@@ -42,8 +42,6 @@ init_archetype :: proc(input_components: []LabelledComponent) -> (arch: ^Archety
     return arch, ent
 }
 
-
-
 Component :: union {
     int, bool, f32
 }
@@ -55,7 +53,6 @@ get_archetype_component_from_id :: proc(entityId: u8, label: string, archetype: 
     return result
 }
 
-
 //an archetype cannot exist without an entity!
 
 @(test)
@@ -63,23 +60,4 @@ arch_test :: proc(T: ^testing.T) {
     numeric_components := [2]LabelledComponent{ LabelledComponent { "int", 5 }, LabelledComponent { "float", 12.2 }}
     archetype, entity := init_archetype(numeric_components[:])
     fmt.printfln("archetype: %v, entity: %v", archetype, entity)
-}
-
-@(test)
-testing :: proc(t: ^testing.T) {
-    archetype := new(Archetype)
-    entity := new(Entity)
-    entity.entityId = 0
-    entity.archetypeComponentIndex = 0
-
-    components := make([dynamic][dynamic]Component, 3, 3)
-    for &componentList in components {
-        componentList = make([dynamic]Component, 1, 1)
-        component: Component = 5
-        componentList[0] = component
-    }
-
-    append(&archetype.entities, entity^)
-
-    fmt.printfln("components: %v", components)
 }
