@@ -3,87 +3,83 @@ package eno
 import "core:log"
 import "core:testing"
 import "core:fmt"
+import "core:mem"
 
 MAX_ENTITIES :: 255
-_currentEntityIndex: u8 = 0
-
-EntityError :: enum {
-    EntityError,
-    InitError,
-    ComponentError
-}
-
-EntityResult :: union {
-    ^Entity,
-    EntityError
-}
 
 Entity :: struct {
     entityId: u8,
-    archetypeId: u8
+    archetypeComponentIndex: u8
 }
 
-initEntity :: proc(archetype: ^EntityArchetype) -> (result: EntityResult) {
-    currentEntityIndex := _currentEntityIndex;
-    if currentEntityIndex == MAX_ENTITIES {
-        log.error("Exceeded MAX_ENTITIES of %v", MAX_ENTITIES);
-        result = EntityError.InitError;
-        return result;
+Archetype :: struct {
+    entities: [dynamic]Entity,
+    componentLabelMatch: map[string]int,
+    components: [dynamic][dynamic]Component
+}
+
+LabelledComponent :: struct {
+    label: string,
+    component: Component
+}
+
+init_archetype :: proc(input_components: []LabelledComponent) -> (arch: ^Archetype, ent: ^Entity) {
+    ent = new(Entity)
+    ent.entityId = 0
+    ent.archetypeComponentIndex = 0
+
+    arch = new(Archetype)
+    append(&arch.entities, ent^)
+
+    components := make([dynamic][dynamic]Component, len(input_components), len(input_components))
+    for &innerComponentList, i in components {
+        innerComponentList = make([dynamic]Component, 1, 1)
+        innerComponentList[0] = input_components[i].component
+        arch.componentLabelMatch[input_components[i].label] = i
     }
-    _currentEntityIndex += 1;
 
-    archetypeId := u8(len(archetype.entities));
-    result = new(Entity)
-    entity := result.(^Entity)
-    entity.archetypeId = archetypeId
-    entity.entityId = currentEntityIndex
+    arch.components = components
+    return arch, ent
+}
 
-    append(&archetype.entities, entity)
 
-    for componentType, &componentData in archetype.entityComponentData {
-        append(&componentData, new(type_info_of(componentType)))
-    }
+
+Component :: union {
+    int, bool, f32
+}
+
+get_archetype_component_from_id :: proc(entityId: u8, label: string, archetype: ^Archetype) -> (result: ^Component) {
+    //simple, enhance using queries later
+    entity := &archetype.entities[entityId]
+    result = &archetype.components[archetype.componentLabelMatch[label]][entity.archetypeComponentIndex]
     return result
 }
 
-ArchetypeResult :: union {
-    ^EntityArchetype,
-    EntityError
-}
 
-EntityArchetype :: struct {
-    entities: [dynamic]^Entity,
-    entityComponentData: map[typeid][dynamic]^Component
-}
+//an archetype cannot exist without an entity!
 
-initArchetype :: proc(components: ..Component) -> (result: ^EntityArchetype) {
-    result = new(EntityArchetype)
-    result.entities = make([dynamic]^Entity, 0, 3)
-    result.entityComponentData = make(map[typeid][dynamic]^Component)
-
-    for component in components {
-        result.entityComponentData[typeid_of(type_of(component))] = make([dynamic]^Component, 0, 3)
-    }
-
-    return result;
-}
-
-
-freeArchetype :: proc(archetype: ^EntityArchetype) {
-    delete(archetype.entities)
-    delete(archetype.entityComponentData)
-    free(archetype)
+@(test)
+arch_test :: proc(T: ^testing.T) {
+    numeric_components := [2]LabelledComponent{ LabelledComponent { "int", 5 }, LabelledComponent { "float", 12.2 }}
+    archetype, entity := init_archetype(numeric_components[:])
+    fmt.printfln("archetype: %v, entity: %v", archetype, entity)
 }
 
 @(test)
-entityTest :: proc(t: ^testing.T) {
-    archetypeTest := new(EntityArchetype)
-    defer freeArchetype(archetypeTest)
+testing :: proc(t: ^testing.T) {
+    archetype := new(Archetype)
+    entity := new(Entity)
+    entity.entityId = 0
+    entity.archetypeComponentIndex = 0
 
-    entityResult := initEntity(archetypeTest)
-    entity, ok := entityResult.(^Entity)
-    defer free(entity) //entity is fine to be used with free() since it only contains ints
+    components := make([dynamic][dynamic]Component, 3, 3)
+    for &componentList in components {
+        componentList = make([dynamic]Component, 1, 1)
+        component: Component = 5
+        componentList[0] = component
+    }
 
-    testing.expect(t, ok, "Check that initEntity() does not return an error")
-    testing.expect_value(t, entity.entityId, 0)
+    append(&archetype.entities, entity^)
+
+    fmt.printfln("components: %v", components)
 }

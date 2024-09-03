@@ -1,4 +1,4 @@
-package main
+package eno
 
 import "core:fmt"
 import glm "core:math/linalg/glsl"
@@ -12,7 +12,7 @@ main :: proc() {
 	WINDOW_WIDTH  :: 854
 	WINDOW_HEIGHT :: 480
 	
-	window := SDL.CreateWindow("Odin SDL2 Demo", SDL.WINDOWPOS_UNDEFINED, SDL.WINDOWPOS_UNDEFINED, WINDOW_WIDTH, WINDOW_HEIGHT, {.OPENGL})
+	window := SDL.CreateWindow("eno engine", SDL.WINDOWPOS_UNDEFINED, SDL.WINDOWPOS_UNDEFINED, WINDOW_WIDTH, WINDOW_HEIGHT, {.OPENGL})
 	if window == nil {
 		fmt.eprintln("Failed to create window")
 		return
