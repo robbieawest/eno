@@ -5,6 +5,8 @@ import "core:testing"
 import "core:fmt"
 import "core:mem"
 
+// ************** Entities ****************
+
 MAX_ENTITIES :: 255
 
 Entity :: struct {
@@ -12,19 +14,27 @@ Entity :: struct {
     archetypeComponentIndex: u8
 }
 
-Archetype :: struct {
-    entities: [dynamic]Entity,
-    componentLabelMatch: map[string]int,
-    components: [dynamic][dynamic]Component
-}
+// ****************************************
+
+// ************** Components ****************
 
 LabelledComponent :: struct {
     label: string,
     component: Component
 }
 
+// ****************************************
+
 Component :: union {
     int, bool, f32
+}
+
+// ************** Archetypes ****************
+
+Archetype :: struct {
+    entities: [dynamic]Entity,
+    componentLabelMatch: map[string]int,
+    components: [dynamic][dynamic]Component
 }
 
 init_archetype :: proc(input_components: []LabelledComponent) -> (arch: ^Archetype, ent: ^Entity) {
@@ -54,13 +64,15 @@ deinit_archetype :: proc(archetype: ^Archetype) {
     free(archetype)
 }
 
-
 get_archetype_component_from_id :: proc(entityId: u8, label: string, archetype: ^Archetype) -> (result: ^Component) {
     //simple, enhance using queries later
     entity := &archetype.entities[entityId]
     result = &archetype.components[archetype.componentLabelMatch[label]][entity.archetypeComponentIndex]
     return result
 }
+
+// ****************************************
+
 
 @(test)
 arch_test :: proc(T: ^testing.T) {
