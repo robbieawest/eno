@@ -56,7 +56,7 @@ init_archetype :: proc(input_components: []LabelledComponent) -> (arch: ^Archety
     return arch, ent
 }
 
-deinit_archetype :: proc(archetype: ^Archetype) {
+destroy_archetype :: proc(archetype: ^Archetype) {
     delete(archetype.entities)
     delete(archetype.componentLabelMatch)
     for innerComponentList in archetype.components do delete(innerComponentList)
@@ -64,14 +64,33 @@ deinit_archetype :: proc(archetype: ^Archetype) {
     free(archetype)
 }
 
-get_archetype_component_from_id :: proc(entityId: u8, label: string, archetype: ^Archetype) -> (result: ^Component) {
-    //simple, enhance using queries later
-    entity := &archetype.entities[entityId]
-    result = &archetype.components[archetype.componentLabelMatch[label]][entity.archetypeComponentIndex]
-    return result
+// ****************************************
+
+// ************** Scenes ****************
+
+Scene :: struct {
+    archetypes: [dynamic]Archetype
 }
 
-// ****************************************
+init_scene_empty :: proc() -> ^Scene {
+    return new(Scene, context.allocator)
+}
+
+init_scene_with_archetypes :: proc(archetypes: [dynamic]Archetype) -> (result: ^Scene) {
+    result = new(Scene)
+    result.archetypes = archetypes
+}
+
+init_scene :: proc{ init_scene_empty, init_scene_with_archetypes }
+
+destroy_scene :: proc(scene: ^Scene) {
+    for archetype in scene.archetypes do destroy_archetype(archetype)
+    delete(scene)
+}
+
+
+// **************************************
+
 
 
 @(test)
@@ -79,10 +98,6 @@ arch_test :: proc(T: ^testing.T) {
     numeric_components := [2]LabelledComponent{ LabelledComponent { "int", 5 }, LabelledComponent { "float", 12.2 }}
     archetype, entity := init_archetype(numeric_components[:])
     defer free(entity)
-    defer deinit_archetype(archetype)
+    defer destroy_archetype(archetype)
     fmt.printfln("archetype: %v, entity: %v", archetype, entity)
-
-    component_result: ^Component = get_archetype_component_from_id(0, "float", archetype)
-    f32_res := component_result.(f32)
-    fmt.println("res: ", component_result)
 }
