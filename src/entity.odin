@@ -37,7 +37,7 @@ init_archetype :: proc(input_components: []LabelledComponent) -> (arch: ^Archety
 
     components := make([dynamic][dynamic]Component, len(input_components), len(input_components))
     for &innerComponentList, i in components {
-        innerComponentList = make([dynamic]Component, 1, 1) //leak
+        innerComponentList = make([dynamic]Component, 1, 1)
         innerComponentList[0] = input_components[i].component
         arch.componentLabelMatch[input_components[i].label] = i
     }
@@ -49,6 +49,7 @@ init_archetype :: proc(input_components: []LabelledComponent) -> (arch: ^Archety
 deinit_archetype :: proc(archetype: ^Archetype) {
     delete(archetype.entities)
     delete(archetype.componentLabelMatch)
+    for innerComponentList in archetype.components do delete(innerComponentList)
     delete(archetype.components)
     free(archetype)
 }
@@ -61,8 +62,6 @@ get_archetype_component_from_id :: proc(entityId: u8, label: string, archetype: 
     return result
 }
 
-//an archetype cannot exist without an entity!
-
 @(test)
 arch_test :: proc(T: ^testing.T) {
     numeric_components := [2]LabelledComponent{ LabelledComponent { "int", 5 }, LabelledComponent { "float", 12.2 }}
@@ -70,4 +69,8 @@ arch_test :: proc(T: ^testing.T) {
     defer free(entity)
     defer deinit_archetype(archetype)
     fmt.printfln("archetype: %v, entity: %v", archetype, entity)
+
+    component_result: ^Component = get_archetype_component_from_id(0, "float", archetype)
+    f32_res := component_result.(f32)
+    fmt.println("res: ", component_result)
 }
