@@ -95,8 +95,8 @@ destroy_scene :: proc(scene: ^Scene) {
     free(scene)
 }
 
-add_arch_to_scene :: proc(scene: ^Scene, archetype: Archetype) {
-    append(&scene.archetypes, archetype)
+add_arch_to_scene :: proc(scene: ^Scene, archetype: ^Archetype) {
+    append(&scene.archetypes, archetype^)
 }
 
 // **************************************
@@ -132,24 +132,31 @@ add_entities_of_archetype :: proc(archetype_label: string, n: u8, scene: ^Scene)
         //Components
         for &componentArr in archetype.components {
             firstComponent := componentArr[0] //Is always available due to archetypes not being able to exist without an entity
-            append(&componentArr, initialize_component_of_component_type(&firstComponent)^)
+
+            comp: ^Component = initialize_component_of_component_type(&firstComponent)
+            /*
+            compderef: Component = comp^
+            log.infof("comp deref: %v", compderef)
+            intval: int = compderef.(int) or_else -1
+            floatval: f32 = compderef.(f32) or_else -1.1
+            log.infof("intval: %v, floatval: %v", intval, floatval)
+            */
+
+            append(&componentArr, comp^)
         }
     }
     
-
 }
 
-initialize_component_of_component_type :: proc (eComponent: ^Component) -> ^Component {
-    type: typeid = reflect.union_variant_typeid(eComponent)
-    a, ok := alloc_dynamic(type)
-    if type_of(ok) == runtime.Allocator_Error do log.error("Could not allocate component type, runtime allocator error")
-    return auto_cast a.data
+initialize_component_of_component_type :: proc (eComponent: ^Component) -> (Result: ^Component) {
+    type: typeid = reflect.union_variant_typeid(eComponent^)
+    a := alloc_dynamic(type) or_else nil
+    if a == nil do log.error("Could not allocate component type, runtime allocator error")
+    result: ^Component = cast(^Component)a.data
+    return result
 }
 
 // **************************************
-
-
-// print only works half the time for tests
 
 @(test)
 arch_test :: proc(T: ^testing.T) {
@@ -158,4 +165,31 @@ arch_test :: proc(T: ^testing.T) {
     defer free(entity)
     defer destroy_archetype(archetype)
     fmt.printfln("archetype: %v, entity: %v", archetype, entity)
+}
+
+@(test)
+init_test :: proc(T: ^testing.T) {
+    comp: Component = 5
+    initer: ^Component = initialize_component_of_component_type(&comp)
+    defer free(initer)
+    fmt.println("break")
+   // testing.expect_value(T, initer.(i32), 5)
+}
+
+@(test)
+inner_comp_test ::proc(T: ^testing.T) {
+
+    scene: ^Scene = init_scene_empty()
+    defer destroy_scene(scene)
+
+    numeric_components := [2]LabelledComponent{ LabelledComponent { "int", 5 }, LabelledComponent { "float", 12.2 }}
+    archetype, entity := init_archetype("testArch", numeric_components[:])
+    defer free(entity)
+    defer destroy_archetype(archetype)
+
+    add_arch_to_scene(scene, archetype)
+    add_entities_of_archetype("testArch", 3, scene)
+
+    log.infof("scene: %v", scene)
+    fmt.println("break")
 }
