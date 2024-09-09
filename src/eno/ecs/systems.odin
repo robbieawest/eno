@@ -3,7 +3,7 @@ package ecs
 import "core:testing"
 import "core:log"
 import "core:fmt"
-
+import "core:mem"
 
 add_entities_of_archetype :: proc(archetype_label: string, n: u8, scene: ^Scene) {
 
@@ -44,7 +44,7 @@ add_entities_of_archetype :: proc(archetype_label: string, n: u8, scene: ^Scene)
     
 }
 
-SceneSearchQuery :: struct {
+SearchQuery :: struct {
     archetypeLabelQueries: []string,
     componentLabelQueries: []string, //receive all of these components from all of the queried archetypes
     nEntities: u8, //Number of entities,
@@ -52,8 +52,8 @@ SceneSearchQuery :: struct {
 }
 
 // Allocates a search query on heap
-search_query :: proc(archLabels: []string, compLabels: []string, nEntities: u8, entity: ^Entity = nil) -> (result: ^SceneSearchQuery) {
-    result = new(SceneSearchQuery)
+search_query :: proc(archLabels: []string, compLabels: []string, nEntities: u8, entity: ^Entity = nil) -> (result: ^SearchQuery) {
+    result = new(SearchQuery)
     result.archetypeLabelQueries = archLabels
     result.componentLabelQueries = compLabels
     result.nEntities = nEntities
@@ -67,7 +67,7 @@ destroy_query_result :: proc(result: QueryResult) {
     delete(result)
 }
 
-search_scene :: proc(scene: ^Scene, query: SceneSearchQuery) -> (result: QueryResult) {
+search_scene :: proc(scene: ^Scene, query: ^SearchQuery) -> (result: QueryResult) {
     //No input sanitization because lazy as shit ToDo
     result = make(QueryResult)
 
@@ -93,6 +93,15 @@ search_scene :: proc(scene: ^Scene, query: SceneSearchQuery) -> (result: QueryRe
     return result
 }
 
+// WIP
+set_components :: proc(query: ^SearchQuery, components: [][][]Component, scene: ^Scene) -> (result: QueryResult) {
+    result: search_scene(scene, query)
+    for _, &componentMap, i in result {
+        for _, &componentList, j in componentMap do componentList = mem.clone_slice(components[i][j])
+    }
+}
+
+
 @(test)
 search_test :: proc(T: ^testing.T) {
 
@@ -110,7 +119,7 @@ search_test :: proc(T: ^testing.T) {
     query := search_query(archOperands[:], compOperands[:], 3, nil)
     defer free(query)
 
-    result: QueryResult = search_scene(scene, query^)
+    result: QueryResult = search_scene(scene, query)
     defer destroy_query_result(result)
 
     log.infof("query result: %v", result)
