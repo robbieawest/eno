@@ -41,8 +41,10 @@ Archetype :: struct {
     components: [dynamic][dynamic]Component
 }
 
-init_archetype :: proc(label: string, input_components: []LabelledComponent) -> (arch: ^Archetype, ent: ^Entity) {
-    ent = new(Entity)
+init_archetype :: proc(label: string, input_components: []LabelledComponent) -> (arch: ^Archetype) {
+    ent := new(Entity)
+    defer free(ent)
+
     ent.entityId = CurrentEntity
     CurrentEntity += 1
     ent.archetypeComponentIndex = 0
@@ -59,13 +61,14 @@ init_archetype :: proc(label: string, input_components: []LabelledComponent) -> 
     }
 
     arch.components = components
-    return arch, ent
+    return arch
 }
+
 
 destroy_archetype :: proc(archetype: ^Archetype) {
     delete(archetype.entities)
     delete(archetype.componentLabelMatch)
-    for innerComponentList in archetype.components do delete(innerComponentList)
+    for innerComponentList in archetype.components do delete(innerComponentList) 
     delete(archetype.components)
     free(archetype)
 }
@@ -97,6 +100,7 @@ destroy_scene :: proc(scene: ^Scene) {
 
 add_arch_to_scene :: proc(scene: ^Scene, archetype: ^Archetype) {
     append(&scene.archetypes, archetype^)
+    free(archetype)
 }
 
 // **************************************
@@ -124,6 +128,7 @@ add_entities_of_archetype :: proc(archetype_label: string, n: u8, scene: ^Scene)
 
     for i in 0..<n {
         ent := new(Entity)
+        defer free(ent)
         ent.entityId = CurrentEntity
         CurrentEntity += 1
         ent.archetypeComponentIndex = u8(len(archetype.entities))
@@ -133,27 +138,21 @@ add_entities_of_archetype :: proc(archetype_label: string, n: u8, scene: ^Scene)
         for &componentArr in archetype.components {
             firstComponent := componentArr[0] //Is always available due to archetypes not being able to exist without an entity
 
-            comp: ^Component = initialize_component_of_component_type(&firstComponent)
-            /*
-            compderef: Component = comp^
-            log.infof("comp deref: %v", compderef)
-            intval: int = compderef.(int) or_else -1
-            floatval: f32 = compderef.(f32) or_else -1.1
-            log.infof("intval: %v, floatval: %v", intval, floatval)
-            */
-
-            append(&componentArr, comp^)
+            newComp := new(Component)
+            defer free(newComp)
+            append(&componentArr, newComp^)
         }
     }
     
 }
 
-initialize_component_of_component_type :: proc (eComponent: ^Component) -> (Result: ^Component) {
+//no use
+initialize_component_of_component_type :: proc (eComponent: ^Component) -> any {
     type: typeid = reflect.union_variant_typeid(eComponent^)
+
     a := alloc_dynamic(type) or_else nil
     if a == nil do log.error("Could not allocate component type, runtime allocator error")
-    result: ^Component = cast(^Component)a.data
-    return result
+    return a
 }
 
 // **************************************
@@ -161,17 +160,16 @@ initialize_component_of_component_type :: proc (eComponent: ^Component) -> (Resu
 @(test)
 arch_test :: proc(T: ^testing.T) {
     numeric_components := [2]LabelledComponent{ LabelledComponent { "int", 5 }, LabelledComponent { "float", 12.2 }}
-    archetype, entity := init_archetype("testArch", numeric_components[:])
-    defer free(entity)
+    archetype:= init_archetype("testArch", numeric_components[:])
     defer destroy_archetype(archetype)
-    fmt.printfln("archetype: %v, entity: %v", archetype, entity)
+    fmt.printfln("archetype: %v", archetype)
 }
 
 @(test)
 init_test :: proc(T: ^testing.T) {
     comp: Component = 5
-    initer: ^Component = initialize_component_of_component_type(&comp)
-    defer free(initer)
+    //initer: ^Component = initialize_component_of_component_type(&comp)
+    //defer free(initer)
     fmt.println("break")
    // testing.expect_value(T, initer.(i32), 5)
 }
@@ -183,11 +181,9 @@ inner_comp_test ::proc(T: ^testing.T) {
     defer destroy_scene(scene)
 
     numeric_components := [2]LabelledComponent{ LabelledComponent { "int", 5 }, LabelledComponent { "float", 12.2 }}
-    archetype, entity := init_archetype("testArch", numeric_components[:])
-    defer free(entity)
-    defer destroy_archetype(archetype)
+    archetype := init_archetype("testArch", numeric_components[:])
 
-    add_arch_to_scene(scene, archetype)
+    add_arch_to_scene(scene, archetype) //free's top level archetype definition
     add_entities_of_archetype("testArch", 3, scene)
 
     log.infof("scene: %v", scene)
