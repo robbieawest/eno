@@ -62,24 +62,32 @@ search_query :: proc(archLabels: []string, compLabels: []string, nEntities: u8, 
 }
 
 QueryResult :: map[string]map[string][]Component
+destroy_query_result :: proc(result: QueryResult) {
+    for key, &value in result do delete(value)
+    delete(result)
+}
+
 search_scene :: proc(scene: ^Scene, query: SceneSearchQuery) -> (result: QueryResult) {
     //No input sanitization because lazy as shit ToDo
     result = make(QueryResult)
 
     for archetypeLabel in query.archetypeLabelQueries {
+
         archetype: ^Archetype = &scene.archetypes[scene.archetypeLabelMatch[archetypeLabel]]
-     //   result[archetypeLabel] =  todo this
+        componentMap := make(map[string][]Component)
         for componentLabel in query.componentLabelQueries {
+
             componentList: ^[dynamic]Component = &archetype.components[archetype.componentLabelMatch[componentLabel]]
             lowerBounds: u8 = 0
-            upperBounds: u8 = query.nEntities + 1
+            upperBounds: u8 = query.nEntities
             if query.entity != nil {
                 lowerBounds = query.entity.archetypeComponentIndex
                 upperBounds = lowerBounds + 1
             }
 
-            result[archetypeLabel][componentLabel] = componentList[lowerBounds:upperBounds]
+            componentMap[componentLabel] = componentList[lowerBounds:upperBounds]
         }
+        result[archetypeLabel] = componentMap
     }
 
     return result
@@ -97,11 +105,14 @@ search_test :: proc(T: ^testing.T) {
     add_arch_to_scene(scene, archetype) //free's top level archetype definition, could just do add_arch_to_scene(scene, init_archetype(...))
     add_entities_of_archetype("testArch", 3, scene)
 
-    archOperands := [1]string{"testArch"}
-    compOperands := [1]string{"int"}
+    archOperands := [?]string{"testArch"}
+    compOperands := [?]string{"int", "float"}
     query := search_query(archOperands[:], compOperands[:], 3, nil)
     defer free(query)
+
     result: QueryResult = search_scene(scene, query^)
+    defer destroy_query_result(result)
+
     log.infof("query result: %v", result)
     fmt.println("break")
 }
