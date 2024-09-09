@@ -79,6 +79,7 @@ destroy_archetype :: proc(archetype: ^Archetype) {
 // ************** Scenes ****************
 
 Scene :: struct {
+    archetypeLabelMatch: map[string]int,
     archetypes: [dynamic]Archetype
 }
 
@@ -88,6 +89,7 @@ init_scene_empty :: proc() -> ^Scene {
 
 init_scene_with_archetypes :: proc(archetypes: [dynamic]Archetype) -> (result: ^Scene) {
     result = new(Scene)
+    for archetype, i in archetypes do result.archetypeLabelMatch[archetype.label] = i
     result.archetypes = archetypes
     return result
 }
