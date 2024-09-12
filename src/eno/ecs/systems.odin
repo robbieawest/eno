@@ -94,8 +94,8 @@ search_scene :: proc(scene: ^Scene, query: ^SearchQuery) -> (result: QueryResult
     return result
 }
 
-// WIP
 set_components :: proc(query: ^SearchQuery, components: [][][]Component, scene: ^Scene) -> (result: QueryResult) {
+    //searches and then sets, not the most efficient so to speak
     result = search_scene(scene, query)
     i := 0
     for _, &componentMap in result {
