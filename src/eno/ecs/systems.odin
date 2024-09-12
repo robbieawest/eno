@@ -4,6 +4,7 @@ import "core:testing"
 import "core:log"
 import "core:fmt"
 import "core:mem"
+import "core:slice"
 
 add_entities_of_archetype :: proc(archetype_label: string, n: u8, scene: ^Scene) {
 
@@ -95,10 +96,18 @@ search_scene :: proc(scene: ^Scene, query: ^SearchQuery) -> (result: QueryResult
 
 // WIP
 set_components :: proc(query: ^SearchQuery, components: [][][]Component, scene: ^Scene) -> (result: QueryResult) {
-    result: search_scene(scene, query)
-    for _, &componentMap, i in result {
-        for _, &componentList, j in componentMap do componentList = mem.clone_slice(components[i][j])
+    result = search_scene(scene, query)
+    i := 0
+    for _, &componentMap in result {
+        j := 0
+        for _, &componentList in componentMap {
+            componentsToSet := &components[i][j]
+            for k in 0..<len(componentsToSet) do componentList[k] = componentsToSet[k]
+            j += 1
+        }
+        i += 1
     }
+    return result
 }
 
 
@@ -126,3 +135,25 @@ search_test :: proc(T: ^testing.T) {
     fmt.println("break")
 }
 
+@(test)
+set_test :: proc(t: ^testing.T) {
+    scene: ^Scene = init_scene_empty()
+    defer destroy_scene(scene)
+
+    numeric_components := [2]LabelledComponent{ LabelledComponent { "int", 5 }, LabelledComponent { "float", 12.2 }}
+    archetype := init_archetype("testArch", numeric_components[:])
+
+    add_arch_to_scene(scene, archetype) //free's top level archetype definition, could just do add_arch_to_scene(scene, init_archetype(...))
+    add_entities_of_archetype("testArch", 3, scene)
+
+    archOperands := [?]string{"testArch"}
+    compOperands := [?]string{"int", "float"}
+    query := search_query(archOperands[:], compOperands[:], 3, nil)
+    defer free(query)
+
+    updated_components := [][][]Component{ [][]Component{ []Component{ 19, 32 }, []Component {13.5} }} //Not very nice but kind of necessary
+    log.infof("scene before set: %v", scene)
+
+    set_components(query, updated_components[:], scene)
+    log.infof("scene after set: %v", scene)
+}
