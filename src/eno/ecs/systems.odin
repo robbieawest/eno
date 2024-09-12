@@ -154,6 +154,7 @@ set_test :: proc(t: ^testing.T) {
     updated_components := [][][]Component{ [][]Component{ []Component{ 19, 32 }, []Component {13.5} }} //Not very nice but kind of necessary
     log.infof("scene before set: %v", scene)
 
-    set_components(query, updated_components[:], scene)
+    result: QueryResult = set_components(query, updated_components[:], scene)
+    defer destroy_query_result(result)
     log.infof("scene after set: %v", scene)
 }
