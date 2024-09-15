@@ -3,13 +3,24 @@ package model
 import "core:log"
 import "core:os"
 import "core:strings"
+import "core:unicode"
+import "core:strconv"
 
 // This class defines data transfer
 // Currently implemented for parsing and representing JSON input
+// *none of this is tested yet
+
+AcceptedValues :: enum { STRING, BOOL, INT, FLOAT }
+JSONValue :: union {
+    string,
+    bool,
+    i64,
+    f64,
+}
 
 JSONInner :: union {
     ^JSONResult,
-    any //any because easy. Any is a really simple concept, you just have to handle a rawptr.
+    JSONValue
 }
 
 JSONResult :: struct { //Size will not be known at runtime apparently
@@ -36,7 +47,7 @@ read_lines_from_file :: proc(filepath: string) -> (lines: []string, ok: bool) #o
 
     file_as_string: string = strings.to_string(strings.builder_from_bytes(bytes))
 
-    lines = strings.split(file_as_string, "\n")
+    lines = strings.split_lines(file_as_string)
     if lines == nil do ok = false
     
     return lines, ok
@@ -57,7 +68,7 @@ parse_json_from_file :: proc(filepath: string) -> (res: []^JSONResult, ok: bool)
     // If the root is the full root of the input JSON then `root` is nil, else the root points to the JSONResult, so the line can insert itself as a JSONInner
     root: ^JSONResult = nil 
 
-    JSONOut := [dynamic]JSONResult
+    JSONOut := [dynamic]^JSONResult
 
     for line, i in lines {
         containsAssignment, inQuotes, bracketOpens, bracketCloses := false
@@ -94,18 +105,35 @@ parse_json_from_file :: proc(filepath: string) -> (res: []^JSONResult, ok: bool)
             }
             
             // End of recursion, given a direct value (no more JSONInner)
-            splitByAssignment: []string = strings.split(line, ':') //change to a new implementation of split_last
-            
+            splitByAssignment: []string = parse_json_key_value(key_line)
+            assert(len(splitByAssignment) == 2)
 
+            line_res := new(JSONResult)
+            line_res.key := parse_key(splitByAssignment[0], #procedure)
+            line_res.value := parse_inner(splitByAssignment[1], #procedure)
         }
 
 
     }
-
 }
 
 @(private)
-parse_key :: proc(key_line: string, call_proc: string) -> (key: string, ok: bool) {
+parse_json_key_value :: proc(line: string) -> (result: []string) {
+    inQuotes := false
+    result := [2]string{"", ""}
+    for char, i in line {
+        if char == '\"' do inQuotes = !inQuotes
+        else if char == ':' && !inQuotes {
+            result[0] = strings.substring(0, i)
+            result[1] = strings.substring(i + 1, len(line))
+        }
+    }
+
+    return result
+}
+
+@(private)
+parse_key :: proc(key_line, call_proc: string) -> (key: string, ok: bool) {
     key_builder := strings.builder_make()
     nQuotes := 0
 
@@ -126,6 +154,54 @@ parse_key :: proc(key_line: string, call_proc: string) -> (key: string, ok: bool
     }
 
     return strings.to_string(key_builder)
+}
+
+@(private)
+parse_inner :: proc(value_line, call_proc: string) -> (inner: JSONInner, ok: bool) #optional_ok {
+    value, ok := parse_value(value_line)
+    if !ok {
+        log.errorf("%s: JSON parsing error: Value of %s was not able to be parsed", call_proc, value_line)
+        return nil, false
+    }
+    inner: JSONInner
+    inner = value
+    return inner, true
+}
+
+@(private)
+parse_value :: proc(value_line) -> (value: JSONValue, ok: bool) {
+    
+    trimmed_line := strings.trim_space(value_line)
+    #partial switch(get_data_fmt(trimmed_line, call_proc)) {
+        case .BOOL:
+            value = trimmed_line == "true"
+        case .INT:
+            value, ok = strconv.parse_i64(trimmed_line)
+        case .FLOAT:
+            value, ok = strconv.parse_f64(trimmed_line)
+        case .STRING:
+            value = trimmed_line
+    }
+
+    return value, ok
+}
+
+@(private)
+get_data_fmt :: proc(value_str: string, call_proc: string) -> (data_type: AcceptedValues, ok: bool) {
+    if strings.count(value_str, "\"") == 2 {
+        return AcceptedValues.STRING, true
+    }
+    else if strings.contains(value_str, "true") || strings.contains(value_str, "false") {
+        return AcceptedValues.BOOL, true
+    }
+    else if unicode.is_number(value_str) {
+        if strings.contains(value_str, ".") do return AcceptedValues.FLOAT, true
+        else do return AcceptedValues.INT, true
+    }
+    else {
+        log.errorf("%s: JSON paring error: Invalid type for data given: %s", call_proc, value_str)
+        return typeid_of(typeid), false
+    }
 }
 
 
