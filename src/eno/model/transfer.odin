@@ -187,6 +187,24 @@ parse_value :: proc(value_line, call_proc: string) -> (value: JSONValue, ok: boo
 }
 
 @(private)
+get_data_fmt :: proc(value_str: string, call_proc: string) -> (data_type: AcceptedValues, ok: bool) {
+    if strings.count(value_str, "\"") == 2 {
+        return AcceptedValues.STRING, true
+    }
+    else if strings.contains(value_str, "true") || strings.contains(value_str, "false") {
+        return AcceptedValues.BOOL, true
+    }
+    else if unicode.is_number(value_str) {
+        if strings.contains(value_str, ".") do return AcceptedValues.FLOAT, true
+        else do return AcceptedValues.INT, true
+    }
+    else {
+        log.errorf("%s: JSON paring error: Invalid type for data given: %s", call_proc, value_str)
+        return typeid_of(typeid), false
+    }
+}
+
+@(private)
 parse_multi_inner :: proc(value_line, call_proc: string) -> (value: JSONInner, ok: bool) #optional_ok {
     // Grab assignments from inside brackets, split them and recurse parse_json_into_arr
     assign_starts_at, assign_ends_at: int = 0
@@ -208,25 +226,6 @@ parse_multi_inner :: proc(value_line, call_proc: string) -> (value: JSONInner, o
 
     return statements[:], true
 }
-
-@(private)
-get_data_fmt :: proc(value_str: string, call_proc: string) -> (data_type: AcceptedValues, ok: bool) {
-    if strings.count(value_str, "\"") == 2 {
-        return AcceptedValues.STRING, true
-    }
-    else if strings.contains(value_str, "true") || strings.contains(value_str, "false") {
-        return AcceptedValues.BOOL, true
-    }
-    else if unicode.is_number(value_str) {
-        if strings.contains(value_str, ".") do return AcceptedValues.FLOAT, true
-        else do return AcceptedValues.INT, true
-    }
-    else {
-        log.errorf("%s: JSON paring error: Invalid type for data given: %s", call_proc, value_str)
-        return typeid_of(typeid), false
-    }
-}
-
 
 destroy_json :: proc {destroy_json_result, destroy_json_results }
 
