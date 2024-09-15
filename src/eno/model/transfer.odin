@@ -19,7 +19,7 @@ JSONValue :: union {
 }
 
 JSONInner :: union {
-    ^JSONResult,
+    []^JSONResult,
     JSONValue
 }
 
@@ -61,14 +61,12 @@ parse_json_from_file :: proc(filepath: string) -> (res: []^JSONResult, ok: bool)
         return nil, false
     }
     
+    parsed_json: [dynamic]^JSONResult = parse_json_into_arr(lines)
+    return parsed_json[:]
+}
 
-    // Identify lines containing key value assignment with ':' and split them
-
-    // Root describes the root of the current line to be parsed
-    // If the root is the full root of the input JSON then `root` is nil, else the root points to the JSONResult, so the line can insert itself as a JSONInner
-    root: ^JSONResult = nil 
-
-    JSONOut := [dynamic]^JSONResult
+@(private)
+parse_json_into_arr :: proc(lines: []string) -> (res: [dynamic]^JSONResult, ok: bool) {
 
     for line, i in lines {
         containsAssignment, inQuotes, bracketOpens, bracketCloses := false
@@ -87,7 +85,12 @@ parse_json_from_file :: proc(filepath: string) -> (res: []^JSONResult, ok: bool)
         if bracketOpens {
             if bracketCloses {
                 // JSONInner described in the same line
-                // Split statements by commas
+                splitByAssignment: []string = parse_json_key_value(key_line)
+                assert(len(splitByAssignment) == 2)
+
+                line_res := new(JSONResult)
+                line_res.key := parse_key(splitByAssignment[0], #procedure)
+                line_res.value := parse_multi_inner(splitByAssignment[1], #procedure)
             }
             else {
                 // JSONInner described over the next few lines
@@ -111,10 +114,8 @@ parse_json_from_file :: proc(filepath: string) -> (res: []^JSONResult, ok: bool)
             line_res := new(JSONResult)
             line_res.key := parse_key(splitByAssignment[0], #procedure)
             line_res.value := parse_inner(splitByAssignment[1], #procedure)
+            append(&res, line_res)
         }
-
-
-    }
 }
 
 @(private)
@@ -163,13 +164,12 @@ parse_inner :: proc(value_line, call_proc: string) -> (inner: JSONInner, ok: boo
         log.errorf("%s: JSON parsing error: Value of %s was not able to be parsed", call_proc, value_line)
         return nil, false
     }
-    inner: JSONInner
-    inner = value
+    inner: JSONInner = []JSONValue{value}
     return inner, true
 }
 
 @(private)
-parse_value :: proc(value_line) -> (value: JSONValue, ok: bool) {
+parse_value :: proc(value_line, call_proc: string) -> (value: JSONValue, ok: bool) {
     
     trimmed_line := strings.trim_space(value_line)
     #partial switch(get_data_fmt(trimmed_line, call_proc)) {
@@ -184,6 +184,29 @@ parse_value :: proc(value_line) -> (value: JSONValue, ok: bool) {
     }
 
     return value, ok
+}
+
+@(private)
+parse_multi_inner :: proc(value_line, call_proc: string) -> (value: JSONInner, ok: bool) #optional_ok {
+    // Grab assignments from inside brackets, split them and recurse parse_json_into_arr
+    assign_starts_at, assign_ends_at: int = 0
+    for char, i in value_line {
+        if char == '{' do assign_starts_at = i
+        else if char == '}' do assign_ends_at = i
+    }
+
+    if assign_starts_at >= assign_ends_at {
+        log.errorf("%s: JSON parsing error: Inline value brackets are flipped in %s", call_proc, value_line)
+        return nil, false
+    }
+
+    assignments = strings.substring(value_line, assign_starts_at, assign_ends_at + 1)
+    statements = strings.split(assignments, ",")
+
+    arr, ok := parse_json_into_arr(statements)
+    if !ok do return nil, false
+
+    return statements[:], true
 }
 
 @(private)
