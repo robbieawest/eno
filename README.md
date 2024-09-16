@@ -29,6 +29,3 @@ Usage: srceno [
     ]
 ```
 You may have to call `chmod +x ./runeno.sh` to update permissions before running the script, on operating systems other than Linux this may differ.
-
-Caution: Running random bash scripts off the internet is not very smart, please look through any scripts you plan to run, including this one.
-To note: It is common for attackers to write malicious code outside of the current screen view, since github does not wrap lines longer than the screen length.
