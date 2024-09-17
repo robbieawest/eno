@@ -7,28 +7,7 @@ import "core:unicode"
 import "core:strconv"
 
 // This class defines data transfer
-// Currently implemented for parsing and representing JSON input
-// *none of this is tested yet
 
-AcceptedValues :: enum { STRING, BOOL, INT, FLOAT }
-JSONValue :: union {
-    string,
-    bool,
-    i64,
-    f64,
-}
-
-JSONInner :: union {
-    []^JSONResult,
-    JSONValue
-}
-
-JSONResult :: struct { //Size will not be known at runtime apparently
-    key: string,
-    value: JSONInner
-}
-
-@(private)
 read_lines_from_file :: proc(filepath: string) -> (lines: []string, ok: bool) #optional_ok {
     ok = true
 
@@ -53,7 +32,39 @@ read_lines_from_file :: proc(filepath: string) -> (lines: []string, ok: bool) #o
     return lines, ok
 }
 
-parse_json_from_file :: proc(filepath: string) -> (res: []^JSONResult, ok: bool) #optional_ok {
+// Currently implemented for parsing and representing JSON input
+// *none of this is tested yet
+
+AcceptedValues :: enum { STRING, BOOL, INT, FLOAT, LIST}
+JSONValue :: union {
+    string,
+    bool,
+    i64,
+    f64,
+    []JSONValue // Check cleanup for this, if delete(JSONValue) deletes this as well
+}
+
+JSONInner :: union {
+    []^JSONResult,
+    JSONValue
+}
+
+JSONResult :: struct { //Size will not be known at runtime apparently
+    key: string,
+    value: JSONInner
+}
+
+
+parse_json :: proc { parse_json_from_file, parse_json_from_string }
+
+parse_json_from_string :: proc(json_input: string) -> (res: ^JSONResult, ok: bool) #optional_ok {
+    parsed_json, ok := parse_json_into_arr(json_input)
+    if !ok do return nil, false
+
+    return parsed_json
+}
+
+parse_json_from_file :: proc(filepath: string) -> (res: ^JSONResult, ok: bool) #optional_ok {
 
     lines: []string = read_lines_from_file(filepath)
     if lines == nil {
@@ -61,43 +72,81 @@ parse_json_from_file :: proc(filepath: string) -> (res: []^JSONResult, ok: bool)
         return nil, false
     }
     
-    parsed_json: [dynamic]^JSONResult = parse_json_into_arr(lines)
-    return parsed_json[:]
+    return parse_json_from_string(lines)
 }
 
 @(private)
-parse_json_into_arr :: proc(lines: []string) -> (res: [dynamic]^JSONResult, ok: bool) {
+parse_json_from_lines :: proc(lines: []string) -> (res: ^JSONResult, ok: bool) {
+    res := new (JSONResult)
+    res.key = ""
+    res.value, ok = parse_json_document(lines)
+    return res, ok
+}
+
+@(private)
+parse_json_document :: proc(lines: []string) -> (res: JSONInner, ok: bool) {
+
+    //assume single assignment per line, unless all assignments for an inner JSON document are described inline with '{...}'
+    
+    continued_bracket_start := -1
+    json_results := [dynamic]JSONResult{}
 
     for line, i in lines {
+        line := strings.trim_space(line)
+        
+        if continued_brackets_start != -1 && !strings.contains(line, "}"){
+            if strings.ends_with(line, "}"){
+                log.errorf("%s: JSON parsing error: Line cannot end with a single '}' without any comma indicating the next", #procedure)
+                return nil, false
+            }
+
+            if strings.ends_with(line, "},") {
+                // recursively call this procedure to figure out the JSONInner value for the bracketed region
+                json_results(len(json_results)).value = parse_json_document(strings.substring(lines, continued_bracket_start, i + 1))
+                cotinued_bracket_start = -1
+            }
+            continue
+        }
+
+        //Parse some basic features
+
         containsAssignment, inQuotes, bracketOpens, bracketCloses := false
         nEndCommas := 0
 
-        for char, j in line { //Runes loop
+        for char, j in line {
             #partial switch char {
                 case '\"' :inQuotes = !inQuotes
                 case ':': if !inQuotes do containsAssignment = true
                 case '{': bracketOpens = true
                 case '}': bracketCloses = true
-                case ',': if !inQuotes do nEndCommands += 1
+                case ',': if !inQuotes do nEndCommas += 1
             }
         }
 
-        if bracketOpens {
+        //--
+
+        line_res := new(JSONResult)
+
+        if bracketOpens { //Contains recursive json document inline or across the next lines
             if bracketCloses {
                 // JSONInner described in the same line
                 splitByAssignment: []string = parse_json_key_value(key_line)
                 assert(len(splitByAssignment) == 2)
-
-                line_res := new(JSONResult)
-                line_res.key := parse_key(splitByAssignment[0], #procedure)
+                
+                if root_nil do line_res.key := parse_key(splitByAssignment[0], #procedure)
                 line_res.value := parse_multi_inner(splitByAssignment[1], #procedure)
             }
             else {
                 // JSONInner described over the next few lines
+                splitByAssignment: []string = parse_json_key_value(key_line)
+                assert(len(splitByAssignment) == 2)
+
+                line_res.key := parse_key(splitByAssignment[0], #procedure)
+                continued_bracket_start = i
             }
 
         }
-        else {
+        else { //Single assignment
             if (nEndCommas == 0) {
                 log.errorf("%s: JSON parsing error: No commas to designate line end", #procedure)
                 return nil, false
@@ -111,11 +160,15 @@ parse_json_into_arr :: proc(lines: []string) -> (res: [dynamic]^JSONResult, ok: 
             splitByAssignment: []string = parse_json_key_value(key_line)
             assert(len(splitByAssignment) == 2)
 
-            line_res := new(JSONResult)
-            line_res.key := parse_key(splitByAssignment[0], #procedure)
+            if root_nil do line_res.key := parse_key(splitByAssignment[0], #procedure)
             line_res.value := parse_inner(splitByAssignment[1], #procedure)
-            append(&res, line_res)
         }
+
+        append(&json_results, line_res)
+    }
+
+    res := json_results[:]
+    return res, true
 }
 
 @(private)
@@ -224,13 +277,13 @@ parse_multi_inner :: proc(value_line, call_proc: string) -> (value: JSONInner, o
     arr, ok := parse_json_into_arr(statements)
     if !ok do return nil, false
 
-    return statements[:], true
+    return arr[:], true
 }
 
 destroy_json :: proc {destroy_json_result, destroy_json_results }
 
 @(private)
-destroy_json_result :: proc(results: []^JSONResult) {
+destroy_json_output :: proc(results: JSON) {
     for result in results do destroy_json_result(result)
 }
 
