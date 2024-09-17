@@ -6,7 +6,7 @@ import "core:strings"
 import "core:unicode"
 import "core:strconv"
 
-// This class defines data transfer
+// This file defines data transfer
 
 read_lines_from_file :: proc(filepath: string) -> (lines: []string, ok: bool) #optional_ok {
     ok = true
