@@ -58,7 +58,7 @@ JSONResult :: struct { //Size will not be known at runtime apparently
 parse_json :: proc { parse_json_from_file, parse_json_from_string }
 
 parse_json_from_string :: proc(json_input: string) -> (res: ^JSONResult, ok: bool) #optional_ok {
-    parsed_json, ok := parse_json_into_arr(json_input)
+    parsed_json, ok := parse_json_document(json_input)
     if !ok do return nil, false
 
     return parsed_json
