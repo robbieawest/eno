@@ -55,14 +55,7 @@ JSONResult :: struct {
 }
 
 
-parse_json :: proc { parse_json_from_file, parse_json_from_string }
-
-parse_json_from_string :: proc(json_input: string) -> (res: ^JSONResult, ok: bool) #optional_ok {
-    parsed_json, ok := parse_json_document(json_input)
-    if !ok do return nil, false
-
-    return parsed_json
-}
+parse_json :: proc { parse_json_from_file, parse_json_from_lines }
 
 parse_json_from_file :: proc(filepath: string) -> (res: ^JSONResult, ok: bool) #optional_ok {
 
@@ -72,7 +65,7 @@ parse_json_from_file :: proc(filepath: string) -> (res: ^JSONResult, ok: bool) #
         return nil, false
     }
     
-    return parse_json_from_string(lines)
+    return parse_json_from_lines(lines)
 }
 
 @(private)
@@ -102,7 +95,7 @@ parse_json_document :: proc(lines: []string) -> (res: JSONInner, ok: bool) {
 
             if strings.ends_with(line, "},") {
                 // recursively call this procedure to figure out the JSONInner value for the bracketed region
-                json_results(len(json_results)).value = parse_json_document(strings.substring(lines, continued_bracket_start, i + 1))
+                json_results[len(json_results) - 1].value = parse_json_document(strings.substring(lines, continued_bracket_start, i + 1))
                 cotinued_bracket_start = -1
             }
             continue
@@ -126,25 +119,14 @@ parse_json_document :: proc(lines: []string) -> (res: JSONInner, ok: bool) {
         //--
 
         line_res := new(JSONResult)
+        splitByAssignment: []string = parse_json_key_value(key_line)
+        assert(len(splitByAssignment) == 2)
+
+        line_res.key := parse_key(splitByAssignment[0], #procedure)
 
         if bracketOpens { //Contains recursive json document inline or across the next lines
-            if bracketCloses {
-                // JSONInner described in the same line
-                splitByAssignment: []string = parse_json_key_value(key_line)
-                assert(len(splitByAssignment) == 2)
-                
-                if root_nil do line_res.key := parse_key(splitByAssignment[0], #procedure)
-                line_res.value := parse_multi_inner(splitByAssignment[1], #procedure)
-            }
-            else {
-                // JSONInner described over the next few lines
-                splitByAssignment: []string = parse_json_key_value(key_line)
-                assert(len(splitByAssignment) == 2)
-
-                line_res.key := parse_key(splitByAssignment[0], #procedure)
-                continued_bracket_start = i
-            }
-
+            if bracketCloses do line_res.value := parse_multi_inner(splitByAssignment[1], #procedure) // JSONInner described in the same lin
+            else do continued_bracket_start = i // JSONInner described over the next few lines
         }
         else { //Single assignment
             if (nEndCommas == 0) {
@@ -157,10 +139,6 @@ parse_json_document :: proc(lines: []string) -> (res: JSONInner, ok: bool) {
             }
             
             // End of recursion, given a direct value (no more JSONInner)
-            splitByAssignment: []string = parse_json_key_value(key_line)
-            assert(len(splitByAssignment) == 2)
-
-            if root_nil do line_res.key := parse_key(splitByAssignment[0], #procedure)
             line_res.value := parse_inner(splitByAssignment[1], #procedure)
         }
 
@@ -295,8 +273,8 @@ destroy_json_result :: proc(result: ^JSONResult) {
 
 @(private)
 destroy_json_inner :: proc(inner: ^JSONInner) {
-    json_res, ok := inner.(^JSONResult)
-    if ok do destroy_json_result(json_res)
+    json_res, ok := inner.([]^JSONResult)
+    if ok do for results in json_res { destroy_json_result(results) }
     else {
         any_res, ok := inner.(any)
         if !ok do log.errorf("Type error should not happen in %s", #procedure)
