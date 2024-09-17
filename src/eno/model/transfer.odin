@@ -41,7 +41,7 @@ JSONValue :: union {
     bool,
     i64,
     f64,
-    []JSONValue // Check cleanup for this, if delete(JSONValue) deletes this as well
+    []JSONValue // Check cleanup for this
 }
 
 JSONInner :: union {
@@ -49,7 +49,7 @@ JSONInner :: union {
     JSONValue
 }
 
-JSONResult :: struct { //Size will not be known at runtime apparently
+JSONResult :: struct {
     key: string,
     value: JSONInner
 }
