@@ -55,12 +55,12 @@ get_string_encoded_type :: proc(s: string) -> StringTypeResult {
 string_encoded_type :: proc(t: ^testing.T) {
     testing.expect_value(t, get_string_encoded_type("true"), StringTypeResult.BOOL)
     testing.expect_value(t, get_string_encoded_type("\"hey guys it sme scarce here\""), StringTypeResult.STRING)
-    testing.expect_value(t, is_number("565.142"), StringTypeResult.POS_REAL)
-    testing.expect_value(t, is_number("-123424.3512"), StringTypeResult.NEG_REAL)
-    testing.expect_value(t, is_number("38922"), StringTypeResult.POS_INT)
-    testing.expect_value(t, is_number("-2556235"), StringTypeResult.NEG_INT)
-    testing.expect_value(t, is_number("45624356-2556235"), StringTypeResult.NAN)
-    testing.expect_value(t, is_number("hey guys its me scarce here"), StringTypeResult.NAN)
+    testing.expect_value(t, get_string_encoded_type("565.142"), StringTypeResult.POS_REAL)
+    testing.expect_value(t, get_string_encoded_type("-123424.3512"), StringTypeResult.NEG_REAL)
+    testing.expect_value(t, get_string_encoded_type("38922"), StringTypeResult.POS_INT)
+    testing.expect_value(t, get_string_encoded_type("-2556235"), StringTypeResult.NEG_INT)
+    testing.expect_value(t, get_string_encoded_type("45624356-2556235"), StringTypeResult.NAN)
+    testing.expect_value(t, get_string_encoded_type("hey guys its me scarce here"), StringTypeResult.NAN)
 }
 
 
