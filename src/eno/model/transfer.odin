@@ -5,6 +5,7 @@ import "core:os"
 import "core:strings"
 import "core:unicode"
 import "core:strconv"
+import "core:testing"
 
 // This file defines data transfer
 
@@ -18,7 +19,7 @@ read_lines_from_file :: proc(filepath: string) -> (lines: []string, ok: bool) #o
     }
     defer os.close(f)
 
-    bytes, success = os.read_entire_file_from_filename(filepath)
+    bytes, success := os.read_entire_file_from_filename(filepath)
     if !success {
         log.errorf("%s: File %s could not be read into bytes", #procedure, filepath)
         return nil, false
@@ -55,6 +56,9 @@ JSONResult :: struct {
 }
 
 
+
+// -- json parsing --
+
 parse_json :: proc { parse_json_from_file, parse_json_from_lines }
 
 parse_json_from_file :: proc(filepath: string) -> (res: ^JSONResult, ok: bool) #optional_ok {
@@ -70,7 +74,7 @@ parse_json_from_file :: proc(filepath: string) -> (res: ^JSONResult, ok: bool) #
 
 @(private)
 parse_json_from_lines :: proc(lines: []string) -> (res: ^JSONResult, ok: bool) {
-    res := new (JSONResult)
+    res = new (JSONResult)
     res.key = ""
     res.value, ok = parse_json_document(lines)
     return res, ok
@@ -82,12 +86,12 @@ parse_json_document :: proc(lines: []string) -> (res: JSONInner, ok: bool) {
     //assume single assignment per line, unless all assignments for an inner JSON document are described inline with '{...}'
     
     continued_bracket_start := -1
-    json_results := [dynamic]JSONResult{}
+    json_results := [dynamic]^JSONResult{}
 
     for line, i in lines {
         line := strings.trim_space(line)
         
-        if continued_brackets_start != -1 && !strings.contains(line, "}"){
+        if continued_bracket_start != -1 && !strings.contains(line, "}"){
             if strings.ends_with(line, "}"){
                 log.errorf("%s: JSON parsing error: Line cannot end with a single '}' without any comma indicating the next", #procedure)
                 return nil, false
@@ -95,19 +99,19 @@ parse_json_document :: proc(lines: []string) -> (res: JSONInner, ok: bool) {
 
             if strings.ends_with(line, "},") {
                 // recursively call this procedure to figure out the JSONInner value for the bracketed region
-                json_results[len(json_results) - 1].value = parse_json_document(strings.substring(lines, continued_bracket_start, i + 1))
-                cotinued_bracket_start = -1
+                json_results[len(json_results) - 1].value = parse_json_document(lines[continued_bracket_start:i+1]) or_return
+                continued_bracket_start = -1
             }
             continue
         }
 
         //Parse some basic features
 
-        containsAssignment, inQuotes, bracketOpens, bracketCloses := false
+        containsAssignment, inQuotes, bracketOpens, bracketCloses := false, false, false, false
         nEndCommas := 0
 
         for char, j in line {
-            #partial switch char {
+            switch char {
                 case '\"' :inQuotes = !inQuotes
                 case ':': if !inQuotes do containsAssignment = true
                 case '{': bracketOpens = true
@@ -119,13 +123,13 @@ parse_json_document :: proc(lines: []string) -> (res: JSONInner, ok: bool) {
         //--
 
         line_res := new(JSONResult)
-        splitByAssignment: []string = parse_json_key_value(key_line)
+        splitByAssignment: []string = parse_json_key_value(line)
         assert(len(splitByAssignment) == 2)
 
-        line_res.key := parse_key(splitByAssignment[0], #procedure)
+        line_res.key = parse_key(splitByAssignment[0], #procedure) or_return
 
         if bracketOpens { //Contains recursive json document inline or across the next lines
-            if bracketCloses do line_res.value := parse_multi_inner(splitByAssignment[1], #procedure) // JSONInner described in the same lin
+            if bracketCloses do line_res.value = parse_multi_inner(splitByAssignment[1], #procedure) or_return // JSONInner described in the same lin
             else do continued_bracket_start = i // JSONInner described over the next few lines
         }
         else { //Single assignment
@@ -139,25 +143,38 @@ parse_json_document :: proc(lines: []string) -> (res: JSONInner, ok: bool) {
             }
             
             // End of recursion, given a direct value (no more JSONInner)
-            line_res.value := parse_inner(splitByAssignment[1], #procedure)
+            line_res.value = parse_value(splitByAssignment[1], #procedure) or_return
         }
 
         append(&json_results, line_res)
     }
 
-    res := json_results[:]
+    res = json_results[:]
     return res, true
 }
+
+@(test)
+json_test_simple :: proc(t: ^testing.T) {
+   
+    filepath :: "jsontext1.txt"
+    result, ok := parse_json(filepath)
+    testing.expect(t, ok)
+
+    log.infof("jsonresult: %v", result)
+}
+
+// -- 
+
 
 @(private)
 parse_json_key_value :: proc(line: string) -> (result: []string) {
     inQuotes := false
-    result := [2]string{"", ""}
+    result = []string{"", ""}
     for char, i in line {
         if char == '\"' do inQuotes = !inQuotes
         else if char == ':' && !inQuotes {
-            result[0] = strings.substring(0, i)
-            result[1] = strings.substring(i + 1, len(line))
+            result[0] = line[0:i]
+            result[1] = line[i+1:len(line)]
         }
     }
 
@@ -171,13 +188,13 @@ parse_key :: proc(key_line, call_proc: string) -> (key: string, ok: bool) {
 
     for char, i in key_line {
         if char == '\"' {
-            if nQuotes <= 1 do inQuotes += 1
+            if nQuotes <= 1 do nQuotes += 1
             else {
                 log.errorf("%s: JSON parsing error: Number of quotes in key is irregular", call_proc)
                 return "", false
             }
         }
-        else if inQuotes != 1 {
+        else if nQuotes != 1 {
             // If not inside the quotes
             log.errorf("%s: JSON parsing error: Irregular character when parsing key at index: %d", call_proc, i)
             return "", false
@@ -185,25 +202,28 @@ parse_key :: proc(key_line, call_proc: string) -> (key: string, ok: bool) {
         else do strings.write_rune(&key_builder, char)
     }
 
-    return strings.to_string(key_builder)
+    return strings.to_string(key_builder), true
 }
 
+/* replace with parse_value and parse errors on call, * JSONInner is JSONValue
 @(private)
 parse_inner :: proc(value_line, call_proc: string) -> (inner: JSONInner, ok: bool) #optional_ok {
-    value, ok := parse_value(value_line)
+    inner, ok = parse_value(value_line, call_proc)
     if !ok {
         log.errorf("%s: JSON parsing error: Value of %s was not able to be parsed", call_proc, value_line)
         return nil, false
     }
-    inner: JSONInner = []JSONValue{value}
+    inner = []JSONValue{value}
     return inner, true
 }
+*/
 
 @(private)
 parse_value :: proc(value_line, call_proc: string) -> (value: JSONValue, ok: bool) {
     
     trimmed_line := strings.trim_space(value_line)
-    #partial switch(get_data_fmt(trimmed_line, call_proc)) {
+    data_fmt := get_data_fmt(trimmed_line, call_proc) or_return
+    #partial switch(data_fmt) {
         case .BOOL:
             value = trimmed_line == "true"
         case .INT:
@@ -225,20 +245,20 @@ get_data_fmt :: proc(value_str: string, call_proc: string) -> (data_type: Accept
     else if strings.contains(value_str, "true") || strings.contains(value_str, "false") {
         return AcceptedValues.BOOL, true
     }
-    else if unicode.is_number(value_str) {
+    else if unicode.is_number(value_str) { //use different proc
         if strings.contains(value_str, ".") do return AcceptedValues.FLOAT, true
         else do return AcceptedValues.INT, true
     }
     else {
         log.errorf("%s: JSON paring error: Invalid type for data given: %s", call_proc, value_str)
-        return typeid_of(typeid), false
+        return .BOOL, false
     }
 }
 
 @(private)
 parse_multi_inner :: proc(value_line, call_proc: string) -> (value: JSONInner, ok: bool) #optional_ok {
     // Grab assignments from inside brackets, split them and recurse parse_json_into_arr
-    assign_starts_at, assign_ends_at: int = 0
+    assign_starts_at, assign_ends_at := 0, 0
     for char, i in value_line {
         if char == '{' do assign_starts_at = i
         else if char == '}' do assign_ends_at = i
@@ -249,34 +269,24 @@ parse_multi_inner :: proc(value_line, call_proc: string) -> (value: JSONInner, o
         return nil, false
     }
 
-    assignments = strings.substring(value_line, assign_starts_at, assign_ends_at + 1)
-    statements = strings.split(assignments, ",")
+    assignments := value_line[assign_starts_at:assign_ends_at+1]
+    statements := strings.split(assignments, ",")
 
-    arr, ok := parse_json_into_arr(statements)
-    if !ok do return nil, false
-
-    return arr[:], true
-}
-
-destroy_json :: proc {destroy_json_result, destroy_json_results }
-
-@(private)
-destroy_json_output :: proc(results: JSON) {
-    for result in results do destroy_json_result(result)
+    return parse_json_document(statements)
 }
 
 @(private)
-destroy_json_result :: proc(result: ^JSONResult) {
-    destroy_json_inner(result.value)
+destroy_json :: proc(result: ^JSONResult) {
+    destroy_json_inner(&result.value)
     free(result)
 }
 
 @(private)
 destroy_json_inner :: proc(inner: ^JSONInner) {
     json_res, ok := inner.([]^JSONResult)
-    if ok do for results in json_res { destroy_json_result(results) }
+    if ok do for results in json_res { destroy_json(results) }
     else {
-        any_res, ok := inner.(any)
+        any_res, ok := inner.(any) //fix all
         if !ok do log.errorf("Type error should not happen in %s", #procedure)
         free(any_res.data)
         delete(any_res)
