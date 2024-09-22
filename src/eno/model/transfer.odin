@@ -1,7 +1,6 @@
 package model
 
 import "core:log"
-import "core:os"
 import "core:strings"
 import "core:unicode"
 import "core:strconv"
@@ -10,29 +9,6 @@ import "../utils"
 
 // This file defines data transfer
 
-read_lines_from_file :: proc(filepath: string) -> (lines: []string, ok: bool) #optional_ok {
-    ok = true
-
-    f, err := os.open(filepath)
-    if err != os.ERROR_NONE {
-        log.errorf("%s: Could not open file specified: %s", #procedure, filepath)
-        return nil, false
-    }
-    defer os.close(f)
-
-    bytes, success := os.read_entire_file_from_filename(filepath)
-    if !success {
-        log.errorf("%s: File %s could not be read into bytes", #procedure, filepath)
-        return nil, false
-    }
-
-    file_as_string: string = strings.to_string(strings.builder_from_bytes(bytes))
-
-    lines = strings.split_lines(file_as_string)
-    if lines == nil do ok = false
-    
-    return lines, ok
-}
 
 // Currently implemented for parsing and representing JSON input
 // *none of this is tested yet
@@ -64,7 +40,7 @@ parse_json :: proc { parse_json_from_file, parse_json_from_lines }
 
 parse_json_from_file :: proc(filepath: string) -> (res: ^JSONResult, ok: bool) #optional_ok {
 
-    lines: []string = read_lines_from_file(filepath)
+    lines: []string = utils.read_lines_from_file(filepath)
     if lines == nil {
         log.errorf("%s: Could not read lines from file: %s", #procedure, filepath)
         return nil, false
