@@ -111,4 +111,19 @@ substring_test :: proc(t: ^testing.T) {
     log.infof("s2: %v", s2)
 }
 
+concat :: proc(string_inp: ..string) -> string {
+    builder := strings.builder_make()
+    defer strings.builder_destroy(&builder)
 
+    for str in string_inp do strings.write_string(&builder, str)
+
+    return strings.to_string(builder)
+}
+
+@(test)
+concat_test :: proc(t: ^testing.T) {
+    str1 := "hello, "
+    str2 := "world"
+    str3 := "!!"
+    log.info(concat(str1, str2, str3))
+}
