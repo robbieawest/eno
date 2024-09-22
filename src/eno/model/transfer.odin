@@ -6,6 +6,7 @@ import "core:strings"
 import "core:unicode"
 import "core:strconv"
 import "core:testing"
+import "../utils"
 
 // This file defines data transfer
 
@@ -42,7 +43,7 @@ JSONValue :: union {
     bool,
     i64,
     f64,
-    []JSONValue // Check cleanup for this
+    []JSONValue // Check cleanup for this *- needs implementation everywhere
 }
 
 JSONInner :: union {
@@ -205,54 +206,27 @@ parse_key :: proc(key_line, call_proc: string) -> (key: string, ok: bool) {
     return strings.to_string(key_builder), true
 }
 
-/* replace with parse_value and parse errors on call, * JSONInner is JSONValue
-@(private)
-parse_inner :: proc(value_line, call_proc: string) -> (inner: JSONInner, ok: bool) #optional_ok {
-    inner, ok = parse_value(value_line, call_proc)
-    if !ok {
-        log.errorf("%s: JSON parsing error: Value of %s was not able to be parsed", call_proc, value_line)
-        return nil, false
-    }
-    inner = []JSONValue{value}
-    return inner, true
-}
-*/
-
 @(private)
 parse_value :: proc(value_line, call_proc: string) -> (value: JSONValue, ok: bool) {
     
     trimmed_line := strings.trim_space(value_line)
-    data_fmt := get_data_fmt(trimmed_line, call_proc) or_return
-    #partial switch(data_fmt) {
-        case .BOOL:
-            value = trimmed_line == "true"
-        case .INT:
+    switch(utils.get_string_encoded_type(trimmed_line)) {
+        case .TRUE:
+            value = true
+        case .FALSE:
+            value = false
+        case .NEG_INT, .POS_INT:
             value, ok = strconv.parse_i64(trimmed_line)
-        case .FLOAT:
+        case .NEG_REAL, .POS_REAL:
             value, ok = strconv.parse_f64(trimmed_line)
         case .STRING:
             value = trimmed_line
+        case .NOT_APPLICABLE:
+            log.errorf("%s: JSON parsing error: Invalid format when parsing value on the line: %s", call_proc, value_line)
+            return value, false
     }
 
     return value, ok
-}
-
-@(private)
-get_data_fmt :: proc(value_str: string, call_proc: string) -> (data_type: AcceptedValues, ok: bool) {
-    if strings.count(value_str, "\"") == 2 {
-        return AcceptedValues.STRING, true
-    }
-    else if strings.contains(value_str, "true") || strings.contains(value_str, "false") {
-        return AcceptedValues.BOOL, true
-    }
-    else if unicode.is_number(value_str) { //use different proc
-        if strings.contains(value_str, ".") do return AcceptedValues.FLOAT, true
-        else do return AcceptedValues.INT, true
-    }
-    else {
-        log.errorf("%s: JSON paring error: Invalid type for data given: %s", call_proc, value_str)
-        return .BOOL, false
-    }
 }
 
 @(private)
