@@ -249,20 +249,14 @@ parse_multi_inner :: proc(value_line, call_proc: string) -> (value: JSONInner, o
     return parse_json_document(statements)
 }
 
-@(private)
 destroy_json :: proc(result: ^JSONResult) {
     destroy_json_inner(&result.value)
     free(result)
 }
 
-@(private)
 destroy_json_inner :: proc(inner: ^JSONInner) {
-    json_res, ok := inner.([]^JSONResult)
-    if ok do for results in json_res { destroy_json(results) }
-    else {
-        any_res, ok := inner.(any) //fix all
-        if !ok do log.errorf("Type error should not happen in %s", #procedure)
-        free(any_res.data)
-        delete(any_res)
-    }
+    list_val, ok := inner.([]^JSONResult)
+    if ok do for result in list_val do destroy_json(result)
+    
+    free(inner)
 }
