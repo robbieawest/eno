@@ -6,6 +6,7 @@ import "core:unicode"
 import "core:strconv"
 import "core:testing"
 import "core:fmt"
+import "core:slice"
 import "../utils"
 
 // This file defines data transfer
@@ -86,15 +87,17 @@ parse_json_from_file :: proc(filepath: string) -> (res: ^JSONResult, ok: bool) #
 
     lines: []string = utils.read_lines_from_file(filepath)
     if lines == nil {
-        log.errorf("%s: Could not read lines from file: %s", #procedure, filepath)
+        log.errorf("%s: Could not read lines from file: %R.West-6@sms.ed.ac.uks", #procedure, filepath)
         return nil, false
     }
     
     return parse_json_from_lines(lines)
 }
 
-@(private)
+
 parse_json_from_lines :: proc(lines: []string) -> (res: ^JSONResult, ok: bool) {
+    lines := slice.filter(lines, proc(s: string) -> bool { return len(s) != 0 })
+
     res = new (JSONResult)
     res.key = ""
     res.value, ok = parse_json_document(lines)
@@ -114,17 +117,20 @@ parse_json_document :: proc(lines: []string) -> (res: JSONInner, ok: bool) {
     for line, i in lines {
         line := strings.trim_space(line)
         
-        if continued_bracket_start != -1 && !strings.contains(line, "}"){
+        if continued_bracket_start != -1 {
             log.info("in continued")
+            log.infof("line in continued: %s", line)
             ends_with_no_comma := strings.ends_with(line, "}")
             if ends_with_no_comma && i != len(lines) - 1 {
-                log.errorf("%s: JSON parsing error: Line % scannot end with a single '}' without any comma indicating the next", #procedure, line)
+                log.error("bad")
+                log.errorf("%s: JSON parsing error: Line %s cannot end with a single '}' without any comma indicating the next", #procedure, line)
                 return nil, false
             }
 
             if strings.ends_with(line, "},") || ends_with_no_comma {
                 // recursively call this procedure to figure out the JSONInner value for the bracketed region
-                json_results[len(json_results) - 1].value = parse_json_document(lines[continued_bracket_start:i+1]) or_return
+                log.info("Recursively calling")
+                json_results[len(json_results) - 1].value = parse_json_document(lines[continued_bracket_start+1:i]) or_return
                 continued_bracket_start = -1
             }
             continue
@@ -150,17 +156,17 @@ parse_json_document :: proc(lines: []string) -> (res: JSONInner, ok: bool) {
         //--
 
         line_res := new(JSONResult)
-        splitByAssignment: []string = parse_json_key_value(line)
-        assert(len(splitByAssignment) == 2)
+        key_input, value_input := split_assignment(line)
+        line_res.key = parse_key(key_input, #procedure) or_return
 
-        line_res.key = parse_key(splitByAssignment[0], #procedure) or_return
-
+        
         if bracketOpens { //Contains recursive json document inline or across the next lines
-            if bracketCloses do line_res.value = parse_multi_inner(splitByAssignment[1], #procedure) or_return // JSONInner described in the same lin
+            if bracketCloses do line_res.value = parse_multi_inner(value_input, #procedure) or_return // JSONInner described in the same lin
             else do continued_bracket_start = i // JSONInner described over the next few lines
         }
         else if !bracketCloses { //Single assignment
-            if (nEndCommas == 0) {
+            log.info("Simple assignment")
+            if (nEndCommas == 0 && i != len(lines) - 2) {
                 log.errorf("%s: JSON parsing error: No commas to designate line end", #procedure)
                 return nil, false
             }
@@ -170,7 +176,8 @@ parse_json_document :: proc(lines: []string) -> (res: JSONInner, ok: bool) {
             }
             
             // End of recursion, given a direct value (no more JSONInner)
-            line_res.value = parse_value(splitByAssignment[1], #procedure) or_return
+            log.infof("split by assignment 1: %s", value_input)
+            line_res.value = parse_value(value_input, #procedure) or_return
         }
 
         append(&json_results, line_res)
@@ -187,33 +194,68 @@ json_test_simple :: proc(t: ^testing.T) {
     result, ok := parse_json(filepath)
     testing.expect(t, ok)
     
-    log.info("json to string: %s\n", json_to_string(result))
-    log.infof("jsonresult: %v", result)
+ //   log.info("json to string: %s\n", json_to_string(result))
+    log.info("print json result: %s\n", print_json(result))
+ //   log.infof("jsonresult: %v", result)
+}
+
+@(private)
+print_json :: proc(result: ^JSONResult) -> string {
+    if result == nil {
+        //log.errorf("Result is nil in %s", #procedure)
+        return "nil"
+    }
+    return fmt.aprintf("{{ key: \"%s\", inner: %s }}", result.key, print_inner(result.value))
+}
+
+@(private)
+print_inner :: proc(inner: JSONInner) -> string {
+    if inner == nil {
+      //  log.errorf("Inner is nil in %s", #procedure)
+        return "nil"
+    }
+
+    list, ok := inner.([]^JSONResult)
+    if ok {
+        builder := strings.builder_make()
+        strings.write_string(&builder, " [ ")
+
+        for &res in list do strings.write_string(&builder, fmt.aprintf("%s, ", print_json(res)))
+
+        strings.pop_rune(&builder)
+        strings.pop_rune(&builder)
+
+        strings.write_string(&builder, " ] ")
+        return strings.to_string(builder)
+    }
+    return fmt.aprintf("%s", inner.(JSONValue))
 }
 
 // -- 
 
 
 @(private)
-parse_json_key_value :: proc(line: string) -> (result: []string) {
+split_assignment :: proc(line: string) -> (key, value: string) {
     inQuotes := false
-    result = []string{"", ""}
     for char, i in line {
         if char == '\"' do inQuotes = !inQuotes
         else if char == ':' && !inQuotes {
-            result[0] = line[0:i]
-            result[1] = line[i+1:len(line)]
+            log.infof("found colon")
+            return line[0:i], line[i+1:]
         }
     }
-
-    return result
+    
+    log.errorf("Could not find assignment in line: %s", line)
+    return "", ""
 }
 
 @(private)
 parse_key :: proc(key_line, call_proc: string) -> (key: string, ok: bool) {
+    if key_line == "" do return key_line, true
+    key_line := strings.trim_space(key_line)
+
     key_builder := strings.builder_make()
     nQuotes := 0
-
     for char, i in key_line {
         if char == '\"' {
             if nQuotes <= 1 do nQuotes += 1
@@ -236,6 +278,8 @@ parse_key :: proc(key_line, call_proc: string) -> (key: string, ok: bool) {
 @(private)
 parse_value :: proc(value_line, call_proc: string) -> (value: JSONValue, ok: bool) {
     
+    log.infof("value line: \"%s\"", value_line)
+
     trimmed_line := strings.trim_space(value_line)
     switch(utils.get_string_encoded_type(trimmed_line)) {
         case .TRUE:
