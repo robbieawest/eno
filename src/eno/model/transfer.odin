@@ -1,6 +1,7 @@
 package model
 
 import "core:log"
+import "core:mem"
 import "core:strings"
 import "core:unicode"
 import "core:strconv"
@@ -62,6 +63,8 @@ json_to_string_internal :: proc(builder: ^strings.Builder, indent: string, resul
 
 json_to_string :: proc(result: ^JSONResult) -> string {
     builder := strings.builder_make()
+    defer strings.builder_destroy(&builder)
+
     strings.write_string(&builder, "{\n")
 
     json_to_string_internal(&builder, "\t", result)
@@ -72,7 +75,7 @@ json_to_string :: proc(result: ^JSONResult) -> string {
 
 //@(test)
 //json_to_string_test :: proc(t: ^testing.T) {
- //   result := new(JSONResult)
+ //   result := new(JSONResult)ture is based on a misperception of the h
  //   result.key = ""
  //   result.value = JSONInner { []^Jnter address of 'builder' SONResult { }}
 //}
@@ -86,6 +89,8 @@ parse_json :: proc { parse_json_from_file, parse_json_from_lines }
 parse_json_from_file :: proc(filepath: string) -> (res: ^JSONResult, ok: bool) #optional_ok {
 
     lines: []string = utils.read_lines_from_file(filepath)
+    defer delete(lines)
+
     if lines == nil {
         log.errorf("%s: Could not read lines from file: %s", #procedure, filepath)
         return nil, false
@@ -97,20 +102,22 @@ parse_json_from_file :: proc(filepath: string) -> (res: ^JSONResult, ok: bool) #
 
 parse_json_from_lines :: proc(lines: []string) -> (res: ^JSONResult, ok: bool) {
     lines := slice.filter(lines, proc(s: string) -> bool { return len(s) != 0 })
+    defer delete(lines)
 
     res = new (JSONResult)
     res.key = ""
-    res.value, ok = parse_json_document(lines)
+    res.value, ok = parse_json_document(lines, true)
     return res, ok
 }
 
 @(private)
-parse_json_document :: proc(lines: []string) -> (res: JSONInner, ok: bool) {
+parse_json_document :: proc(lines: []string, root: bool) -> (res: JSONInner, ok: bool) {
 
     //assume single assignment per line, unless all assignments for an inner JSON document are described inline with '{...}'
     
     continued_bracket_start := -1
     json_results := [dynamic]^JSONResult{}
+    defer delete(json_results)
 
     log.infof("lines: %s", lines)
 
@@ -130,7 +137,26 @@ parse_json_document :: proc(lines: []string) -> (res: JSONInner, ok: bool) {
             if strings.ends_with(line, "},") || ends_with_no_comma {
                 // recursively call this procedure to figure out the JSONInner value for the bracketed region
                 log.info("Recursively calling")
-                json_results[len(json_results) - 1].value = parse_json_document(lines[continued_bracket_start+1:i]) or_return
+                resultant_inner := parse_json_document(lines[continued_bracket_start+1:i], false) or_return
+                resultant, ok := resultant_inner.([]^JSONResult)
+                if !ok {
+                    log.errorf("Unexpected result")
+                    return nil, false
+                }
+
+                if root {
+                    err := reserve(&json_results, len(resultant))
+                    if err != mem.Allocator_Error.None {
+                        log.errorf("Allocator error when reserving into results")
+                        return nil, false
+                    }
+
+                    for inner in resultant do append(&json_results, inner) 
+                }
+                else {
+                    json_results[len(json_results) - 1].value = resultant
+                }
+
                 continued_bracket_start = -1
             }
             continue
@@ -156,18 +182,20 @@ parse_json_document :: proc(lines: []string) -> (res: JSONInner, ok: bool) {
         //--
 
         line_res := new(JSONResult)
-        key_input, value_input := split_assignment(line)
-        line_res.key = parse_key(key_input, #procedure) or_return
-
         
         if bracketOpens { //Contains recursive json document inline or across the next lines
-            if bracketCloses do line_res.value = parse_multi_inner(value_input, #procedure) or_return // JSONInner described in the same lin
+            if bracketCloses {
+                key_input, value_input := split_assignment(line)
+                line_res.key = parse_key(key_input, #procedure) or_return
+                line_res.value = parse_multi_inner(value_input, #procedure) or_return // JSONInner described in the same line
+            }
             else do continued_bracket_start = i // JSONInner described over the next few lines
         }
         else if !bracketCloses { //Single assignment
-            log.info("Simple assignment")
+            key_input, value_input := split_assignment(line)
+            line_res.key = parse_key(key_input, #procedure) or_return
+
             if (nEndCommas == 0 && i != len(lines) - 1) {
-                log.infof("bad line end: nend: %d, i: %d, lenl: %d", nEndCommas, i, len(lines))
                 log.errorf("%s: JSON parsing error: No commas to designate line end", #procedure)
                 return nil, false
             }
@@ -180,11 +208,12 @@ parse_json_document :: proc(lines: []string) -> (res: JSONInner, ok: bool) {
             log.infof("split by assignment 1: %s", value_input)
             line_res.value = parse_value(value_input, #procedure) or_return
         }
-
-        append(&json_results, line_res)
+        
+        if len(line_res.key) != 0 do append(&json_results, line_res)
     }
 
     res = json_results[:]
+   // log.infof("inner after %s finish: %s", #procedure, print_inner(res))
     return res, true
 }
 
@@ -193,11 +222,11 @@ json_test_simple :: proc(t: ^testing.T) {
    
     filepath :: "resources/jsontest1.txt"
     result, ok := parse_json(filepath)
+    defer destroy_json(result)
+
     testing.expect(t, ok)
-    
     //log.infof("json to string: %s\n", json_to_string(result))
-    log.infof("print json result: %s\n", print_json(result))
- //   log.infof("jsonresult: %v", result)
+   // log.infof("print json result: %s\n", print_json(result))
 }
 
 @(private)
@@ -219,6 +248,7 @@ print_inner :: proc(inner: JSONInner) -> string {
     list, ok := inner.([]^JSONResult)
     if ok {
         builder := strings.builder_make()
+
         strings.write_string(&builder, " [ ")
 
         for &res in list do strings.write_string(&builder, fmt.aprintf("%s, ", print_json(res)))
@@ -256,6 +286,7 @@ parse_key :: proc(key_line, call_proc: string) -> (key: string, ok: bool) {
     key_line := strings.trim_space(key_line)
 
     key_builder := strings.builder_make()
+
     nQuotes := 0
     for char, i in key_line {
         if char == '\"' {
@@ -329,7 +360,7 @@ parse_multi_inner :: proc(value_line, call_proc: string) -> (value: JSONInner, o
     assignments := value_line[assign_starts_at:assign_ends_at+1]
     statements := strings.split(assignments, ",")
 
-    return parse_json_document(statements)
+    return parse_json_document(statements, false) //May need to be true depending
 }
 
 destroy_json :: proc(result: ^JSONResult) {
@@ -340,6 +371,4 @@ destroy_json :: proc(result: ^JSONResult) {
 destroy_json_inner :: proc(inner: ^JSONInner) {
     list_val, ok := inner.([]^JSONResult)
     if ok do for result in list_val do destroy_json(result)
-    
-    free(inner)
 }
