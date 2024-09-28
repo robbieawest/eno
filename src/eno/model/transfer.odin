@@ -87,7 +87,7 @@ parse_json_from_file :: proc(filepath: string) -> (res: ^JSONResult, ok: bool) #
 
     lines: []string = utils.read_lines_from_file(filepath)
     if lines == nil {
-        log.errorf("%s: Could not read lines from file: %R.West-6@sms.ed.ac.uks", #procedure, filepath)
+        log.errorf("%s: Could not read lines from file: %s", #procedure, filepath)
         return nil, false
     }
     
@@ -166,7 +166,8 @@ parse_json_document :: proc(lines: []string) -> (res: JSONInner, ok: bool) {
         }
         else if !bracketCloses { //Single assignment
             log.info("Simple assignment")
-            if (nEndCommas == 0 && i != len(lines) - 2) {
+            if (nEndCommas == 0 && i != len(lines) - 1) {
+                log.infof("bad line end: nend: %d, i: %d, lenl: %d", nEndCommas, i, len(lines))
                 log.errorf("%s: JSON parsing error: No commas to designate line end", #procedure)
                 return nil, false
             }
@@ -194,8 +195,8 @@ json_test_simple :: proc(t: ^testing.T) {
     result, ok := parse_json(filepath)
     testing.expect(t, ok)
     
- //   log.info("json to string: %s\n", json_to_string(result))
-    log.info("print json result: %s\n", print_json(result))
+    //log.infof("json to string: %s\n", json_to_string(result))
+    log.infof("print json result: %s\n", print_json(result))
  //   log.infof("jsonresult: %v", result)
 }
 
@@ -228,7 +229,7 @@ print_inner :: proc(inner: JSONInner) -> string {
         strings.write_string(&builder, " ] ")
         return strings.to_string(builder)
     }
-    return fmt.aprintf("%s", inner.(JSONValue))
+    return fmt.aprintf("%v", inner.(JSONValue))
 }
 
 // -- 
@@ -278,18 +279,29 @@ parse_key :: proc(key_line, call_proc: string) -> (key: string, ok: bool) {
 @(private)
 parse_value :: proc(value_line, call_proc: string) -> (value: JSONValue, ok: bool) {
     
+    if len(value_line) == 0 {
+        log.errorf("%s: JSON parsing error: Value input is empty on assignment in line: %s", call_proc, value_line)
+        return value, false
+    }
+
     log.infof("value line: \"%s\"", value_line)
 
     trimmed_line := strings.trim_space(value_line)
-    switch(utils.get_string_encoded_type(trimmed_line)) {
+
+    last_ind := len(trimmed_line) - 1
+    line := trimmed_line[0:trimmed_line[last_ind] == ',' ? last_ind : last_ind + 1]
+
+    log.infof("trimmed line: '%s'", line)
+
+    switch(utils.get_string_encoded_type(line)) {
         case .TRUE:
             value = true
         case .FALSE:
             value = false
         case .NEG_INT, .POS_INT:
-            value, ok = strconv.parse_i64(trimmed_line)
+            value, ok = strconv.parse_i64(line)
         case .NEG_REAL, .POS_REAL:
-            value, ok = strconv.parse_f64(trimmed_line)
+            value, ok = strconv.parse_f64(line)
         case .STRING:
             value = trimmed_line
         case .NOT_APPLICABLE:
