@@ -192,6 +192,11 @@ parse_json_document :: proc(lines: []string, root: bool) -> (res: JSONInner, ok:
             else do continued_bracket_start = i // JSONInner described over the next few lines
         }
         else if !bracketCloses { //Single assignment
+            if !containsAssignment {
+                log.errorf("%s: JSON parsing error: Assignment expected, ':' not found.", #procedure)
+                return nil, false
+            }
+
             key_input, value_input := split_assignment(line)
             line_res.key = parse_key(key_input, #procedure) or_return
 
@@ -302,6 +307,7 @@ parse_key :: proc(key_line, call_proc: string) -> (key: string, ok: bool) {
             return "", false
         }
         else do strings.write_rune(&key_builder, char)
+        
     }
 
     return strings.to_string(key_builder), true
@@ -364,11 +370,18 @@ parse_multi_inner :: proc(value_line, call_proc: string) -> (value: JSONInner, o
 }
 
 destroy_json :: proc(result: ^JSONResult) {
+    delete(result.key)
     destroy_json_inner(&result.value)
     free(result)
 }
 
 destroy_json_inner :: proc(inner: ^JSONInner) {
-    list_val, ok := inner.([]^JSONResult)
-    if ok do for result in list_val do destroy_json(result)
+    if val, ok := inner.([]^JSONResult); ok do for result in val do destroy_json(result)
+    else if val, ok := inner.(JSONValue); ok do destroy_json_value(val)
+    //else nil
+}
+
+destroy_json_value :: proc(value: JSONValue) {
+    if val, ok := value.(string); ok do delete(val)
+    else if val, ok := value.([]JSONValue); ok do for v in val do destroy_json_value(value)
 }
