@@ -3,6 +3,7 @@ package utils
 import "core:testing"
 import "core:log"
 import "core:strings"
+import "core:mem"
 
 //type_checking for conversion
 is_string :: proc(s: string) -> bool {
@@ -120,10 +121,32 @@ concat :: proc(string_inp: ..string) -> string {
     return strings.to_string(builder)
 }
 
+
 @(test)
 concat_test :: proc(t: ^testing.T) {
     str1 := "hello, "
     str2 := "world"
     str3 := "!!"
     log.info(concat(str1, str2, str3))
+}
+
+concat_cstr :: proc(string_inp: ..cstring) -> cstring {
+    builder := strings.builder_make()
+    defer strings.builder_destroy(&builder)
+
+    for str in string_inp do strings.write_string(&builder, string(str))
+
+    return strings.to_cstring(&builder)
+}
+
+
+MAX_KEY_BYTES :: 256
+to_string_no_alloc :: proc(b: strings.Builder) -> (result: string, err: mem.Allocator_Error)  {
+    err = mem.Allocator_Error.None
+    if len(b.buf) > MAX_KEY_BYTES do return "", mem.Allocator_Error.Invalid_Argument
+    
+    stack_bytes: [MAX_KEY_BYTES]u8
+    if num_copied := copy_slice(stack_bytes[:], b.buf[:]); num_copied < len(b.buf) do err = mem.Allocator_Error.Out_Of_Memory
+
+    return string(stack_bytes[:]), err
 }

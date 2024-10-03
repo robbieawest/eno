@@ -11,10 +11,8 @@ import "core:slice"
 import "../utils"
 
 // This file defines data transfer
-
-
 // Currently implemented for parsing and representing JSON input
-// *none of this is tested yet
+// Sort of works, a leak is here somewhere, but I will be using core/encoding/json for the rest of this project
 
 AcceptedValues :: enum { STRING, BOOL, INT, FLOAT, LIST}
 JSONValue :: union {
@@ -231,27 +229,20 @@ json_test_simple :: proc(t: ^testing.T) {
 
     testing.expect(t, ok)
     //log.infof("json to string: %s\n", json_to_string(result))
-   // log.infof("print json result: %s\n", print_json(result))
+    //log.infof("print json result: %s\n", print_json(result))
 }
 
 @(private)
 print_json :: proc(result: ^JSONResult) -> string {
-    if result == nil {
-        //log.errorf("Result is nil in %s", #procedure)
-        return "nil"
-    }
+    if result == nil do return "nil"
     return fmt.aprintf("{{ key: \"%s\", inner: %s }}", result.key, print_inner(result.value))
 }
 
 @(private)
 print_inner :: proc(inner: JSONInner) -> string {
-    if inner == nil {
-      //  log.errorf("Inner is nil in %s", #procedure)
-        return "nil"
-    }
+    if inner == nil do return "nil"
 
-    list, ok := inner.([]^JSONResult)
-    if ok {
+    if list, ok := inner.([]^JSONResult); ok {
         builder := strings.builder_make()
 
         strings.write_string(&builder, " [ ")
@@ -291,6 +282,7 @@ parse_key :: proc(key_line, call_proc: string) -> (key: string, ok: bool) {
     key_line := strings.trim_space(key_line)
 
     key_builder := strings.builder_make()
+    defer strings.builder_destroy(&key_builder)
 
     nQuotes := 0
     for char, i in key_line {
@@ -307,10 +299,16 @@ parse_key :: proc(key_line, call_proc: string) -> (key: string, ok: bool) {
             return "", false
         }
         else do strings.write_rune(&key_builder, char)
-        
-    }
+    } 
 
-    return strings.to_string(key_builder), true
+    str_res, err := utils.to_string_no_alloc(key_builder); if err != mem.Allocator_Error.None {
+        #partial switch(err) {
+        case .Invalid_Argument: log.errorf("%s: JSON parsing error: Max key size exceeded (%d bytes)", #procedure, utils.MAX_KEY_BYTES)
+        case .Out_Of_Memory: log.errorf("%s: JSON parsing error: Allocation error while parsing key", #procedure)
+        }
+        return "", false
+    }
+    return str_res, true
 }
 
 @(private)
@@ -369,16 +367,35 @@ parse_multi_inner :: proc(value_line, call_proc: string) -> (value: JSONInner, o
     return parse_json_document(statements, false) //May need to be true depending
 }
 
+
 destroy_json :: proc(result: ^JSONResult) {
-    delete(result.key)
-    destroy_json_inner(&result.value)
+    destroy_json_inner(result.value)
     free(result)
 }
 
-destroy_json_inner :: proc(inner: ^JSONInner) {
+@(test)
+destroy_json_test :: proc(t: ^testing.T) {
+    json := new(JSONResult)
+
+    json_keyval1 := new(JSONResult)
+    json_keyval1.key = "key1"
+    val1: JSONValue = 2
+    json_keyval1.value = val1
+
+    json_keyval2 := new(JSONResult)
+    json_keyval2.key = "key1"
+    val2: JSONValue = 3
+    json_keyval2.value = val2
+
+    json.value = []^JSONResult{json_keyval1, json_keyval2}
+
+    destroy_json(json) //look for leaks 
+}
+
+destroy_json_inner :: proc(inner: JSONInner) {
     if val, ok := inner.([]^JSONResult); ok do for result in val do destroy_json(result)
     else if val, ok := inner.(JSONValue); ok do destroy_json_value(val)
-    //else nil
+    //else nil - maybe remove case with #no_nil
 }
 
 destroy_json_value :: proc(value: JSONValue) {

@@ -35,3 +35,23 @@ remove_index_test :: proc(t: ^testing.T) {
 
     for i := 0; i < len(removed); i += 1 do testing.expect_value(t, removed[i], removed_expected[i])
 }
+
+append_n_defaults :: proc(slice: ^$T/[dynamic]$E, n: uint) {
+    reserve(slice, n)
+    for i in 0..<n {
+        def: E 
+        append(slice, def)
+    }
+}
+
+@(test)
+append_n_defaults_test :: proc(t: ^testing.T) {
+    slice := [dynamic]f32{0.32, 0.12, 0.58}
+    expected_end_slice := [dynamic]f32{0.32, 0.12, 0.58, 0.0, 0.0, 0.0}
+    defer delete(slice)
+    defer delete(expected_end_slice)
+
+    append_n_defaults(&slice, 3)
+    testing.expect_value(t, len(slice), len(expected_end_slice))
+    for i in 0..<len(slice) do testing.expect_value(t, slice[i], expected_end_slice[i])
+}
