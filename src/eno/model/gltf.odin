@@ -4,6 +4,7 @@ import "vendor:cgltf"
 import "core:log"
 import "core:testing"
 import "core:strings"
+import "core:mem"
 import "../utils"
 
 DEFAULT_OPTIONS: cgltf.options
@@ -43,7 +44,17 @@ load_model_test :: proc(t: ^testing.T) {
     //log.infof("data: \n%#v", data)
 }
 
-extract_vertex_data_from_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []^Mesh, ok: bool) {
+ZeroedSize :: union { uint, int }
+zeroed_size_to_size :: proc(zs: ZeroedSize) -> uint {
+    ui, ok := zs.(uint)
+    if !ok {
+        log.errorf("%s: Attempted to obtain size from int in zeroed size", #procedure)
+        return 0
+    }
+    return ui
+}
+
+extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layout: [][]VertexComponent) -> (result: []^Mesh, ok: bool) {
 
     //This is assuming all mesh attributes (aside from indices) have the same count (for each primitive/mesh output)
 
@@ -51,49 +62,66 @@ extract_vertex_data_from_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []^Mesh, ok
 
     mesh_data := make([dynamic]^Mesh, len(mesh.primitives))
     defer delete(mesh_data)
+    
+    if len(vertex_layout) != len(mesh.primitives) {
+        log.errorf("%s: Number of mesh primitives does not match vertex layout", #procedure)
+        return mesh_data[:], false
+    }
 
     for _primitive, i in mesh.primitives {
         mesh_ret := new(Mesh)
+        num_copied := utils.copy_slice_to_dynamic(&mesh_ret.components, &vertex_layout[i])
+        if !num_copied {
+            log.errorf("%s: Error in slice/dynamic arr data", #procedure)
+            return mesh_data[:], false
+        }
 
-        components := make([dynamic]VertexComponent)
-        defer delete(components)
-        vertices := make([dynamic]VertexData)
-        defer delete(vertices)
+        if len(vertex_layout) != len(_primitive.attributes) {
+            log.errorf("%s: Number of primitive attributes does not match vertex layout", #procedure);
+            return mesh_data[:], false
+        }
 
         count_throughout: uint = 0
-        current_offset: uint = 0
+        last_offset: ZeroedSize = -1
         for _attribute, j in _primitive.attributes {
             _accessor := _attribute.data
 
             //Grab the element size( aligned with the current datatype, in units of that datatype (only currently considering f32) )
             //Todo: Consider other datatypes by matching component type of accessor against odin type 
-            element_size := _accessor.stride / _accessor.count / size_of(f32)
+            stride_as_index : = _accessor.stride / size_of(f32)
+            element_size : ZeroedSize = -1
+            if _, ok := last_offset.(int); ok {
+                if len(vertex_layout[i]) == 1 do element_size = stride_as_index
+                else do element_size = vertex_layout[i][j + 1].offset //Panics if vertex_layout incorrectly formatted
+            }
+            else do element_size = vertex_layout[i][j].offset - zeroed_size_to_size(last_offset)
+
             
             count := _accessor.count
             if count_throughout != 0 && count != count_throughout {
                 log.errorf("%s: Attributes/accessors of mesh primitive must contain the same count/number of elements", #procedure)
                 return mesh_data[:], false
             } else if count_throughout == 0 {
-                utils.append_n_defaults(&vertices, count)
-                utils.append_n_defaults(&components, count)
+                utils.append_n_defaults(&mesh_ret.vertices, count)
+                utils.append_n_defaults(&mesh_ret.components, count)
             }
 
             //Read in data for all the vertices of this attribute
+            log.info("hi ", count, " ", count_throughout)
             for k in 0..<count {
-                read_res: b32 = cgltf.accessor_read_float(_accessor, k, &mesh_ret.vertices[k].raw_data[current_offset], element_size)
+                if (len(mesh_ret.vertices[k].raw_data) == 0) do utils.append_n_defaults(&mesh_ret.vertices[k].raw_data, stride_as_index)
+                read_res: b32 = cgltf.accessor_read_float(_accessor, k, &mesh_ret.vertices[k].raw_data[vertex_layout[i][j].offset], zeroed_size_to_size(element_size))
                 if read_res == false {
                     log.errorf("%s: Error while reading float from accessor, received boolean false", #procedure)
                     return mesh_data[:], false
                 }
             }
+            log.info("hey")
 
-            current_offset += element_size
-            components[j] = VertexComponent{ current_offset, _attribute.type }
+            last_offset := vertex_layout[i][j].offset
         }
 
         //Slice components and vertices to add to mesh (Consider just storing dynamic arrays in mesh struct)
-        mesh_ret.components = components[:]
-        mesh_ret.vertices = vertices[:]
         mesh_data[i] = mesh_ret
     }
 
@@ -105,12 +133,22 @@ extract_index_data_from_mesh :: proc(mesh: ^cgltf.mesh) -> []uint {
     return []uint{}
 }
 
+
 @(test)
 extract_vertex_data_test :: proc(t: ^testing.T) {
     data, result := load_model_data("SciFiHelmet")
     defer cgltf.free(data)
 
-    res, ok := extract_vertex_data_from_mesh(&data.meshes[0])
+    vertex_layout := [][]VertexComponent{
+        make_vertex_components([]uint{3, 3, 2, 2}, []cgltf.attribute_type{
+            cgltf.attribute_type.normal,
+            cgltf.attribute_type.position,
+            cgltf.attribute_type.tangent,
+            cgltf.attribute_type.texcoord
+        })
+    }
+    res, ok := extract_mesh_from_cgltf(&data.meshes[0], vertex_layout)
+
     testing.expect(t, ok, "ok check")
     log.infof("meshes size: %d, mesh components: %v, len mesh vertices: %d", len(res), res[0].components, len(res[0].vertices))
 }

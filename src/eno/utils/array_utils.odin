@@ -55,3 +55,13 @@ append_n_defaults_test :: proc(t: ^testing.T) {
     testing.expect_value(t, len(slice), len(expected_end_slice))
     for i in 0..<len(slice) do testing.expect_value(t, slice[i], expected_end_slice[i])
 }
+
+copy_slice_to_dynamic :: proc(dyna: ^$T/[dynamic]$E, slice: ^$S/[]E) -> (copied_all: bool) {
+    //Copies elements with append
+    reserve(dyna, len(slice))
+
+    i: uint
+    for i = 0; i < len(slice); i += 1 do append(dyna, slice[i])
+
+    return i == len(slice)
+}
