@@ -10,6 +10,12 @@ VertexComponent :: struct {
     attr_type: cgltf.attribute_type
 }
 
+VertexLayout :: struct {
+    sizes : []uint,
+    types: []cgltf.attribute_type
+}
+
+/*
 make_vertex_components :: proc(offsets: []uint, types: []cgltf.attribute_type) -> (result: []VertexComponent) {
 
     if len(offsets) != len(types) {
@@ -39,18 +45,20 @@ make_vertex_components_dyna :: proc(offsets: []uint, types: []cgltf.attribute_ty
     return result
 }
 
-deep_clone_components :: proc(components: []VertexComponent) -> (result: []VertexComponent) {
+deep_clone_components :: proc(components: ^[]VertexComponent) -> (result: []VertexComponent) {
     components_arr := make([dynamic]VertexComponent, len(components))
     defer delete(components_arr)
 
+    log.infof("components before: \n%#v", components)
+
     for i := 0; i < len(components); i += 1 do components_arr[i] = VertexComponent { components[i].element_size, components[i].attr_type }
+    log.infof("components_arr: \n%#v", components_arr)
 
     return components_arr[:]
 }
 
 @(test)
 deep_clone_test :: proc(t: ^testing.T) {
-    //Write test
     components := make_vertex_components([]uint{3, 3, 4, 2}, []cgltf.attribute_type{
         cgltf.attribute_type.normal,
         cgltf.attribute_type.position,
@@ -60,16 +68,17 @@ deep_clone_test :: proc(t: ^testing.T) {
 
     log.infof("components before: \n%#v", components)
 
-    copied_components := deep_clone_components(components)
+    copied_components := deep_clone_components(&components)
     defer delete(copied_components)
    // delete(components)
 
     log.infof("components: \n%#v", copied_components)
 }
+*/
 
 Mesh :: struct {
     vertices: [dynamic]VertexData,
-    components: []VertexComponent
+    layout: ^VertexLayout
 }
 
 VertexData :: struct {
@@ -77,7 +86,6 @@ VertexData :: struct {
 }
 
 destroy_mesh :: proc(mesh: ^Mesh) {
-    delete(mesh.components)
     for &vertex in mesh.vertices do delete(vertex.raw_data)
     delete(mesh.vertices)
     free(mesh)
@@ -91,12 +99,16 @@ destroy_mesh_test :: proc(t: ^testing.T) {
     vert: [dynamic]VertexData
     append(&vert, VertexData{ rawdata })
 
-    comp := make_vertex_components([]uint{3}, []cgltf.attribute_type{ cgltf.attribute_type.normal })
-    defer delete(comp)
+    vertex_layout := VertexLayout { []uint{3, 3, 4, 2}, []cgltf.attribute_type {
+            cgltf.attribute_type.normal,
+            cgltf.attribute_type.position,
+            cgltf.attribute_type.tangent,
+            cgltf.attribute_type.texcoord
+    }}
 
     mesh := new(Mesh)
     mesh.vertices = vert
-    mesh.components = comp
+    mesh.layout = &vertex_layout
     defer destroy_mesh(mesh)
    // log.infof("mesh leak test, check for leaks: %#v", mesh)
 }

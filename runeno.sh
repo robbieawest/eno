@@ -4,12 +4,14 @@ build=true
 run=false
 testing=false
 dbg=false
+memory_tracking=true
 
 usage() {
     echo "Usage: srceno [
     -b (odin build), 
     -r (odin run), 
-    -t (odin test), 
+    -t (odin test),
+    -m (enable memory tracking for testing),
     -d (include debugging symbols), 
     -p (build subpackage instead of the whole of eno, example: ./srceno.sh -p ecs)
     ]"
@@ -18,7 +20,7 @@ usage() {
 
 build_options=""
 subproj_override=""
-while getopts brtdhp: opt; do
+while getopts brtmdhp: opt; do
     case "${opt}" in
         b) 
             build=true
@@ -34,6 +36,9 @@ while getopts brtdhp: opt; do
             testing=true
             run=false
             build=false
+            ;;
+        m)
+            memory_tracking=false
             ;;
         d) 
             dbg=true
@@ -67,6 +72,9 @@ if [ "$testing" == true ]; then
     build_options="test"
     out_name="$out_name-test"
     test_options="-define:ODIN_TEST_FANCY=true"
+    if [ "$memory_tracking" == false ]; then
+        test_options="$test_options -define:ODIN_TEST_TRACK_MEMORY=false"
+    fi
 fi
 if [ "$dbg" == true ]; then
     out_name="$out_name-debug"

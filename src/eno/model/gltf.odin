@@ -55,30 +55,26 @@ zeroed_size_to_size :: proc(zs: ZeroedSize) -> uint {
     return ui
 }
 
-extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layout: [][]VertexComponent) -> (result: []^Mesh, ok: bool) {
+extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layouts: []^VertexLayout) -> (result: []^Mesh, ok: bool) {
 
     //This is assuming all mesh attributes (aside from indices) have the same count (for each primitive/mesh output)
 
     log.infof("mesh: \n%#v", mesh)
-    log.infof("vertex layout: \n%#v", vertex_layout)
+    log.infof("vertex layouts: \n%#v", vertex_layouts)
 
     mesh_data := make([dynamic]^Mesh, len(mesh.primitives))
     defer delete(mesh_data)
     
-    if len(vertex_layout) != len(mesh.primitives) {
+    if len(vertex_layouts) != len(mesh.primitives) {
         log.errorf("%s: Number of mesh primitives does not match vertex layout", #procedure)
         return mesh_data[:], false
     }
 
     for _primitive, i in mesh.primitives {
-        log.infof("vertex layout i: \n%#v", vertex_layout[i])
-        components := slice.clone(vertex_layout[i])
-        log.infof("components: \n%#v, vertex_layout[i]: \n%#v", components, vertex_layout[i])
         mesh_ret := new(Mesh)
-        mesh_ret.components = components 
-        log.infof("mesh comp: \n%#v", mesh_ret.components)
+        mesh_ret.layout = vertex_layouts[i]
 
-        if len(vertex_layout[i]) != len(_primitive.attributes) {
+        if len(mesh_ret.layout.sizes) != len(_primitive.attributes) {
             log.errorf("%s: Number of primitive attributes does not match vertex layout", #procedure);
             return mesh_data[:], false
         }
@@ -89,9 +85,8 @@ extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layout: [][]VertexComp
             _accessor := _attribute.data
 
             //Todo: Consider other datatypes by matching component type of accessor against odin type 
-            stride_as_index := _accessor.stride / size_of(f32)
 
-            element_size := mesh_ret.components[j].element_size
+            element_size := mesh_ret.layout.sizes[j]
             log.infof("element size: %d", element_size)
         
             //Validating mesh
@@ -108,10 +103,9 @@ extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layout: [][]VertexComp
             //Read in data for all the vertices of this attribute
             next_offset := current_offset + element_size
             for k in 0..<count {
-                if (len(mesh_ret.vertices[k].raw_data) == 0) do utils.append_n_defaults(&mesh_ret.vertices[k].raw_data, stride_as_index)
+                if (len(mesh_ret.vertices[k].raw_data) == 0) do utils.append_n_defaults(&mesh_ret.vertices[k].raw_data, _accessor.stride)
                
                 raw_vertex_data : [^]f32 = raw_data(mesh_ret.vertices[k].raw_data[current_offset:next_offset])
-                log.infof("raw data: %v", raw_vertex_data[0])
 
                 read_res: b32 = cgltf.accessor_read_float(_accessor, k, raw_vertex_data, element_size)
                 if read_res == false {
@@ -141,17 +135,19 @@ extract_vertex_data_test :: proc(t: ^testing.T) {
     data, result := load_model_data("SciFiHelmet")
     defer cgltf.free(data)
 
-    vertex_layout := [][]VertexComponent{
-        make_vertex_components([]uint{3, 3, 4, 2}, []cgltf.attribute_type{
+    //Expected usage is defined here.
+    //destroy_mesh does not clean up the vertex_layout, so you must do it yourself if you allocate a VertexLayout
+
+    vertex_layout := VertexLayout { []uint{3, 3, 4, 2}, []cgltf.attribute_type {
             cgltf.attribute_type.normal,
             cgltf.attribute_type.position,
             cgltf.attribute_type.tangent,
             cgltf.attribute_type.texcoord
-        })
-    }
-    res, ok := extract_mesh_from_cgltf(&data.meshes[0], vertex_layout)
+    }}
+
+    res, ok := extract_mesh_from_cgltf(&data.meshes[0], []^VertexLayout{&vertex_layout})
     defer for mesh in res do destroy_mesh(mesh)
 
     testing.expect(t, ok, "ok check")
-    log.infof("meshes size: %d, mesh components: %v, len mesh vertices: %d", len(res), res[0].components, len(res[0].vertices))
+    log.infof("meshes size: %d, mesh components: %v, len mesh vertices: %d", len(res), res[0].layout, len(res[0].vertices))
 }
