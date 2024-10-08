@@ -24,6 +24,7 @@ Usage: srceno [
     -b (odin build), 
     -r (odin run), 
     -t (odin test), 
+    -m (enable memory tracking for testing),
     -d (include debugging symbols), 
     -p (build subpackage instead of the whole of eno, example: ./srceno.sh -p ecs)
     ]
