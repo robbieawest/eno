@@ -7,7 +7,7 @@ dbg=false
 memory_tracking=true
 
 usage() {
-    echo "Usage: srceno [
+    echo "Usage: runeno.sh [
     -b (odin build), 
     -r (odin run), 
     -t (odin test),
