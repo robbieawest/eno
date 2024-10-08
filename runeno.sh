@@ -47,11 +47,11 @@ while getopts brtdhp: opt; do
     esac
 done
 
-if [ "$subproj_override" != "" ]; then
-    subproj_override="/$subproj_override"
-fi
+#if [ "$subproj_override" != "" ]; then
+#    subproj_override="$subproj_override"
+#fi
 
-out_name="-out:bin/eno$subproj_override"
+out_name="-out:bin/eno-$subproj_override"
 debug_options=""
 test_options=""
 
@@ -73,7 +73,7 @@ if [ "$dbg" == true ]; then
     debug_options="-debug"
 fi
 
-build_options="$build_options ./src/eno$subproj_override $out_name $debug_options $test_options"
+build_options="$build_options ./src/eno/$subproj_override $out_name $debug_options $test_options"
 
 odin $build_options
 

@@ -1,6 +1,7 @@
 package utils
 
 import "core:testing"
+import "core:mem"
 
 /* likely not needed
 remove_indexes_from_slice :: proc(slice: ^$T/[]$E, indexes: []int) -> (result: []T) {
@@ -46,22 +47,18 @@ append_n_defaults :: proc(slice: ^$T/[dynamic]$E, n: uint) {
 
 @(test)
 append_n_defaults_test :: proc(t: ^testing.T) {
-    slice := [dynamic]f32{0.32, 0.12, 0.58}
-    expected_end_slice := [dynamic]f32{0.32, 0.12, 0.58, 0.0, 0.0, 0.0}
-    defer delete(slice)
+    //leaking
+s_slice := []f32{0.32, 0.12, 0.58}
+    s_expected_end_slice := []f32{0.32, 0.12, 0.58, 0.0, 0.0, 0.0}
+    slice := make([dynamic]f32, 0)
+    expected_end_slice := make([dynamic]f32, 0)
+    append(&slice, ..s_slice)
+    append(&expected_end_slice, ..s_expected_end_slice)
     defer delete(expected_end_slice)
+    defer delete(slice)
 
     append_n_defaults(&slice, 3)
+
     testing.expect_value(t, len(slice), len(expected_end_slice))
     for i in 0..<len(slice) do testing.expect_value(t, slice[i], expected_end_slice[i])
-}
-
-copy_slice_to_dynamic :: proc(dyna: ^$T/[dynamic]$E, slice: ^$S/[]E) -> (copied_all: bool) {
-    //Copies elements with append
-    reserve(dyna, len(slice))
-
-    i: uint
-    for i = 0; i < len(slice); i += 1 do append(dyna, slice[i])
-
-    return i == len(slice)
 }
