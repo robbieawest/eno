@@ -20,7 +20,7 @@ odin build ./src/eno -out:bin/eno-build
 `./runeno.sh -h` gives the usage, the arguments `-b -r -t -d -p` give functionality on what you are building and how, including testing and debug symbol generation.
 ```
 user@os:../eno$ ./runeno.sh -h
-Usage: srceno [
+Usage: runeno.sh [
     -b (odin build), 
     -r (odin run), 
     -t (odin test), 
