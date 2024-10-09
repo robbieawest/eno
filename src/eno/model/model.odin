@@ -85,10 +85,19 @@ VertexData :: struct {
     raw_data: [dynamic]f32
 }
 
+IndexData :: struct {
+    raw_data: [dynamic]u32
+}
+
 destroy_mesh :: proc(mesh: ^Mesh) {
     for &vertex in mesh.vertices do delete(vertex.raw_data)
     delete(mesh.vertices)
     free(mesh)
+}
+
+destroy_index_data :: proc(index_data: ^IndexData) {
+    delete(index_data.raw_data)
+    free(index_data)
 }
 
 @(test)

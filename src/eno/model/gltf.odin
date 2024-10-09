@@ -9,7 +9,7 @@ import "core:slice"
 import "../utils"
 
 DEFAULT_OPTIONS: cgltf.options
-load_model_data :: proc(model_name: string) -> (data: ^cgltf.data, result: cgltf.result){
+load_gltf_mesh :: proc(model_name: string) -> (data: ^cgltf.data, result: cgltf.result){
     model_name := strings.clone_to_cstring(model_name)
     defer delete(model_name)
 
@@ -36,7 +36,7 @@ load_model_data :: proc(model_name: string) -> (data: ^cgltf.data, result: cgltf
 
 @(test)
 load_model_test :: proc(t: ^testing.T) {
-    data, result := load_model_data("SciFiHelmet")
+    data, result := load_gltf_mesh("SciFiHelmet")
     defer cgltf.free(data)
 
     testing.expect_value(t, result, cgltf.result.success)
@@ -67,7 +67,7 @@ extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layouts: []^VertexLayo
     
     if len(vertex_layouts) != len(mesh.primitives) {
         log.errorf("%s: Number of mesh primitives does not match vertex layout", #procedure)
-        return mesh_data[:], false
+        return result, false
     }
 
     for _primitive, i in mesh.primitives {
@@ -76,7 +76,7 @@ extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layouts: []^VertexLayo
 
         if len(mesh_ret.layout.sizes) != len(_primitive.attributes) {
             log.errorf("%s: Number of primitive attributes does not match vertex layout", #procedure);
-            return mesh_data[:], false
+            return result, false
         }
 
         count_throughout: uint = 0
@@ -87,13 +87,12 @@ extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layouts: []^VertexLayo
             //Todo: Consider other datatypes by matching component type of accessor against odin type 
 
             element_size := mesh_ret.layout.sizes[j]
-            log.infof("element size: %d", element_size)
         
             //Validating mesh
             count := _accessor.count
             if count_throughout != 0 && count != count_throughout {
                 log.errorf("%s: Attributes/accessors of mesh primitive must contain the same count/number of elements", #procedure)
-                return mesh_data[:], false
+                return result, false
             } else if count_throughout == 0 {
                 utils.append_n_defaults(&mesh_ret.vertices, count)
             }
@@ -110,7 +109,7 @@ extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layouts: []^VertexLayo
                 read_res: b32 = cgltf.accessor_read_float(_accessor, k, raw_vertex_data, element_size)
                 if read_res == false {
                     log.errorf("%s: Error while reading float from accessor, received boolean false", #procedure)
-                    return mesh_data[:], false
+                    return result, false
                 }
             }
             //
@@ -125,14 +124,34 @@ extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layouts: []^VertexLayo
     return mesh_data[:], true
 }
 
-extract_index_data_from_mesh :: proc(mesh: ^cgltf.mesh) -> []uint {
-    //do things in here
-    return []uint{}
+extract_index_data_from_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []^IndexData, ok: bool) {
+    index_data := make([dynamic]^IndexData, len(mesh.primitives))
+    defer delete(index_data)
+
+    for _primitive, i in mesh.primitives {
+        _accessor := _primitive.indices
+        indices := new(IndexData)
+
+        utils.append_n_defaults(&indices.raw_data, _accessor.count)
+        for k in 0..<_accessor.count {
+            raw_index_data: [^]u32 = raw_data(indices.raw_data[k:k+1])
+            read_res: b32 = cgltf.accessor_read_uint(_accessor, k, raw_index_data, 1)
+            if read_res == false {
+                log.errorf("%s: Error while reading uint(index) from accessor, received boolean false", #procedure)
+                return result, false
+            }
+
+        }
+
+        index_data[i] = indices
+    }
+
+    return index_data[:], true
 }
 
 @(test)
 extract_vertex_data_test :: proc(t: ^testing.T) {
-    data, result := load_model_data("SciFiHelmet")
+    data, result := load_gltf_mesh("SciFiHelmet")
     defer cgltf.free(data)
 
     //Expected usage is defined here.
@@ -150,4 +169,22 @@ extract_vertex_data_test :: proc(t: ^testing.T) {
 
     testing.expect(t, ok, "ok check")
     log.infof("meshes size: %d, mesh components: %v, len mesh vertices: %d", len(res), res[0].layout, len(res[0].vertices))
+}
+
+@(test)
+extract_index_data_test :: proc(t: ^testing.T) {
+    data, result := load_gltf_mesh("SciFiHelmet")
+
+    vertex_layout := VertexLayout { []uint{3, 3, 4, 2}, []cgltf.attribute_type {
+            cgltf.attribute_type.normal,
+            cgltf.attribute_type.position,
+            cgltf.attribute_type.tangent,
+            cgltf.attribute_type.texcoord
+    }}
+
+    res, ok := extract_index_data_from_mesh(&data.meshes[0])
+    defer for index_data in res do destroy_index_data(index_data)
+
+    testing.expect(t, ok, "ok check")
+    log.infof("indices size: %d, num indices: %d", len(res), len(res[0].raw_data))
 }

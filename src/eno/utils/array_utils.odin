@@ -37,11 +37,11 @@ remove_index_test :: proc(t: ^testing.T) {
     for i := 0; i < len(removed); i += 1 do testing.expect_value(t, removed[i], removed_expected[i])
 }
 
-append_n_defaults :: proc(slice: ^$T/[dynamic]$E, n: uint) {
-    reserve(slice, n)
+append_n_defaults :: proc(dynamic_arr: ^$T/[dynamic]$E, n: uint) {
+    reserve(dynamic_arr, n) //Pretty sure this allocates willy nilly bad things
     for i in 0..<n {
         def: E 
-        append(slice, def)
+        append(dynamic_arr, def)
     }
 }
 
