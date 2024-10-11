@@ -30,17 +30,13 @@ release_gpu_component :: proc(component: ^GPUComponent) {
     //*want less GPU calls when releasing memory
     switch (RENDER_API) {
     case .OPENGL: 
-        comps, ok := component.(gl_GPUComponent) //Not sure if comps is copied here to be honest
-        if !ok {
-            log.errorf("GPUComponent is not gl yet renderapi gl? What are you doing?")
-            return
-        }
-        gl.DeleteVertexArrays(1, &comps.vao)
-        gl.DeleteBuffers(1, &comps.vbo)
-        gl.DeleteBuffers(1, &comps.ebo)
+        gl_component, ok := parse_gl_component(gpu_component); if !ok do return
+
+        gl.DeleteVertexArrays(1, gl_component.vao)
+        gl.DeleteBuffers(1, &gl_component.vbo)
+        gl.DeleteBuffers(1, &gl_component.ebo)
         free(components)
-    case .VULKAN:
-        log.infof("%s: Vulkan not yet supported")
+    case .VULKAN: vulkan_not_supported();
     }
 }
 
@@ -63,22 +59,13 @@ express_mesh_with_indices :: proc(mesh: ^model.Mesh, index_data: ^model.IndexDat
 //*Likely should use express_mesh_with_indices instead
 express_mesh :: proc(mesh: ^model.Mesh, gpu_component: ^GPUComponent) -> (ok: bool) {
 
-    if len(mesh.vertices) == 0 {
-        log.errorf("%s: No vertices given to express", #procedure)
-        return ok
-    }
+    if len(mesh.vertices) == 0 { log.errorf("%s: No vertices given to express", #procedure); return ok }
 
     switch (RENDER_API) {
     case .OPENGL:
-        gl_gpu_component, ok := gpu_component.(gl_GPUComponent) //Extrapolate to surrouding method
-        if !ok {
-            log.errorf("GPUComponent is not gl yet renderapi gl? What are you doing?")
-            return ok 
-        }
-        gl_express_mesh(mesh, &gl_gpu_component)
-    case .VULKAN:
-        log.errorf("%s: Vulkan not yet supported", #procedure) //Extrapolate to surrounding method as well
-        return ok 
+        gl_component, comp_ok := parse_gl_component(gpu_component); if !comp_ok do return ok
+        gl_express_mesh(mesh, gl_component)
+    case .VULKAN: vulkan_not_supported(); return ok 
     }
 
     return true
@@ -113,16 +100,9 @@ express_indices :: proc(index_data: ^IndexData, gpu_component: ^GPUComponent) ->
 
     switch (RENDER_API) {
     case .OPENGL: 
-        gl_gpu_component, ok := gpu_component.(gl_GPUComponent) //Extrapolate to surrouding method
-        if !ok {
-            log.errorf("GPUComponent is not gl yet renderapi gl? What are you doing?")
-            return ok 
-        }
-
-        gl_express_indices(express_indices, &gl_gpu_component)
-    case .VULKAN:
-        log.errorf("%s: Vulkan not yet supported", #procedure)
-        return ok
+        gl_component, comp_ok := parse_gl_component(gpu_component); if !comp_ok do return ok
+        gl_express_indices(express_indices, gl_component)
+    case .VULKAN: vulkan_not_supported(); return ok
     }
     
     return true
@@ -139,3 +119,18 @@ gl_express_indices :: proc(index_data: ^IndexData, gl_gpu_component: ^gl_GPUComp
 }
 
 //
+
+@(private)
+parse_gl_component :: proc(gpu_component: ^GPUComponent) -> (result: ^gl_GPUComponent, ok: bool) {
+
+    gl_gpu_component, ok := gpu_component.(gl_GPUComponent)
+    if !ok {
+        log.errorf("GPUComponent is not gl yet renderapi gl? What are you doing?")
+        return ok 
+    }
+
+    return &gl_gpu_component, true
+}
+
+@(private)
+vulkan_not_supported :: proc(location := #caller_location) { log.errorf("%v: Vulkan not supported", caller_location) }
