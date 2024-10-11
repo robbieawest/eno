@@ -37,7 +37,7 @@ main :: proc() {
 	
 	uniforms := gl.get_uniforms_from_program(program)
 	defer delete(uniforms)
-	
+
 	vao: u32
 	gl.GenVertexArrays(1, &vao); defer gl.DeleteVertexArrays(1, &vao)
 	

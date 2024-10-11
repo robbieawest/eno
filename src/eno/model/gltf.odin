@@ -45,16 +45,6 @@ load_model_test :: proc(t: ^testing.T) {
     //log.infof("data: \n%#v", data)
 }
 
-ZeroedSize :: union { uint, int }
-zeroed_size_to_size :: proc(zs: ZeroedSize) -> uint {
-    ui, ok := zs.(uint)
-    if !ok {
-        log.errorf("%s: Attempted to obtain size from int in zeroed size", #procedure)
-        return 0
-    }
-    return ui
-}
-
 extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layouts: []^VertexLayout) -> (result: []^Mesh, ok: bool) {
 
     //This is assuming all mesh attributes (aside from indices) have the same count (for each primitive/mesh output)
