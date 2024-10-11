@@ -84,7 +84,7 @@ extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layouts: []^VertexLayo
         for _attribute, j in _primitive.attributes {
             _accessor := _attribute.data
 
-            //Todo: Consider other datatypes by matching component type of accessor against odin type 
+            //Todo: Consider other datatypes by matching component type of accessor against odin type (maybe just raise error when found)
 
             element_size := mesh_ret.layout.sizes[j]
         

@@ -23,7 +23,7 @@ main :: proc() {
 	gl_context := SDL.GL_CreateContext(window)
 	SDL.GL_MakeCurrent(window, gl_context)
 	// load the OpenGL procedures once an OpenGL context has been established
-	gl.load_up_to(3, 3, SDL.gl_set_proc_address)
+	gl.load_up_to(4, 3, SDL.gl_set_proc_address)
 	
 	// useful utility procedures that are part of vendor:OpenGl
 	program, program_ok := gl.load_shaders_source(vertex_source, fragment_source)
