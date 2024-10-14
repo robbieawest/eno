@@ -1,17 +1,20 @@
 package ecs
 
+import mem "../memory"
+
 import "core:log"
 import "core:testing"
 import "core:fmt"
 import "core:mem"
 import "core:reflect"
+
 import "base:runtime"
-import "../memory"
 
 // ************** Entities ****************
 
 MAX_ENTITIES: u8 = 255
 CurrentEntity: u8 = 0
+
 
 Entity :: struct {
     entityId: u8,
@@ -41,6 +44,7 @@ Archetype :: struct {
     componentLabelMatch: map[string]int,
     components: [dynamic][dynamic]Component
 }
+
 
 init_archetype :: proc(label: string, input_components: []LabelledComponent) -> (arch: ^Archetype) {
     ent := new(Entity)
@@ -83,9 +87,11 @@ Scene :: struct {
     archetypes: [dynamic]Archetype
 }
 
+
 init_scene_empty :: proc() -> ^Scene {
     return new(Scene, context.allocator)
 }
+
 
 init_scene_with_archetypes :: proc(archetypes: [dynamic]Archetype) -> (result: ^Scene) {
     result = new(Scene)
@@ -94,12 +100,15 @@ init_scene_with_archetypes :: proc(archetypes: [dynamic]Archetype) -> (result: ^
     return result
 }
 
+
 init_scene :: proc{ init_scene_empty, init_scene_with_archetypes }
+
 
 destroy_scene :: proc(scene: ^Scene) {
     for &archetype in scene.archetypes do destroy_archetype(&archetype)
     free(scene)
 }
+
 
 add_arch_to_scene :: proc(scene: ^Scene, archetype: ^Archetype) {
     append(&scene.archetypes, archetype^)
@@ -115,7 +124,7 @@ add_arch_to_scene :: proc(scene: ^Scene, archetype: ^Archetype) {
 initialize_component_of_component_type :: proc (eComponent: ^Component) -> any {
     type: typeid = reflect.union_variant_typeid(eComponent^)
 
-    a := memory.alloc_dynamic(type) or_else nil
+    a := mem.alloc_dynamic(type) or_else nil
     if a == nil do log.error("Could not allocate component type, runtime allocator error")
     return a
 }
@@ -130,14 +139,17 @@ arch_test :: proc(T: ^testing.T) {
     fmt.printfln("archetype: %v", archetype)
 }
 
+
 @(test)
 init_test :: proc(T: ^testing.T) {
     comp: Component = 5
-    //initer: ^Component = initialize_component_of_component_type(&comp)
+    //
+    initer: ^Component = initialize_component_of_component_type(&comp)
     //defer free(initer)
     fmt.println("break")
    // testing.expect_value(T, initer.(i32), 5)
 }
+
 
 @(test)
 inner_comp_test ::proc(T: ^testing.T) {

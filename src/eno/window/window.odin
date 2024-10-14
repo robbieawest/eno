@@ -2,9 +2,11 @@ package window
 
 import SDL "vendor:sdl2"
 import gl "vendor:OpenGL"
+
+import gpu "../gpu"
+
 import "core:log"
 import "core:strings"
-import "../gpu"
 
 // This file defines how eno interacts with the windower (SDL implemented currently)
 
@@ -14,7 +16,7 @@ CURRENT_WINDOWER: Windower = .SDL
 
 use_windower :: proc(windower: Windower) -> (ok: bool) {
     CURRENT_WINDOWER = windower
-    switch(CURRENT_WINDOWER) {
+    switch (CURRENT_WINDOWER) {
     case .SDL:
         initialize_window = SDL_init_window
         destroy_window = SDL_destroy_window
@@ -60,7 +62,7 @@ SDL_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..
 	}
 	
     // Extra steps for render apis
-    switch(gpu.RENDER_API) {
+    switch (gpu.RENDER_API) {
     case. OPENGL:
         gl_context := SDL.GL_CreateContext(window)
         SDL.GL_MakeCurrent(window, gl_context)
@@ -90,7 +92,7 @@ swap_window_bufs: swap_win_ = SDL_swap_window_bufs
 
 @(private)
 SDL_swap_window_bufs :: proc(target: WindowTarget) -> (ok: bool) {
-    switch(gpu.RENDER_API) {
+    switch (gpu.RENDER_API) {
     case .OPENGL:
         sdl_window, ok := parse_sdl_window_target(target); if !ok do return ok
         SDL.GL_SwapWindow(sdl_window)

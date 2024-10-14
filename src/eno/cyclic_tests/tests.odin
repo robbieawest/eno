@@ -1,10 +1,13 @@
 package cyclic_tests
 
 import "vendor:cgltf"
+
+import model "../model"
+import utils "../utils"
+
 import "core:testing"
 import "core:log"
-import "../model"
-import "../utils"
+
 
 @(test)
 copy_slice_to_dynamic_test :: proc(t: ^testing.T) {

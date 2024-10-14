@@ -22,7 +22,7 @@ main :: proc() {
         { SDL.EventType.QUIT, proc(g: ^game.EnoGame) { game.quit_game(g) }}
     }); if !ok do log.errorf("Could not map SDL event")
 
-    ok = game.map_sdl_key_events(game_target, []game.SDLKeyActionPair{
+    ok = game.map_sdl_key_events(game_target, []game.SDLKeyActionPair {
         { SDL.Keycode.ESCAPE, proc(g: ^game.EnoGame) { game.quit_game(g) }}
     }); if !ok do log.errorf("Could not map SDL key event")
 

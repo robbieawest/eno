@@ -6,6 +6,7 @@ import "core:strings"
 import "core:log"
 import "core:mem"
 
+
 read_lines_from_file :: proc(filepath: string) -> (lines: []string, ok: bool) #optional_ok {
     f, err := os.open(filepath)
     if err != os.ERROR_NONE {
@@ -43,6 +44,7 @@ read_lines_from_file :: proc(filepath: string) -> (lines: []string, ok: bool) #o
     return lines, true
 }
 
+
 @(test)
 read_lines_test :: proc(t: ^testing.T) {
     lines, ok := read_lines_from_file("resources/jsontest1.txt")
@@ -51,4 +53,3 @@ read_lines_test :: proc(t: ^testing.T) {
 
     log.infof("lines: %s", lines)
 }
-

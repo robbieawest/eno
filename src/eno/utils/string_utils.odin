@@ -5,6 +5,7 @@ import "core:log"
 import "core:strings"
 import "core:mem"
 
+
 //type_checking for conversion
 is_string :: proc(s: string) -> bool {
     in_quotes := false
@@ -20,6 +21,7 @@ is_string :: proc(s: string) -> bool {
     return n_quotes == 2
 }
 
+
 @(test)
 test_is_string :: proc(t: ^testing.T) {
     testing.expect_value(t, is_string("\"hey guys its me scarce here\""), true)
@@ -30,10 +32,12 @@ test_is_string :: proc(t: ^testing.T) {
     testing.expect_value(t, is_string("1.231"), false)
 }
 
+
 is_bool :: proc(s: string) -> StringTypeResult {
     s := strings.trim_space(s)
     return s == "true" ? .TRUE : s == "false" ? .FALSE : .NOT_APPLICABLE
 }
+
 
 @(test)
 test_is_bool :: proc(t: ^testing.T) {
@@ -46,6 +50,7 @@ test_is_bool :: proc(t: ^testing.T) {
     testing.expect_value(t, is_bool("falsefalse"), StringTypeResult.NOT_APPLICABLE)
     testing.expect_value(t, is_bool("1.3535"),  StringTypeResult.NOT_APPLICABLE)
 }
+
 
 // STRING here is defined as "\"{...}\"", NOT_APPLICABLE is for example "nanvaluehere", the STRING equivalent would be "\"nanvaluehere\""
 StringTypeResult :: enum { NOT_APPLICABLE, TRUE, FALSE, STRING, NEG_INT, POS_INT, NEG_REAL, POS_REAL }
@@ -69,6 +74,7 @@ is_number :: proc(s: string) -> StringTypeResult {
     return real ? neg ? .NEG_REAL : .POS_REAL : neg ? .NEG_INT : .POS_INT
 }
 
+
 @(test)
 is_number_test :: proc(t: ^testing.T) {
     testing.expect_value(t, is_number("565.142"), StringTypeResult.POS_REAL)
@@ -79,11 +85,13 @@ is_number_test :: proc(t: ^testing.T) {
     testing.expect_value(t, is_number("hey guys its me scarce here"), StringTypeResult.NOT_APPLICABLE)
 }
 
+
 get_string_encoded_type :: proc(s: string) -> StringTypeResult {
     if is_string(s) do return .STRING
     bool_res := is_bool(s)
     return bool_res == StringTypeResult.NOT_APPLICABLE ? is_number(s) : bool_res
 }
+
 
 @(test)
 string_encoded_type :: proc(t: ^testing.T) {
@@ -104,6 +112,7 @@ substring_internal :: proc(s: string, sub_start, sub_end_exclusive: int) -> (res
     return s[sub_start:sub_end_exclusive]
 }
 
+
 @(test)
 substring_test :: proc(t: ^testing.T) {
     s: string = "heyguysitsmescarcehere"
@@ -111,6 +120,7 @@ substring_test :: proc(t: ^testing.T) {
 
     log.infof("s2: %v", s2)
 }
+
 
 concat :: proc(string_inp: ..string) -> string {
     builder := strings.builder_make()
@@ -129,6 +139,7 @@ concat_test :: proc(t: ^testing.T) {
     str3 := "!!"
     log.info(concat(str1, str2, str3))
 }
+
 
 concat_cstr :: proc(string_inp: ..cstring) -> cstring {
     builder := strings.builder_make()

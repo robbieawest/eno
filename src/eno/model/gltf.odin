@@ -1,12 +1,14 @@
 package model 
 
 import "vendor:cgltf"
+
+import utils "../utils"
+
 import "core:log"
 import "core:testing"
 import "core:strings"
 import "core:mem"
 import "core:slice"
-import "../utils"
 
 DEFAULT_OPTIONS: cgltf.options
 load_gltf_mesh :: proc(model_name: string) -> (data: ^cgltf.data, result: cgltf.result){
@@ -34,6 +36,7 @@ load_gltf_mesh :: proc(model_name: string) -> (data: ^cgltf.data, result: cgltf.
     return data, .success
 }
 
+
 @(test)
 load_model_test :: proc(t: ^testing.T) {
     data, result := load_gltf_mesh("SciFiHelmet")
@@ -44,6 +47,7 @@ load_model_test :: proc(t: ^testing.T) {
     
     //log.infof("data: \n%#v", data)
 }
+
 
 extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layouts: []^VertexLayout) -> (result: []^Mesh, ok: bool) {
 
@@ -114,6 +118,7 @@ extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layouts: []^VertexLayo
     return mesh_data[:], true
 }
 
+
 extract_index_data_from_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []^IndexData, ok: bool) {
     index_data := make([dynamic]^IndexData, len(mesh.primitives))
     defer delete(index_data)
@@ -139,6 +144,7 @@ extract_index_data_from_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []^IndexData
     return index_data[:], true
 }
 
+
 @(test)
 extract_vertex_data_test :: proc(t: ^testing.T) {
     data, result := load_gltf_mesh("SciFiHelmet")
@@ -160,6 +166,7 @@ extract_vertex_data_test :: proc(t: ^testing.T) {
     testing.expect(t, ok, "ok check")
     log.infof("meshes size: %d, mesh components: %v, len mesh vertices: %d", len(res), res[0].layout, len(res[0].vertices))
 }
+
 
 @(test)
 extract_index_data_test :: proc(t: ^testing.T) {

@@ -10,6 +10,7 @@ remove_indexes_from_slice :: proc(slice: ^$T/[]$E, indexes: []int) -> (result: [
 }
 */
 
+
 //Allocates a new dynamic array and slices it based on the input slice. Result must then be freed
 remove_index_from_slice :: proc(slice: ^$T/[]$E, index : int) -> (result: T) {
     data: [dynamic]E
@@ -24,6 +25,7 @@ remove_index_from_slice :: proc(slice: ^$T/[]$E, index : int) -> (result: T) {
     return data[:]
 }
 
+
 @(test)
 remove_index_test :: proc(t: ^testing.T) {
     slice := []string{"hey", "guys", "its", "me" }
@@ -37,6 +39,7 @@ remove_index_test :: proc(t: ^testing.T) {
     for i := 0; i < len(removed); i += 1 do testing.expect_value(t, removed[i], removed_expected[i])
 }
 
+
 append_n_defaults :: proc(dynamic_arr: ^$T/[dynamic]$E, n: uint) {
     reserve(dynamic_arr, n) //Pretty sure this allocates willy nilly bad things
     for i in 0..<n {
@@ -45,9 +48,10 @@ append_n_defaults :: proc(dynamic_arr: ^$T/[dynamic]$E, n: uint) {
     }
 }
 
+
 @(test)
 append_n_defaults_test :: proc(t: ^testing.T) {
-    //leaking
+    //leaking?
 s_slice := []f32{0.32, 0.12, 0.58}
     s_expected_end_slice := []f32{0.32, 0.12, 0.58, 0.0, 0.0, 0.0}
     slice := make([dynamic]f32, 0)
