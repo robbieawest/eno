@@ -51,9 +51,7 @@ SDL_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..
 
         window = SDL.CreateWindow(c_window_tag, extra_params[0], extra_params[1], width, height, render_api_winflags)
     } else {
-        log.infof("before window %v", render_api_winflags)
         window = SDL.CreateWindow(c_window_tag, SDL.WINDOWPOS_UNDEFINED, SDL.WINDOWPOS_UNDEFINED, width, height, render_api_winflags)
-        log.infof("window: %#v", window)
     }
 
 	if window == nil {
