@@ -9,128 +9,110 @@ import "../model"
 GraphicsAPI :: enum { OPENGL, VULKAN } //Making it easy for the future
 RENDER_API: GraphicsAPI = GraphicsAPI.OPENGL
 
+
 // Defined way to store VAO, VBO, EBO in the entity component system
 // A link to release_gpu_components should be stored as a component when creating an entity with GPUComponents as another component
 // ToDo: Maybe combine these into a single struct?
 
-GPUComponent :: union {
-    gl_GPUComponent,
-    vl_GPUComponent
+GPUComponent :: union #no_nil {
+    ^gl_GPUComponent,
+    ^vl_GPUComponent
 }
+
 
 gl_GPUComponent :: struct {
     vao, vbo, ebo: u32
 }
+
 vl_GPUComponent :: struct {
     vlwhatthefuckwouldgohere: u32
 }
 
-release_gpu_component :: proc(component: ^GPUComponent) {
+
+release_gpu_component :: proc(component: GPUComponent) {
     //Needs to be chunked, how to take in a list and combine a pointer to each element? Definitely some SOA AOS shit check it
     //*want less GPU calls when releasing memory
     switch (RENDER_API) {
     case .OPENGL: 
-        gl_component, ok := parse_gl_component(gpu_component); if !ok do return
+        gl_component := component.(^gl_GPUComponent)
 
-        gl.DeleteVertexArrays(1, gl_component.vao)
+        gl.DeleteVertexArrays(1, &gl_component.vao)
         gl.DeleteBuffers(1, &gl_component.vbo)
         gl.DeleteBuffers(1, &gl_component.ebo)
-        free(components)
+        free(gl_component)
     case .VULKAN: vulkan_not_supported();
     }
 }
 
 //
 
+
 // Procedures to express mesh structures on the GPU, a shader is assumed to already be attached
 
-express_mesh_with_indices :: proc(mesh: ^model.Mesh, index_data: ^model.IndexData) -> (gpu_component: ^GPUComponent ok: bool) {
-    gpu_component = new(GPUComponent)
+express_mesh_with_indices :: proc(mesh: ^model.Mesh, index_data: ^model.IndexData) -> (gpu_component: GPUComponent ok: bool) {
 
-    ok = express_mesh(mesh, gpu_component)
+    switch(RENDER_API) {//Easier just to switch
+        case .OPENGL: gpu_component = new(gl_GPUComponent)
+        case .VULKAN: vulkan_not_supported(); return gpu_component, ok
+    } 
+
+    ok = express_mesh_vertices(mesh, gpu_component)
     if !ok do return gpu_component, ok
 
     ok = express_indices(index_data, gpu_component)
-    if !ok do return gpu_component, ok
+    if !ok do return gpu_component, ok 
 
     return gpu_component, true
 }
 
+
 //*Likely should use express_mesh_with_indices instead
-express_mesh :: proc(mesh: ^model.Mesh, gpu_component: ^GPUComponent) -> (ok: bool) {
+express_mesh_vertices_ :: proc(mesh: ^model.Mesh, component: GPUComponent) -> (ok: bool)
+express_mesh_vertices: express_mesh_vertices_ = gl_express_mesh_vertices
 
-    if len(mesh.vertices) == 0 { log.errorf("%s: No vertices given to express", #procedure); return ok }
-
-    switch (RENDER_API) {
-    case .OPENGL:
-        gl_component, comp_ok := parse_gl_component(gpu_component); if !comp_ok do return ok
-        gl_express_mesh(mesh, gl_component)
-    case .VULKAN: vulkan_not_supported(); return ok 
-    }
-
-    return true
-}
 
 @(private)
-gl_express_mesh :: proc(mesh: ^model.Mesh, gl_gpu_component: ^gl_GPUComponent) {
-    gl.GenVertexArrays(1, &vao)
-    gl.GenBuffers(1, &vbo)
+gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: GPUComponent) -> (ok: bool) {
+    if len(mesh.vertices) == 0 { log.errorf("%s: No vertices given to express", #procedure); return ok }
+
+    gl_component := component.(^gl_GPUComponent)
+
+    gl.GenVertexArrays(1, &gl_component.vao)
+    gl.GenBuffers(1, &gl_component.vbo)
     
-    gl.BindVertexArray(vao)
-    gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
+    gl.BindVertexArray(gl_component.vao)
+    gl.BindBuffer(gl.ARRAY_BUFFER, gl_component.vbo)
 
     stride: int = len(mesh.vertices[0].raw_data) * size_of(f32)
-    gl.BufferData(vbo, len(mesh.vertices) * stride, raw_data(mesh.vertices), gl.STATIC_DRAW)
+    gl.BufferData(gl_component.vbo, len(mesh.vertices) * stride, raw_data(mesh.vertices), gl.STATIC_DRAW)
 
     offset, current_ind: u32 = 0, 0
     for size in mesh.layout.sizes {
         gl.EnableVertexAttribArray(current_ind)
-        gl.VertexAttribPointer(current_ind, size, gl.FLOAT, gl.FALSE, i32(stride), uintptr(offset))
+        gl.VertexAttribPointer(current_ind, i32(size), gl.FLOAT, gl.FALSE, i32(stride), uintptr(offset))
 
         offset += u32(size)
         current_ind += 1
     }
 
-    gl_gpu_component.vao = vao
-    gl_gpu_component.vbo = vbo
+    return true
 }
 
-//*Likely should use express_mesh_with_indices instead
-express_indices :: proc(index_data: ^IndexData, gpu_component: ^GPUComponent) -> (ok: bool) {
 
-    switch (RENDER_API) {
-    case .OPENGL: 
-        gl_component, comp_ok := parse_gl_component(gpu_component); if !comp_ok do return ok
-        gl_express_indices(express_indices, gl_component)
-    case .VULKAN: vulkan_not_supported(); return ok
-    }
+//*Likely should use express_mesh_with_indices instead
+express_indices_ :: proc(index_data: ^model.IndexData, component: GPUComponent) -> (ok: bool)
+express_indices: express_indices_ = gl_express_indices
+
+@(private)
+gl_express_indices :: proc(index_data: ^model.IndexData, component: GPUComponent) -> (ok: bool){
+    gl_component := component.(^gl_GPUComponent)
+    gl.GenBuffers(1, &gl_component.ebo)
+    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl_component.ebo)
+    gl.BufferData(gl_component.ebo, len(index_data.raw_data) * size_of(u32), raw_data(index_data.raw_data), gl.STATIC_DRAW)
     
     return true
 }
 
-@(private)
-gl_express_indices :: proc(index_data: ^IndexData, gl_gpu_component: ^gl_GPUComponent) {
-    ebo: u32
-    gl.GenBuffers(1, &ebo)
-    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
-    gl.BufferData(ebo, len(indeoffset_ofx_data.raw_data) * size_of(u32), raw_data(index_data.raw_data), gl.STATIC_DRAW)
-
-    gl_gpu_component.ebo = ebo
-}
-
 //
 
-@(private)
-parse_gl_component :: proc(gpu_component: ^GPUComponent) -> (result: ^gl_GPUComponent, ok: bool) {
-
-    gl_gpu_component, ok := gpu_component.(gl_GPUComponent)
-    if !ok {
-        log.errorf("GPUComponent is not gl yet renderapi gl? What are you doing?")
-        return ok 
-    }
-
-    return &gl_gpu_component, true
-}
-
-@(private)
-vulkan_not_supported :: proc(location := #caller_location) { log.errorf("%v: Vulkan not supported", caller_location) }
+vulkan_not_supported :: proc(location := #caller_location) { log.errorf("%v: Vulkan not supported", location) }
