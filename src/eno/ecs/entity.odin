@@ -1,6 +1,6 @@
 package ecs
 
-import mem "../memory"
+import "../memory"
 
 import "core:log"
 import "core:testing"
@@ -124,7 +124,7 @@ add_arch_to_scene :: proc(scene: ^Scene, archetype: ^Archetype) {
 initialize_component_of_component_type :: proc (eComponent: ^Component) -> any {
     type: typeid = reflect.union_variant_typeid(eComponent^)
 
-    a := mem.alloc_dynamic(type) or_else nil
+    a := memory.alloc_dynamic(type) or_else nil
     if a == nil do log.error("Could not allocate component type, runtime allocator error")
     return a
 }
@@ -137,17 +137,6 @@ arch_test :: proc(T: ^testing.T) {
     archetype:= init_archetype("testArch", numeric_components[:])
     defer destroy_archetype(archetype)
     fmt.printfln("archetype: %v", archetype)
-}
-
-
-@(test)
-init_test :: proc(T: ^testing.T) {
-    comp: Component = 5
-    //
-    initer: ^Component = initialize_component_of_component_type(&comp)
-    //defer free(initer)
-    fmt.println("break")
-   // testing.expect_value(T, initer.(i32), 5)
 }
 
 

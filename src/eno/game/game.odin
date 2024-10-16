@@ -12,6 +12,7 @@ import "core:log"
 // Procedure type definitions
 frame_loop_proc_ :: proc(game: ^EnoGame) // For the procedure that executes every frame
 event_action_proc_ :: proc(game: ^EnoGame)
+before_loop_proc_ :: proc(game : ^EnoGame)
 
 
 GAME_STATE :: enum { NOT_STARTED, RUNNING, HALTED, QUIT }
@@ -21,6 +22,7 @@ EnoGame :: struct {
     window: win.WindowTarget,
     scene: ^ecs.Scene, // Defined as a single scene per game, this obviously needs some sort of change, since games do not only have a single scene,
     every_frame: frame_loop_proc_,
+    before_frame: before_loop_proc_,
     game_state: GAME_STATE,
     sdl_event_map: map[SDL.EventType]event_action_proc_,
     sdl_key_map: map[SDL.Keycode]event_action_proc_
@@ -29,6 +31,7 @@ EnoGame :: struct {
 
 run_game :: proc(game: ^EnoGame) {
     game.game_state = .RUNNING
+    game.before_frame(game)
     for game.game_state == .RUNNING {
         poll_sdl_events(game)
         game.every_frame(game)
@@ -49,20 +52,22 @@ quit_game :: proc(game: ^EnoGame) {
 init_game :: proc { init_game_with_scene, init_game_default_scene }
 
 
-init_game_with_scene :: proc(scene: ^ecs.Scene, window: win.WindowTarget, every_frame: frame_loop_proc_) -> (game: ^EnoGame) {
+init_game_with_scene :: proc(scene: ^ecs.Scene, window: win.WindowTarget, every_frame: frame_loop_proc_, before_frame: before_loop_proc_) -> (game: ^EnoGame) {
     game = new(EnoGame)
     game.scene = scene
     game.window = window
     game.every_frame = every_frame
+    game.before_frame = before_frame
     return game
 }
 
 
-init_game_default_scene :: proc(window: win.WindowTarget, every_frame: frame_loop_proc_) -> (game: ^EnoGame) {
+init_game_default_scene :: proc(window: win.WindowTarget, every_frame: frame_loop_proc_, before_frame: before_loop_proc_) -> (game: ^EnoGame) {
     game = new(EnoGame)
     game.scene = ecs.init_scene_empty()
     game.window = window
     game.every_frame = every_frame
+    game.before_frame = before_frame
     return game
 }
 
