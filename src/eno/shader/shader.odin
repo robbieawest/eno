@@ -215,15 +215,15 @@ add_functions :: proc(shader: ^Shader, functions: []ShaderFunction) -> (shader: 
 
 // Builds the source as a single string with newlines
 // Uses glsl version 440 core
-build_shader_source :: proc(shader: ^Shader) -> (source: string, ok: bool) {
-    source_builder, _alloc_err := strings.builder_make(); if _alloc_err != mem.Allocator_Error.None {
+build_shader_source :: proc(shader: ^Shader, type: ShaderType) -> (source: ^ShaderSource, ok: bool) {
+    builder, _alloc_err := strings.builder_make(); if _alloc_err != mem.Allocator_Error.None {
         log.error("Allocator error while building shader source")
         return source, ok
     }
-    defer strings.builder_destroy(&source_builder)
+    defer strings.builder_destroy(&builder)
 
     // Todo replace write_string with checked version with a write_stringln alternative
-    strings.write_string(&source_builder, "#version 440 core\n")
+    strings.write_string(&builder, "#version 440 core\n")
     for layout in shader.layout {
         strings.write_string(&source_builder, "layout (location = ")
         strings.write_uint(&builder, layout.location)
@@ -289,11 +289,50 @@ build_shader_source :: proc(shader: ^Shader) -> (source: string, ok: bool) {
             
             strings.write_string(&builder, ") {\n")
             strings.write_string(&builder, function.source)
-            strings.write_string("}")
+            strings.write_string(&builder, "}")
         }
-        strings.write_string("\n")
+        strings.write_string(&builder, "\n")
     }
+
+    source = new(ShaderSource)
+    source.compiled_source = strings.to_string(builder)
+    source.type = type
+    source.shader = shader
+
+    return source
 }
+
+
+ShaderSource :: struct {
+    type: ShaderType,
+    compiled_source: string,
+    shader: ^Shader
+}
+
+destroy_shader_source :: proc(source: ^ShaderSource) {
+    free(source.shader)
+    free(source)
+}
+
+
+
+ShaderIdentifier :: union {
+    u32,
+    //VkShaderModule or a pipeline
+}
+
+
+ShaderProgram :: struct {
+    id: ShaderIdentifier,
+    sources: []ShaderSource,
+    expressed: bool
+}
+
+destroy_shader_program :: proc(program: ^ShaderProgram) {
+    for &source in sources do destroy_shader_source(&source)
+    free(program)
+}
+
 
 ShaderType :: enum { // Is just gl.Shader_Type
     NIL,
@@ -306,13 +345,29 @@ ShaderType :: enum { // Is just gl.Shader_Type
     TESS_EVALUATION
 }
 
-express_shader_source :: proc(source: string, shader_type: ShaderType) -> (shader_program: uint, ok: bool) {
+express_shader :: proc(program: ^ShaderProgram, shader_type: ShaderType) -> (ok: bool) {
+
     switch (gpu.RENDER_API) {
     case .OPENGL:
-        shader_program := gl.compile_shader_from_source(source, cast(gl.Shader_Type)cast(int)shader_type)
+        shader_ids := make([dynamic]u32, len(program.sources))
+        for shader_source in program.sources {
+            id, comp_ok := gl.compile_shader_from_source(shader_source.compiled_source, cast(gl.Shader_Type)cast(int) shader_source.type)
+            if !comp_ok {
+                log.error("Could not express shader source")
+                return ok
+            }
+
+            append(&shader_ids, id)
+        }
+
+        program.id, ok = gl.create_and_link_program(shader_ids[:]); if !ok {
+            log.error("Error while creating and linking shader program")
+            return ok
+        }
+        program.expressed = true
     case .VULKAN:
         gpu.vulkan_not_supported()
-        return shader_program, ok
+        return ok
     }
-    return shader_program, true
+    return true
 }
