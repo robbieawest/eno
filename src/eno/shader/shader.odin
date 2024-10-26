@@ -289,6 +289,7 @@ build_shader_source :: proc(shader: ^Shader, type: ShaderType) -> (source: ^Shad
     }
     
     for function in shader.functions {
+        strings.write_string(&builder, "\n")
         if function.is_typed_source do strings.write_string(&builder, function.source)
         else {
             strings.write_string(&builder, extended_glsl_type_to_string(function.return_type))
@@ -305,6 +306,7 @@ build_shader_source :: proc(shader: ^Shader, type: ShaderType) -> (source: ^Shad
             
             strings.write_string(&builder, ") {\n")
             strings.write_string(&builder, function.source)
+            strings.write_string(&builder, "\n")
             strings.write_string(&builder, "}")
         }
         strings.write_string(&builder, "\n")
@@ -412,8 +414,8 @@ shader_creation_test :: proc(t: ^testing.T) {
             .void,
             []ShaderFunctionArgument {},
             "main",
-            `gl_Position = u_transform * vec4(a_position, 1.0);
-            v_colour = a_colour`,
+            `    gl_Position = u_transform * vec4(a_position, 1.0);
+    v_colour = a_colour;`,
             false
         }
     })
@@ -442,10 +444,8 @@ build_shader_source_test :: proc(t: ^testing.T) {
             .void,
             []ShaderFunctionArgument {},
             "main",
-            `
-    gl_Position = u_transform * vec4(a_position, 1.0);
-    v_colour = a_colour;
-            `,
+            `    gl_Position = u_transform * vec4(a_position, 1.0);
+    v_colour = a_colour;`,
             false
         }
     })
