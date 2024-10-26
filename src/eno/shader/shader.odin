@@ -8,11 +8,13 @@ import "core:strings"
 import "core:mem"
 import "core:log"
 import "core:fmt"
+import "core:testing"
 
 // Defines a generalized shader structure which then compiles using the given render API
 
 // ToDo support for const
 GLSLDataType :: enum {
+    void,
     int,
     uint,
     float,
@@ -65,6 +67,7 @@ ExtendedGLSLType :: union {
 
 GLSL_type_to_string :: proc(type: GLSLDataType) -> (result: string) {
     switch (type) {
+    case .void: result = "void"
     case .int: result = "int"
     case .uint: result = "uint"
     case .float: result = "float"
@@ -113,15 +116,15 @@ GLSL_type_to_string :: proc(type: GLSLDataType) -> (result: string) {
 }
 
 
-extended_glsl_type_to_string :: proc(type: ExtendedGLSLType) -> (result: string) {
+extended_glsl_type_to_string :: proc(type: ExtendedGLSLType, caller_location := #caller_location) -> (result: string) {
     // *Returns labels of structs
 
     struct_type, struct_ok := type.(^ShaderStruct)
-    if struct_ok do return structType.name
+    if struct_ok do return struct_type.name
 
     glsl_type, glsl_ok := type.(GLSLDataType)
-    if struct_ok do return GLSL_type_to_string(glsl_type)
-    else do log.errorf("Invalid ExtendedGLSLType union is nil")
+    if glsl_ok do return GLSL_type_to_string(glsl_type)
+    else do log.errorf("Invalid ExtendedGLSLType union is nil : loc: %s", caller_location)
 
     return result
 }
@@ -148,7 +151,7 @@ ShaderStruct :: struct {
 
 ShaderFunction :: struct {
     return_type: ExtendedGLSLType,
-    arguments: []ShaderFunctionArgument
+    arguments: []ShaderFunctionArgument,
     label: string,
     source: string,
     is_typed_source: bool,
@@ -163,12 +166,20 @@ Shader :: struct {
     functions: [dynamic]ShaderFunction
 }
 
-
+destroy_shader :: proc(shader: ^Shader) {
+    delete(shader.layout)
+    delete(shader.input)
+    delete(shader.output)
+    delete(shader.uniforms)
+    delete(shader.structs)
+    delete(shader.functions)
+    free(shader)
+}
 
 
 // Procs to handle shader fields
 
-init_shader :: proc { _init_shader_empty, }
+init_shader :: proc { _init_shader_empty, _init_shader_with_layout }
 
 @(private)
 _init_shader_empty :: proc() -> (shader: ^Shader) {
@@ -180,33 +191,38 @@ _init_shader_empty :: proc() -> (shader: ^Shader) {
 @(private)
 _init_shader_with_layout :: proc(layout: []ShaderLayout) -> (shader: ^Shader) {
     shader = new(Shader)
-    append_elems(shader.layout, ..layout)
+    append_elems(&shader.layout, ..layout)
     return shader
 }
 
 
-add_to_shader_layout :: proc(shader: ^Shader, layout: []ShaderLayout) -> (shader: ^Shader) {
-    append_elems(shader.layout, ..layout)
+add_layout :: proc(shader: ^Shader, layout: []ShaderLayout) -> ^Shader {
+    append_elems(&shader.layout, ..layout)
     return shader
 }
 
-add_to_shader_input :: proc(shader: ^Shader, input: []ShaderInput) -> (shader: ^Shader) {
-    append_elems(shader.input, ..input)
+add_input :: proc(shader: ^Shader, input: []ShaderInput) -> ^Shader {
+    append_elems(&shader.input, ..input)
     return shader
 }
 
-bind_uniforms :: proc(shader: ^Shader, uniforms: []ShaderUniform) -> (shader: ^Shader) {
-    append_elems(shader.uniforms, ..uniforms)
+add_output :: proc(shader: ^Shader, output: []ShaderOutput) -> ^Shader {
+    append_elems(&shader.output, ..output)
     return shader
 }
 
-add_structs :: proc(shader: ^Shader, structs: []ShaderStruct) -> (shader: ^Shader) {
-    append_elems(shader.structs, ..structs)
+add_uniforms :: proc(shader: ^Shader, uniforms: []ShaderUniform) -> ^Shader {
+    append_elems(&shader.uniforms, ..uniforms)
     return shader
 }
 
-add_functions :: proc(shader: ^Shader, functions: []ShaderFunction) -> (shader: ^Shader) {
-    append_elems(shader.functions, ..functions)
+add_structs :: proc(shader: ^Shader, structs: []ShaderStruct) -> ^Shader {
+    append_elems(&shader.structs, ..structs)
+    return shader
+}
+
+add_functions :: proc(shader: ^Shader, functions: []ShaderFunction) -> ^Shader {
+    append_elems(&shader.functions, ..functions)
     return shader
 }
 
@@ -225,7 +241,7 @@ build_shader_source :: proc(shader: ^Shader, type: ShaderType) -> (source: ^Shad
     // Todo replace write_string with checked version with a write_stringln alternative
     strings.write_string(&builder, "#version 440 core\n")
     for layout in shader.layout {
-        strings.write_string(&source_builder, "layout (location = ")
+        strings.write_string(&builder, "layout (location = ")
         strings.write_uint(&builder, layout.location)
         strings.write_string(&builder, ") in ")
         strings.write_string(&builder, extended_glsl_type_to_string(layout.type))
@@ -269,7 +285,7 @@ build_shader_source :: proc(shader: ^Shader, type: ShaderType) -> (source: ^Shad
             strings.write_string(&builder, field.name)
             strings.write_string(&builder, ";\n")
         }
-        strings.write_string("};\n")
+        strings.write_string(&builder, "};\n")
     }
     
     for function in shader.functions {
@@ -284,7 +300,7 @@ build_shader_source :: proc(shader: ^Shader, type: ShaderType) -> (source: ^Shad
                 strings.write_string(&builder, extended_glsl_type_to_string(argument.type))
                 strings.write_string(&builder, " ")
                 strings.write_string(&builder, argument.name)
-                if i != len(function.arguments) - 1 do strings.write_string(",")
+                if i != len(function.arguments) - 1 do strings.write_string(&builder, ",")
             }
             
             strings.write_string(&builder, ") {\n")
@@ -299,7 +315,7 @@ build_shader_source :: proc(shader: ^Shader, type: ShaderType) -> (source: ^Shad
     source.type = type
     source.shader = shader
 
-    return source
+    return source, true
 }
 
 
@@ -310,7 +326,7 @@ ShaderSource :: struct {
 }
 
 destroy_shader_source :: proc(source: ^ShaderSource) {
-    free(source.shader)
+    destroy_shader(source.shader)
     free(source)
 }
 
@@ -329,7 +345,7 @@ ShaderProgram :: struct {
 }
 
 destroy_shader_program :: proc(program: ^ShaderProgram) {
-    for &source in sources do destroy_shader_source(&source)
+    for &source in program.sources do destroy_shader_source(&source)
     free(program)
 }
 
@@ -345,7 +361,9 @@ ShaderType :: enum { // Is just gl.Shader_Type
     TESS_EVALUATION
 }
 
-express_shader :: proc(program: ^ShaderProgram, shader_type: ShaderType) -> (ok: bool) {
+
+express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
+    if program.expressed do return true
 
     switch (gpu.RENDER_API) {
     case .OPENGL:
@@ -370,4 +388,73 @@ express_shader :: proc(program: ^ShaderProgram, shader_type: ShaderType) -> (ok:
         return ok
     }
     return true
+}
+
+
+
+@(test)
+shader_creation_test :: proc(t: ^testing.T) {
+
+    shader: ^Shader = init_shader(
+                []ShaderLayout {
+                    { 0, .vec3, "a_position"},
+                    { 1, .vec4, "a_colour"}
+                }
+        )
+    add_output(shader, []ShaderInput {
+        { .vec4, "v_colour"}
+    })
+    add_uniforms(shader, []ShaderUniform {
+        { .mat4, "u_transform"}
+    })
+    add_functions(shader, []ShaderFunction {
+        { 
+            .void,
+            []ShaderFunctionArgument {},
+            "main",
+            `gl_Position = u_transform * vec4(a_position, 1.0);
+            v_colour = a_colour`,
+            false
+        }
+    })
+    defer destroy_shader(shader)
+
+    log.infof("shader out: %#v", shader)
+}
+
+@(test)
+build_shader_source_test :: proc(t: ^testing.T) {
+    
+    shader: ^Shader = init_shader(
+                []ShaderLayout {
+                    { 0, .vec3, "a_position"},
+                    { 1, .vec4, "a_colour"}
+                }
+        )
+    add_output(shader, []ShaderInput {
+        { .vec4, "v_colour"}
+    })
+    add_uniforms(shader, []ShaderUniform {
+        { .mat4, "u_transform"}
+    })
+    add_functions(shader, []ShaderFunction {
+        { 
+            .void,
+            []ShaderFunctionArgument {},
+            "main",
+            `
+    gl_Position = u_transform * vec4(a_position, 1.0);
+    v_colour = a_colour;
+            `,
+            false
+        }
+    })
+
+    shader_source, ok := build_shader_source(shader, .VERTEX)
+    defer destroy_shader_source(shader_source)
+
+    testing.expect(t, ok, "ok check")
+    log.infof("shader source out: %#v", shader_source)
+
+    log.info(shader_source.compiled_source)
 }
