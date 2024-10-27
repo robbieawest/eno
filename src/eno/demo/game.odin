@@ -1,6 +1,7 @@
 package demo
 
 import SDL "vendor:sdl2"
+import gl "vendor:OpenGL"
 
 import win "../window"
 import game "../game"
@@ -10,6 +11,8 @@ import "core:log"
 // Implement your before_frame and every_frame procedures in a file like this
 
 every_frame :: proc(eno_game: ^game.EnoGame) {
+    gl.CompileShader(1000)
+    gl.AttachShader(99, 99)
     ok := win.swap_window_bufs(eno_game.window); if !ok do log.errorf("could not swap bufs")
 }
 

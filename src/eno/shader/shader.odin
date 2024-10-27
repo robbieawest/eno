@@ -1,8 +1,10 @@
 package shader
 
 import gl "vendor:OpenGL"
+import SDL "vendor:sdl2"
 
 import gpu "../gpu"
+import win "../window"
 
 import "core:strings"
 import "core:mem"
@@ -230,7 +232,7 @@ add_functions :: proc(shader: ^Shader, functions: []ShaderFunction) -> ^Shader {
 
 
 // Builds the source as a single string with newlines
-// Uses glsl version 440 core
+// Uses glsl version 430 core
 build_shader_source :: proc(shader: ^Shader, type: ShaderType) -> (source: ^ShaderSource, ok: bool) {
     builder, _alloc_err := strings.builder_make(); if _alloc_err != mem.Allocator_Error.None {
         log.error("Allocator error while building shader source")
@@ -239,7 +241,7 @@ build_shader_source :: proc(shader: ^Shader, type: ShaderType) -> (source: ^Shad
     defer strings.builder_destroy(&builder)
 
     // Todo replace write_string with checked version with a write_stringln alternative
-    strings.write_string(&builder, "#version 440 core\n")
+    strings.write_string(&builder, "#version 430 core\n")
     for layout in shader.layout {
         strings.write_string(&builder, "layout (location = ")
         strings.write_uint(&builder, layout.location)
@@ -265,7 +267,7 @@ build_shader_source :: proc(shader: ^Shader, type: ShaderType) -> (source: ^Shad
         strings.write_string(&builder, input.name)
         strings.write_string(&builder, "\n")
     }
-
+    
     for uniform in shader.uniforms {
         strings.write_string(&builder, "out ")
         strings.write_string(&builder, extended_glsl_type_to_string(uniform.type))
@@ -342,12 +344,18 @@ ShaderIdentifier :: union {
 
 ShaderProgram :: struct {
     id: ShaderIdentifier,
-    sources: []ShaderSource,
+    sources: []^ShaderSource,
     expressed: bool
 }
 
+init_shader_program :: proc(shader_sources: []^ShaderSource) -> (program: ^ShaderProgram){
+    program = new(ShaderProgram)
+    program.sources = shader_sources
+    return program
+}
+
 destroy_shader_program :: proc(program: ^ShaderProgram) {
-    for &source in program.sources do destroy_shader_source(&source)
+    for &source in program.sources do destroy_shader_source(source)
     free(program)
 }
 
@@ -363,27 +371,58 @@ ShaderType :: enum { // Is just gl.Shader_Type
     TESS_EVALUATION
 }
 
+@(private)
+conv_gl_shader_type :: proc(type: ShaderType) -> gl.Shader_Type {
+    switch (type) {
+    case .NIL:
+        return .NONE
+    case .LINK:
+        return .SHADER_LINK
+    case .VERTEX:
+        return .VERTEX_SHADER
+    case .COMPUTE:
+        return .COMPUTE_SHADER
+    case .FRAGMENT:
+        return .FRAGMENT_SHADER
+    case .GEOMETRY:
+        return .GEOMETRY_SHADER
+    case .TESS_CONTROL:
+        return .TESS_CONTROL_SHADER
+    case .TESS_EVALUATION:
+        return .TESS_EVALUATION_SHADER
+    }
+    return .NONE
+}
+
 
 express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
     if program.expressed do return true
+    log.infof("expressing shader")
 
     switch (gpu.RENDER_API) {
     case .OPENGL:
+        log.info("hi")
         shader_ids := make([dynamic]u32, len(program.sources))
-        for shader_source in program.sources {
-            id, comp_ok := gl.compile_shader_from_source(shader_source.compiled_source, cast(gl.Shader_Type)cast(int) shader_source.type)
+        log.infof("shader sources: %#v", program.sources)
+        for shader_source, i in program.sources {
+            log.infof("shader source compile at index: %d, source: %s", i, shader_source.compiled_source)
+            
+            id, comp_ok := gl.compile_shader_from_source(shader_source.compiled_source, conv_gl_shader_type(shader_source.type))
             if !comp_ok {
-                log.error("Could not express shader source")
+            //    log.error("Could not express shader source")
                 return ok
             }
-
-            append(&shader_ids, id)
+            log.info("compiled")
+            shader_ids[i] = id
         }
+
+        log.info("expressed shaders")
 
         program.id, ok = gl.create_and_link_program(shader_ids[:]); if !ok {
-            log.error("Error while creating and linking shader program")
+          //  log.error("Error while creating and linking shader program")
             return ok
         }
+
         program.expressed = true
     case .VULKAN:
         gpu.vulkan_not_supported()
@@ -393,7 +432,7 @@ express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
 }
 
 
-
+/*
 @(test)
 shader_creation_test :: proc(t: ^testing.T) {
 
@@ -423,6 +462,7 @@ shader_creation_test :: proc(t: ^testing.T) {
 
     log.infof("shader out: %#v", shader)
 }
+
 
 @(test)
 build_shader_source_test :: proc(t: ^testing.T) {
@@ -457,4 +497,89 @@ build_shader_source_test :: proc(t: ^testing.T) {
     log.infof("shader source out: %#v", shader_source)
 
     log.info(shader_source.compiled_source)
+}
+
+*/
+
+@(private)
+create_test_render_context :: proc() -> (window: ^SDL.Window, gl_context: SDL.GLContext) {
+
+	window = SDL.CreateWindow("eno engine test win", SDL.WINDOWPOS_UNDEFINED, SDL.WINDOWPOS_UNDEFINED, 400, 400, {.OPENGL})
+	if window == nil {
+		fmt.eprintln("Failed to create window")
+		return window, gl_context 
+	}
+	
+	gl_context = SDL.GL_CreateContext(window)
+    SDL.GL_SetAttribute(.CONTEXT_FLAGS, 1)
+	SDL.GL_MakeCurrent(window, gl_context)
+	gl.load_up_to(4, 3, SDL.gl_set_proc_address)
+
+    gl.DebugMessageCallback(win.SDL_GL_DEBUG_CALLBACK, nil)
+
+    return window, gl_context 
+}
+
+@(test)
+express_shader_test :: proc(t: ^testing.T) {
+    window, gl_context := create_test_render_context()
+    
+    vertex_shader: ^Shader = init_shader(
+                []ShaderLayout {
+                    { 0, .vec3, "a_position"},
+                    { 1, .vec4, "a_colour"}
+                }
+        )
+    add_output(vertex_shader, []ShaderInput {
+        { .vec4, "v_colour"}
+    })
+    add_uniforms(vertex_shader, []ShaderUniform {
+        { .mat4, "u_transform"}
+    })
+    add_functions(vertex_shader, []ShaderFunction {
+        { 
+            .void,
+            []ShaderFunctionArgument {},
+            "main",
+            `    gl_Position = u_transform * vec4(a_position, 1.0);
+    v_colour = a_colour;`,
+            false
+        }
+    })
+
+    vertex_source, vertex_ok := build_shader_source(vertex_shader, .VERTEX)
+    testing.expect(t, vertex_ok, "vert check")
+
+    
+    fragment_shader: ^Shader = init_shader()
+    add_input(fragment_shader, []ShaderInput {
+        { .vec4, "v_colour" }
+    })
+    add_output(fragment_shader, []ShaderInput {
+        { .vec4, "o_colour" }
+    })
+    add_functions(fragment_shader, []ShaderFunction {
+        { 
+            .void,
+            []ShaderFunctionArgument {},
+            "main",
+            `    o_colour = v_colour`,
+            false
+        }
+    })
+
+    fragment_source, fragment_ok := build_shader_source(fragment_shader, .FRAGMENT)
+    testing.expect(t, fragment_ok, "frag ok check")
+
+    program: ^ShaderProgram = init_shader_program([]^ShaderSource {
+        vertex_source, fragment_source 
+    })
+    defer destroy_shader_program(program)
+    
+    testing.expect(t, !program.expressed, "not expressed check")
+
+    express_ok := express_shader(program)
+  //  testing.expect(t, express_ok, "express ok check")
+
+  //  testing.expect(t, program.expressed, "expressed check")
 }

@@ -2,16 +2,33 @@ package window
 
 import SDL "vendor:sdl2"
 import gl "vendor:OpenGL"
+import "vendor:glfw"
 
 import gpu "../gpu"
 
 import "core:log"
 import "core:strings"
+import "base:runtime"
+import "core:fmt"
 
 // This file defines how eno interacts with the windower (SDL implemented currently)
 
 Windower :: enum { SDL, GLFW }
 CURRENT_WINDOWER: Windower = .SDL
+
+GL_DEBUG_CALLBACK :: proc "c" (source: u32, type: u32, id: u32, severity: u32, length: i32, message: cstring, userParam: rawptr) {
+    context = runtime.default_context()
+    context.logger = log.create_console_logger()
+    fmt.print("\n\ndebug error!\n\n")
+    log.errorf("gl debug callback error: %s", message)
+}
+
+GLFW_ERROR_CALLBACK :: proc "c" (error: i32, description: cstring) {
+    context = runtime.default_context()
+    context.logger = log.create_console_logger()
+    fmt.print("\nglfw error\n")
+    log.errorf("GLFW error raised : %d : %s", error, description)
+}
 
 
 use_windower :: proc(windower: Windower) -> (ok: bool) {
@@ -22,7 +39,9 @@ use_windower :: proc(windower: Windower) -> (ok: bool) {
         destroy_window = SDL_destroy_window
         swap_window_bufs = SDL_swap_window_bufs
     case .GLFW:
-        log.errorf("GLFW not yet supported")
+        initialize_window = GLFW_init_window
+        destroy_window = GLFW_destroy_window
+        swap_window_bufs = GLFW_swap_window_bufs
         return ok
     }
     return true
@@ -30,7 +49,8 @@ use_windower :: proc(windower: Windower) -> (ok: bool) {
 
 
 WindowTarget :: union {
-    ^SDL.Window
+    ^SDL.Window,
+    glfw.WindowHandle
 }
 
 
@@ -41,9 +61,11 @@ initialize_window: init_win_ = SDL_init_window
 
 @(private)
 SDL_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..i32) -> (ret_win: WindowTarget, ok: bool) {
+    SDL.GL_SetAttribute(.CONTEXT_FLAGS, i32(SDL.GLcontextFlag.DEBUG_FLAG))
+
     window: ^SDL.Window
     c_window_tag := strings.clone_to_cstring(window_tag)
-
+    
     render_api_winflags := gpu.RENDER_API == .OPENGL ? SDL.WINDOW_OPENGL : SDL.WINDOW_VULKAN
     if len(extra_params) != 0 {
         if len(extra_params) != 2 {
@@ -63,17 +85,40 @@ SDL_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..
 	
     // Extra steps for render apis
     switch (gpu.RENDER_API) {
+    case .VULKAN: gpu.vulkan_not_supported()
     case. OPENGL:
         gl_context := SDL.GL_CreateContext(window)
         SDL.GL_MakeCurrent(window, gl_context)
         gl.load_up_to(4, 3, SDL.gl_set_proc_address)
-    case .VULKAN:
-        gpu.vulkan_not_supported()
+        gl.DebugMessageCallback(GL_DEBUG_CALLBACK, nil)
     }
 
     return window, true
 }
 
+GLFW_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..i32) -> (ret_win: WindowTarget, ok: bool) {
+    window_tag_cstr := strings.clone_to_cstring(window_tag)
+    window: glfw.WindowHandle = glfw.CreateWindow(width, height, window_tag_cstr, nil, nil)
+    if window == nil {
+        log.errorf("Failed to initialize GLFW window")
+        return window, ok
+    }
+
+    glfw.MakeContextCurrent(window)
+    glfw.SetErrorCallback(GLFW_ERROR_CALLBACK)
+	glfw.WindowHint(glfw.RESIZABLE, 1)
+
+    switch (gpu.RENDER_API) {
+    case .VULKAN: gpu.vulkan_not_supported()
+    case .OPENGL:
+        glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR,4) 
+        glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR,6)
+        glfw.WindowHint(glfw.OPENGL_PROFILE,glfw.OPENGL_CORE_PROFILE)
+        gl.DebugMessageCallback(GL_DEBUG_CALLBACK, nil)
+    }
+    
+    return window, true
+}
 
 destroy_window_ :: proc(target: WindowTarget)
 destroy_window: destroy_window_  = SDL_destroy_window
@@ -82,6 +127,11 @@ destroy_window: destroy_window_  = SDL_destroy_window
 @(private)
 SDL_destroy_window :: proc(target: WindowTarget) {
     SDL.DestroyWindow(target.(^SDL.Window))
+}
+
+@(private)
+GLFW_destroy_window :: proc(target: WindowTarget) {
+    glfw.DestroyWindow(target.(glfw.WindowHandle))
 }
 
 
@@ -101,6 +151,13 @@ SDL_swap_window_bufs :: proc(target: WindowTarget) -> (ok: bool) {
         return ok
     }
     return true
+}
+
+@(private)
+GLFW_swap_window_bufs :: proc(target: WindowTarget) -> (ok: bool) {
+    ok = true
+    glfw.SwapBuffers(target.(glfw.WindowHandle))
+    return ok
 }
 
 
