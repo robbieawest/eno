@@ -5,6 +5,7 @@ import gl "vendor:OpenGL"
 import "vendor:glfw"
 
 import gpu "../gpu"
+import dbg "../debug"
 
 import "core:log"
 import "core:strings"
@@ -16,12 +17,6 @@ import "core:fmt"
 Windower :: enum { SDL, GLFW }
 CURRENT_WINDOWER: Windower = .SDL
 
-GL_DEBUG_CALLBACK :: proc "c" (source: u32, type: u32, id: u32, severity: u32, length: i32, message: cstring, userParam: rawptr) {
-    context = runtime.default_context()
-    context.logger = log.create_console_logger()
-    fmt.print("\n\ndebug error!\n\n")
-    log.errorf("gl debug callback error: %s", message)
-}
 
 GLFW_ERROR_CALLBACK :: proc "c" (error: i32, description: cstring) {
     context = runtime.default_context()
@@ -61,7 +56,8 @@ initialize_window: init_win_ = SDL_init_window
 
 @(private)
 SDL_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..i32) -> (ret_win: WindowTarget, ok: bool) {
-    SDL.GL_SetAttribute(.CONTEXT_FLAGS, i32(SDL.GLcontextFlag.DEBUG_FLAG))
+    dbg.init_debug_stack()
+    dbg.debug_point( dbg.LogInfo{ msg = "INIT DEBUG STACK", level = .INFO} )
 
     window: ^SDL.Window
     c_window_tag := strings.clone_to_cstring(window_tag)
@@ -89,14 +85,27 @@ SDL_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..
     case. OPENGL:
         gl_context := SDL.GL_CreateContext(window)
         SDL.GL_MakeCurrent(window, gl_context)
-        gl.load_up_to(4, 3, SDL.gl_set_proc_address)
-        gl.DebugMessageCallback(GL_DEBUG_CALLBACK, nil)
+        gl.load_up_to(4, 3, SDL.gl_set_proc_address) // Loads odin gl procedure bindings?
+
+        _attr_ret: i32
+        _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_MAJOR_VERSION, 4)
+        _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_MINOR_VERSION, 3)
+        _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_PROFILE_MASK, i32(SDL.GLprofile.CORE))
+        _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_FLAGS, i32(SDL.GLcontextFlag.DEBUG_FLAG))
+        if _attr_ret != 0 do log.errorf("Could not set certain SDL parameters for OpenGL")
+
+        gl.Enable(gl.DEBUG_OUTPUT)
+        gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
+        gl.DebugMessageCallback(dbg.GL_DEBUG_CALLBACK, nil)
     }
 
     return window, true
 }
 
 GLFW_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..i32) -> (ret_win: WindowTarget, ok: bool) {
+    dbg.init_debug_stack()
+    dbg.debug_point( dbg.LogInfo{ msg = "INIT DEBUG STACK", level = .INFO} )
+
     window_tag_cstr := strings.clone_to_cstring(window_tag)
     window: glfw.WindowHandle = glfw.CreateWindow(width, height, window_tag_cstr, nil, nil)
     if window == nil {
@@ -114,7 +123,7 @@ GLFW_init_window :: proc(width, height: i32, window_tag: string, extra_params: .
         glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR,4) 
         glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR,6)
         glfw.WindowHint(glfw.OPENGL_PROFILE,glfw.OPENGL_CORE_PROFILE)
-        gl.DebugMessageCallback(GL_DEBUG_CALLBACK, nil)
+        gl.DebugMessageCallback(dbg.GL_DEBUG_CALLBACK, nil)
     }
     
     return window, true

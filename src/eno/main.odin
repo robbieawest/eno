@@ -7,11 +7,23 @@ import "core:time"
 import SDL "vendor:sdl2"
 import gl "vendor:OpenGL"
 
+import "base:runtime"
+import "core:log"
+
+GlDebugCallback :: proc "c" (source: u32, type: u32, id: u32, severity: u32, length: i32, message: cstring, userParam: rawptr) {
+    context = runtime.default_context()
+    context.logger = log.create_console_logger()
+    fmt.println("debug callback")
+}
+
 
 main :: proc() {
+    context.logger = log.create_console_logger()
+
 	WINDOW_WIDTH  :: 854
 	WINDOW_HEIGHT :: 480
 	
+
 	window := SDL.CreateWindow("eno engine", SDL.WINDOWPOS_UNDEFINED, SDL.WINDOWPOS_UNDEFINED, WINDOW_WIDTH, WINDOW_HEIGHT, {.OPENGL})
 	if window == nil {
 		fmt.eprintln("Failed to create window")
@@ -24,6 +36,18 @@ main :: proc() {
 	SDL.GL_MakeCurrent(window, gl_context)
 	// load the OpenGL procedures once an OpenGL context has been established
 	gl.load_up_to(4, 3, SDL.gl_set_proc_address)
+    ret: i32 = SDL.GL_SetAttribute(.CONTEXT_MAJOR_VERSION, 4)
+    if ret == -1 do log.errorf("no success :(")
+    ret = SDL.GL_SetAttribute(.CONTEXT_MINOR_VERSION, 3)
+    if ret == -1 do log.errorf("no success :(")
+    ret = SDL.GL_SetAttribute(.CONTEXT_PROFILE_MASK, i32(SDL.GLprofile.CORE))
+    if ret == -1 do log.errorf("no success :(")
+    ret = SDL.GL_SetAttribute(.CONTEXT_FLAGS, i32(SDL.GLcontextFlag.DEBUG_FLAG))
+    if ret == -1 do log.errorf("no success :(")
+
+    gl.Enable(gl.DEBUG_OUTPUT)
+    gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
+    gl.DebugMessageCallback(GlDebugCallback, nil)
 	
 	// useful utility procedures that are part of vendor:OpenGl
 	program, program_ok := gl.load_shaders_source(vertex_source, fragment_source)
