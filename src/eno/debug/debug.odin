@@ -2,7 +2,9 @@ package debug
 
 import gl "vendor:OpenGL"
 
-import log "core:log"
+import "../utils"
+
+import "core:log"
 import "core:strings"
 import "core:fmt"
 import "core:mem"
@@ -19,18 +21,20 @@ GL_DEBUG_CALLBACK :: proc "c" (source: u32, type: u32, id: u32, severity: u32, l
     context = runtime.default_context()
     context.logger = log.create_console_logger()
 
-    log.errorf("\n************* Opengl error! **************\nMessage: %s\n", message)
-    
-    debug_stack_out_depth := DEBUG_PANIC_ON_ERROR ? DEBUG_STACK.curr_items : 3
-    
+
     builder, err := strings.builder_make()
     defer strings.builder_destroy(&builder)
     if err != mem.Allocator_Error.None do log.errorf("Could not allocate debug stack builder")
 
-    strings.write_string(&builder, "\n**** Returning head of debug stack : head size = ", )
-    strings.write_uint(&builder, uint(debug_stack_out_depth))
-    strings.write_string(&builder, " ****\n\n")
-
+    fmt.sbprintfln(&builder, "\n************* Opengl error! **************\nMessage: %s", strings.clone_from_cstring(message))
+    
+    debug_stack_out_depth := DEBUG_PANIC_ON_ERROR ? DEBUG_STACK.curr_items : 3
+    
+    fmt.sbprint(&builder,
+        "\n\n**** Returning head of debug stack : head size = ",
+        uint(debug_stack_out_depth),
+        " ****\n\n"
+    )
 
     debug_stack_head: ^StackItem = DEBUG_STACK.stack_head
     debug_info: ^DebugInfo = nil
@@ -38,22 +42,25 @@ GL_DEBUG_CALLBACK :: proc "c" (source: u32, type: u32, id: u32, severity: u32, l
     i: u32 
     for i = 0; i < debug_stack_out_depth && debug_stack_head != nil; i += 1 {
         debug_info, debug_stack_head = read_last_debug_point(debug_stack_head)
-        strings.write_string(&builder, "Debug point >>  ")
-        strings.write_string(&builder, log_level_to_string(debug_info.log_info.level))
-        strings.write_string(&builder, " '")
-        strings.write_string(&builder, debug_info.log_info.msg)
-        strings.write_string(&builder, "'\t")
-        strings.write_int(&builder, int(debug_info.loc.line))
-        strings.write_string(&builder, ":")
-        strings.write_int(&builder, int(debug_info.loc.column)) 
-        strings.write_string(&builder, ":")
-        strings.write_string(&builder, parse_debug_source_path(debug_info.loc.file_path))
-        strings.write_string(&builder, ":")
-        strings.write_string(&builder, debug_info.loc.procedure)
-        strings.write_string(&builder, "\n")
+        fmt.sbprintfln(&builder, 
+            "Debug point >> %s '%s' %s:%s:%d:%d",
+            log_level_to_string(debug_info.log_info.level),
+            debug_info.log_info.msg,
+            parse_debug_source_path(debug_info.loc.file_path),
+            debug_info.loc.procedure,
+            int(debug_info.loc.line),
+            int(debug_info.loc.column),
+        )
     }
-    if i < debug_stack_out_depth do strings.write_string(&builder, "Stack smaller than head size\n")
-    log.infof("%s", strings.to_string(builder))
+    if i < debug_stack_out_depth do fmt.sbprint(&builder, "Stack smaller than head size\n")
+
+
+    switch (severity) {
+    case gl.DEBUG_SEVERITY_MEDIUM, gl.DEBUG_SEVERITY_HIGH:
+        log.errorf("%s", strings.to_string(builder))
+    case:
+        log.warnf("%s", strings.to_string(builder))
+    }
 }
 
 @(private)
@@ -126,6 +133,8 @@ _debug_point_log :: proc(log_info: LogInfo, loc := #caller_location) {
 
 @(private)
 push_to_debug_stack :: proc(stack: ^DebugStack, debug_info: ^DebugInfo) {
+    if (stack == nil) do log.error("Debug stack not yet initalized")
+
     if (stack.curr_items == MAX_DEBUG_STACK) {
         // Remove off of tail
         temp_stack_tail := stack.stack_tail

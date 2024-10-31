@@ -135,11 +135,13 @@ destroy_window: destroy_window_  = SDL_destroy_window
 
 @(private)
 SDL_destroy_window :: proc(target: WindowTarget) {
+    dbg.debug_point( dbg.LogInfo{ msg = "DESTROYING WINDOW", level = .INFO })
     SDL.DestroyWindow(target.(^SDL.Window))
 }
 
 @(private)
 GLFW_destroy_window :: proc(target: WindowTarget) {
+    dbg.debug_point( dbg.LogInfo{ msg = "DESTROYING WINDOW", level = .INFO })
     glfw.DestroyWindow(target.(glfw.WindowHandle))
 }
 

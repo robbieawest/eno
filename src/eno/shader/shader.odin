@@ -5,6 +5,7 @@ import SDL "vendor:sdl2"
 
 import gpu "../gpu"
 import win "../window"
+import dbg "../debug"
 
 import "core:strings"
 import "core:mem"
@@ -249,7 +250,7 @@ build_shader_source :: proc(shader: ^Shader, type: ShaderType) -> (source: ^Shad
         strings.write_string(&builder, extended_glsl_type_to_string(layout.type))
         strings.write_string(&builder, " ")
         strings.write_string(&builder, layout.name)
-        strings.write_string(&builder, "\n")
+        strings.write_string(&builder, ";\n")
     }
 
     for output in shader.output {
@@ -257,7 +258,7 @@ build_shader_source :: proc(shader: ^Shader, type: ShaderType) -> (source: ^Shad
         strings.write_string(&builder, extended_glsl_type_to_string(output.type))
         strings.write_string(&builder, " ")
         strings.write_string(&builder, output.name)
-        strings.write_string(&builder, "\n")
+        strings.write_string(&builder, ";\n")
     }
 
     for input in shader.input {
@@ -265,7 +266,7 @@ build_shader_source :: proc(shader: ^Shader, type: ShaderType) -> (source: ^Shad
         strings.write_string(&builder, extended_glsl_type_to_string(input.type))
         strings.write_string(&builder, " ")
         strings.write_string(&builder, input.name)
-        strings.write_string(&builder, "\n")
+        strings.write_string(&builder, ";\n")
     }
     
     for uniform in shader.uniforms {
@@ -273,7 +274,7 @@ build_shader_source :: proc(shader: ^Shader, type: ShaderType) -> (source: ^Shad
         strings.write_string(&builder, extended_glsl_type_to_string(uniform.type))
         strings.write_string(&builder, " ")
         strings.write_string(&builder, uniform.name)
-        strings.write_string(&builder, "\n")
+        strings.write_string(&builder, ";\n")
     }
 
     for struct_definition in shader.structs {
@@ -397,7 +398,9 @@ conv_gl_shader_type :: proc(type: ShaderType) -> gl.Shader_Type {
 
 express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
     if program.expressed do return true
-    log.infof("expressing shader")
+
+    log.info("Expressing shader")
+    dbg.debug_point(dbg.LogInfo{ msg = "Expressing Shader", level = .INFO })
 
     switch (gpu.RENDER_API) {
     case .OPENGL:
@@ -409,17 +412,14 @@ express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
             
             id, comp_ok := gl.compile_shader_from_source(shader_source.compiled_source, conv_gl_shader_type(shader_source.type))
             if !comp_ok {
-            //    log.error("Could not express shader source")
+                log.error("Could not express shader source")
                 return ok
             }
-            log.info("compiled")
             shader_ids[i] = id
         }
 
-        log.info("expressed shaders")
-
         program.id, ok = gl.create_and_link_program(shader_ids[:]); if !ok {
-          //  log.error("Error while creating and linking shader program")
+            log.error("Error while creating and linking shader program")
             return ok
         }
 
@@ -510,12 +510,21 @@ create_test_render_context :: proc() -> (window: ^SDL.Window, gl_context: SDL.GL
 		return window, gl_context 
 	}
 	
+    dbg.init_debug_stack()
 	gl_context = SDL.GL_CreateContext(window)
-    SDL.GL_SetAttribute(.CONTEXT_FLAGS, 1)
 	SDL.GL_MakeCurrent(window, gl_context)
 	gl.load_up_to(4, 3, SDL.gl_set_proc_address)
 
-    gl.DebugMessageCallback(win.SDL_GL_DEBUG_CALLBACK, nil)
+    _attr_ret: i32
+    _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_MAJOR_VERSION, 4)
+    _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_MINOR_VERSION, 3)
+    _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_PROFILE_MASK, i32(SDL.GLprofile.CORE))
+    _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_FLAGS, i32(SDL.GLcontextFlag.DEBUG_FLAG))
+    if _attr_ret != 0 do log.errorf("Could not set certain SDL parameters for OpenGL")
+
+    gl.Enable(gl.DEBUG_OUTPUT)
+    gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
+    gl.DebugMessageCallback(dbg.GL_DEBUG_CALLBACK, nil)
 
     return window, gl_context 
 }

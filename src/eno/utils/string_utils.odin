@@ -4,7 +4,10 @@ import "core:testing"
 import "core:log"
 import "core:strings"
 import "core:mem"
+import "core:fmt"
 
+
+// Below all deprecated
 
 //type_checking for conversion
 is_string :: proc(s: string) -> bool {
