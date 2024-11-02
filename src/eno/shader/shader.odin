@@ -243,76 +243,41 @@ build_shader_source :: proc(shader: ^Shader, type: ShaderType) -> (source: ^Shad
     }
     defer strings.builder_destroy(&builder)
 
-    // Todo replace write_string with checked version with a write_stringln alternative
     strings.write_string(&builder, "#version 430 core\n")
     for layout in shader.layout {
-        strings.write_string(&builder, "layout (location = ")
-        strings.write_uint(&builder, layout.location)
-        strings.write_string(&builder, ") in ")
-        strings.write_string(&builder, extended_glsl_type_to_string(layout.type))
-        strings.write_string(&builder, " ")
-        strings.write_string(&builder, layout.name)
-        strings.write_string(&builder, ";\n")
+        fmt.sbprintfln(&builder, "layout (location = %d) in %s %s;", layout.location, extended_glsl_type_to_string(layout.type), layout.name)
     }
 
     for output in shader.output {
-        strings.write_string(&builder, "out ")
-        strings.write_string(&builder, extended_glsl_type_to_string(output.type))
-        strings.write_string(&builder, " ")
-        strings.write_string(&builder, output.name)
-        strings.write_string(&builder, ";\n")
+        fmt.sbprintfln(&builder, "out %s %s;", extended_glsl_type_to_string(output.type), output.name)
     }
 
     for input in shader.input {
-        strings.write_string(&builder, "out ")
-        strings.write_string(&builder, extended_glsl_type_to_string(input.type))
-        strings.write_string(&builder, " ")
-        strings.write_string(&builder, input.name)
-        strings.write_string(&builder, ";\n")
+        fmt.sbprintfln(&builder, "in %s %s;", extended_glsl_type_to_string(input.type), input.name)
     }
     
     for uniform in shader.uniforms {
-        strings.write_string(&builder, "out ")
-        strings.write_string(&builder, extended_glsl_type_to_string(uniform.type))
-        strings.write_string(&builder, " ")
-        strings.write_string(&builder, uniform.name)
-        strings.write_string(&builder, ";\n")
+        fmt.sbprintfln(&builder, "uniform %s %s;", extended_glsl_type_to_string(uniform.type), uniform.name)
     }
 
     for struct_definition in shader.structs {
-        strings.write_string(&builder, "struct ")
-        strings.write_string(&builder, struct_definition.name)
-        strings.write_string(&builder, " {\n")
+        fmt.sbprintfln(&builder, "struct %s {{", struct_definition.name)
         for field in struct_definition.fields {
-            strings.write_string(&builder, "\t")
-            strings.write_string(&builder, extended_glsl_type_to_string(field.type))
-            strings.write_string(&builder, " ")
-            strings.write_string(&builder, field.name)
-            strings.write_string(&builder, ";\n")
+            fmt.sbprintfln(&builder, "\t%s %s;", extended_glsl_type_to_string(field.type), field.name)
         }
-        strings.write_string(&builder, "};\n")
+        fmt.sbprintfln(&builder, "}};")
     }
     
     for function in shader.functions {
         strings.write_string(&builder, "\n")
         if function.is_typed_source do strings.write_string(&builder, function.source)
         else {
-            strings.write_string(&builder, extended_glsl_type_to_string(function.return_type))
-            strings.write_string(&builder, " ")
-            strings.write_string(&builder, function.label)
-            strings.write_string(&builder, "(")
-
+            fmt.sbprintfln(&builder, "%s %s(", extended_glsl_type_to_string(function.return_type), function.label)
             for argument, i in function.arguments {
-                strings.write_string(&builder, extended_glsl_type_to_string(argument.type))
-                strings.write_string(&builder, " ")
-                strings.write_string(&builder, argument.name)
+                fmt.sbprintf(&builder, "%s %s", extended_glsl_type_to_string(argument.type), argument.name)
                 if i != len(function.arguments) - 1 do strings.write_string(&builder, ",")
             }
-            
-            strings.write_string(&builder, ") {\n")
-            strings.write_string(&builder, function.source)
-            strings.write_string(&builder, "\n")
-            strings.write_string(&builder, "}")
+            fmt.sbprintf(&builder, ") {{\n%s\n}}", function.source)
         }
         strings.write_string(&builder, "\n")
     }
@@ -412,7 +377,11 @@ express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
 
         for shader_source, i in program.sources {
             dbg.debug_point()
-            id := gl.compile_shader_from_source(shader_source.compiled_source, conv_gl_shader_type(shader_source.type)) or_return
+            id, compile_ok := gl.compile_shader_from_source(shader_source.compiled_source, conv_gl_shader_type(shader_source.type))
+            if !compile_ok {
+                log.errorf("Could not compile shader source: %s", shader_source.compiled_source)
+                return ok
+            }
             shader_ids[i] = id
         }
 
