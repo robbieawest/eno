@@ -32,14 +32,9 @@ before_frame :: proc(eno_game: ^game.EnoGame) {
 
 
     game_scene := ecs.init_scene()
-
-    def_center_position: ecs.CenterPosition
-    def_mesh: model.Mesh
-    def_indexdata: model.IndexData
     helmet_arch := ecs.init_archetype("scifi-helmet", []ecs.LabelledComponent {
-        ecs.LabelledComponent { label = "position", component = def_center_position },
-        ecs.LabelledComponent { label = "meshdata", component = def_mesh },
-        ecs.LabelledComponent { label = "indexdata", component = def_indexdata },
+        ecs.LabelledComponent { label = "position", component = ecs.DEFAULT_CENTER_POSITION },
+        ecs.LabelledComponent { label = "draw_properties", component = ecs.DEFAULT_DRAW_PROPERTIES },
     })
     ecs.add_arch_to_scene(game_scene, helmet_arch)
     
@@ -47,12 +42,16 @@ before_frame :: proc(eno_game: ^game.EnoGame) {
     ecs.add_entities_of_archetype("scifi-helmet", 1, game_scene)
 
     archOperands := []string{"scifi-helmet"}
-    compOperands := []string{"meshdata", "indexdata"}
+    compOperands := []string{"draw_properties"}
     query := ecs.search_query(archOperands, compOperands, 1, nil)
     defer free(query)
 
-    mesh_comp, index_comp := create_mesh_and_index_components()
-    updated_components := [][][]ecs.Component{ [][]ecs.Component{ []ecs.Component{ mesh_comp.component }, []ecs.Component { index_comp.component } }}
+    mesh, indices := create_mesh_and_indices()
+
+    draw_props := ecs.DEFAULT_DRAW_PROPERTIES
+    draw_props.mesh = mesh
+    draw_props.indices = indices
+    updated_components := [][][]ecs.Component{ [][]ecs.Component{ []ecs.Component{ draw_props } } }
 
     result: ecs.QueryResult = ecs.set_components(query, updated_components[:], game_scene)
     defer ecs.destroy_query_result(result)
@@ -61,7 +60,7 @@ before_frame :: proc(eno_game: ^game.EnoGame) {
 
 
 @(private)
-create_mesh_and_index_components :: proc() -> (mesh_comp: ecs.LabelledComponent, index_comp: ecs.LabelledComponent) {
+create_mesh_and_indices :: proc() -> (mesh: model.Mesh, indices: model.IndexData) {
     
     vertex_layout := model.VertexLayout { []uint{3, 3, 4, 2}, []cgltf.attribute_type {
             cgltf.attribute_type.normal,
@@ -70,10 +69,8 @@ create_mesh_and_index_components :: proc() -> (mesh_comp: ecs.LabelledComponent,
             cgltf.attribute_type.texcoord
     }}
 
-    meshes, indices := read_meshes_and_indices_from_gltf("SciFiHelmet", []^model.VertexLayout{ &vertex_layout })
-    mesh_comp = ecs.LabelledComponent{ label = "meshdata", component = meshes[0] }
-    index_comp = ecs.LabelledComponent{ label = "indexdata", component = indices[0] }
-    return mesh_comp, index_comp
+    meshes, index_datas := read_meshes_and_indices_from_gltf("SciFiHelmet", []^model.VertexLayout{ &vertex_layout })
+    return meshes[0], index_datas[0]
 }
 
 

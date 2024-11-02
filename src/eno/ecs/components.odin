@@ -1,22 +1,30 @@
 package ecs
 
 import "../model"
+import "../gpu"
 
-// ************** Components ****************
 
 LabelledComponent :: struct {
     label: string,
     component: Component
 }
 
-// ****************************************
 
 Component :: union {
     int, bool, f32,
-    model.Mesh, model.IndexData, CenterPosition
+    CenterPosition,
+    DrawProperties
 }
 
+DEFAULT_DRAW_PROPERTIES: DrawProperties
+DrawProperties :: struct {
+    mesh: model.Mesh,
+    indices: model.IndexData,
+    gpu_component: gpu.GPUComponent,
+    expressed: bool
+}
 
+DEFAULT_CENTER_POSITION: CenterPosition
 CenterPosition :: struct {
     x: f32,
     y: f32

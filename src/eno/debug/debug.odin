@@ -10,6 +10,8 @@ import "core:fmt"
 import "core:mem"
 import "base:runtime"
 
+// ToDo Write options for debugging
+
 DEBUG_STACK: ^DebugStack
 init_debug_stack :: proc() {
     DEBUG_STACK = new(DebugStack)

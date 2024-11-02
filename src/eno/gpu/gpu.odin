@@ -15,8 +15,8 @@ RENDER_API: GraphicsAPI = GraphicsAPI.OPENGL
 // ToDo: Maybe combine these into a single struct?
 
 GPUComponent :: union #no_nil {
-    ^gl_GPUComponent,
-    ^vl_GPUComponent
+    gl_GPUComponent,
+    vl_GPUComponent
 }
 
 
@@ -30,14 +30,14 @@ vl_GPUComponent :: struct {
 
 
 release_gpu_component :: proc(component: GPUComponent) {
-    switch (RENDER_API) {
+    switch RENDER_API {
     case .OPENGL: 
-        gl_component := component.(^gl_GPUComponent)
+        gl_component := component.(gl_GPUComponent)
 
         gl.DeleteVertexArrays(1, &gl_component.vao)
         gl.DeleteBuffers(1, &gl_component.vbo)
         gl.DeleteBuffers(1, &gl_component.ebo)
-        free(gl_component)
+        free(&gl_component)
     case .VULKAN: vulkan_not_supported();
     }
 }
@@ -49,9 +49,11 @@ release_gpu_component :: proc(component: GPUComponent) {
 
 express_mesh_with_indices :: proc(mesh: ^model.Mesh, index_data: ^model.IndexData) -> (gpu_component: GPUComponent ok: bool) {
 
-    switch(RENDER_API) {
-        case .OPENGL: gpu_component = new(gl_GPUComponent)
-        case .VULKAN: vulkan_not_supported(); return gpu_component, ok
+    switch RENDER_API {
+    case .OPENGL:
+        gl_def_comp: gl_GPUComponent
+        gpu_component = gl_def_comp
+    case .VULKAN: vulkan_not_supported(); return gpu_component, ok
     } 
 
     ok = express_mesh_vertices(mesh, gpu_component)
@@ -73,7 +75,7 @@ express_mesh_vertices: express_mesh_vertices_ = gl_express_mesh_vertices
 gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: GPUComponent) -> (ok: bool) {
     if len(mesh.vertices) == 0 { log.errorf("%s: No vertices given to express", #procedure); return ok }
 
-    gl_component := component.(^gl_GPUComponent)
+    gl_component := component.(gl_GPUComponent)
 
     gl.GenVertexArrays(1, &gl_component.vao)
     gl.GenBuffers(1, &gl_component.vbo)
@@ -103,7 +105,7 @@ express_indices: express_indices_ = gl_express_indices
 
 @(private)
 gl_express_indices :: proc(index_data: ^model.IndexData, component: GPUComponent) -> (ok: bool){
-    gl_component := component.(^gl_GPUComponent)
+    gl_component := component.(gl_GPUComponent)
     gl.GenBuffers(1, &gl_component.ebo)
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl_component.ebo)
     gl.BufferData(gl_component.ebo, len(index_data.raw_data) * size_of(u32), raw_data(index_data.raw_data), gl.STATIC_DRAW)
