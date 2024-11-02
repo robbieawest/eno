@@ -49,14 +49,14 @@ load_model_test :: proc(t: ^testing.T) {
 }
 
 
-extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layouts: []^VertexLayout) -> (result: []^Mesh, ok: bool) {
+extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layouts: []^VertexLayout) -> (result: []Mesh, ok: bool) {
 
     //This is assuming all mesh attributes (aside from indices) have the same count (for each primitive/mesh output)
 
     log.infof("mesh: \n%#v", mesh)
     log.infof("vertex layouts: \n%#v", vertex_layouts)
 
-    mesh_data := make([dynamic]^Mesh, len(mesh.primitives))
+    mesh_data := make([dynamic]Mesh, len(mesh.primitives))
     defer delete(mesh_data)
     
     if len(vertex_layouts) != len(mesh.primitives) {
@@ -65,7 +65,7 @@ extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layouts: []^VertexLayo
     }
 
     for _primitive, i in mesh.primitives {
-        mesh_ret := new(Mesh)
+        mesh_ret: Mesh
         mesh_ret.layout = vertex_layouts[i]
 
         if len(mesh_ret.layout.sizes) != len(_primitive.attributes) {
@@ -119,13 +119,13 @@ extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layouts: []^VertexLayo
 }
 
 
-extract_index_data_from_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []^IndexData, ok: bool) {
-    index_data := make([dynamic]^IndexData, len(mesh.primitives))
+extract_index_data_from_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []IndexData, ok: bool) {
+    index_data := make([dynamic]IndexData, len(mesh.primitives))
     defer delete(index_data)
 
     for _primitive, i in mesh.primitives {
         _accessor := _primitive.indices
-        indices := new(IndexData)
+        indices: IndexData
 
         utils.append_n_defaults(&indices.raw_data, _accessor.count)
         for k in 0..<_accessor.count {
@@ -161,7 +161,7 @@ extract_vertex_data_test :: proc(t: ^testing.T) {
     }}
 
     res, ok := extract_mesh_from_cgltf(&data.meshes[0], []^VertexLayout{&vertex_layout})
-    defer for mesh in res do destroy_mesh(mesh)
+    defer for &mesh in res do destroy_mesh(&mesh)
 
     testing.expect(t, ok, "ok check")
     log.infof("meshes size: %d, mesh components: %v, len mesh vertices: %d", len(res), res[0].layout, len(res[0].vertices))
@@ -180,7 +180,7 @@ extract_index_data_test :: proc(t: ^testing.T) {
     }}
 
     res, ok := extract_index_data_from_mesh(&data.meshes[0])
-    defer for index_data in res do destroy_index_data(index_data)
+    defer for &index_data in res do destroy_index_data(&index_data)
 
     testing.expect(t, ok, "ok check")
     log.infof("indices size: %d, num indices: %d", len(res), len(res[0].raw_data))

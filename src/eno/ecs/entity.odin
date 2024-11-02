@@ -1,6 +1,7 @@
 package ecs
 
 import "../memory"
+import "../model"
 
 import "core:log"
 import "core:testing"
@@ -9,6 +10,8 @@ import "core:mem"
 import "core:reflect"
 
 import "base:runtime"
+
+// Needs a rewrite or two
 
 // ************** Entities ****************
 
@@ -22,19 +25,6 @@ Entity :: struct {
 }
 
 // ****************************************
-
-// ************** Components ****************
-
-LabelledComponent :: struct {
-    label: string,
-    component: Component
-}
-
-// ****************************************
-
-Component :: union {
-    int, bool, f32
-}
 
 // ************** Archetypes ****************
 
@@ -56,7 +46,7 @@ init_archetype :: proc(label: string, input_components: []LabelledComponent) -> 
 
     arch = new(Archetype)
     arch.label = label
-    append(&arch.entities, ent^)
+append(&arch.entities, ent^)
 
     components := make([dynamic][dynamic]Component, len(input_components), len(input_components))
     for &innerComponentList, i in components {

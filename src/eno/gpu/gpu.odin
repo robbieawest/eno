@@ -30,8 +30,6 @@ vl_GPUComponent :: struct {
 
 
 release_gpu_component :: proc(component: GPUComponent) {
-    //Needs to be chunked, how to take in a list and combine a pointer to each element? Definitely some SOA AOS shit check it
-    //*want less GPU calls when releasing memory
     switch (RENDER_API) {
     case .OPENGL: 
         gl_component := component.(^gl_GPUComponent)
@@ -51,7 +49,7 @@ release_gpu_component :: proc(component: GPUComponent) {
 
 express_mesh_with_indices :: proc(mesh: ^model.Mesh, index_data: ^model.IndexData) -> (gpu_component: GPUComponent ok: bool) {
 
-    switch(RENDER_API) {//Easier just to switch
+    switch(RENDER_API) {
         case .OPENGL: gpu_component = new(gl_GPUComponent)
         case .VULKAN: vulkan_not_supported(); return gpu_component, ok
     } 

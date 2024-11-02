@@ -38,13 +38,11 @@ IndexData :: struct {
 destroy_mesh :: proc(mesh: ^Mesh) {
     for &vertex in mesh.vertices do delete(vertex.raw_data)
     delete(mesh.vertices)
-    free(mesh)
 }
 
 
 destroy_index_data :: proc(index_data: ^IndexData) {
     delete(index_data.raw_data)
-    free(index_data)
 }
 
 
@@ -63,9 +61,9 @@ destroy_mesh_test :: proc(t: ^testing.T) {
             cgltf.attribute_type.texcoord
     }}
 
-    mesh := new(Mesh)
+    mesh: Mesh
     mesh.vertices = vert
     mesh.layout = &vertex_layout
-    defer destroy_mesh(mesh)
+    defer destroy_mesh(&mesh)
    // log.infof("mesh leak test, check for leaks: %#v", mesh)
 }
