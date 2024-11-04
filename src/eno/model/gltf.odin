@@ -9,13 +9,14 @@ import "core:testing"
 import "core:strings"
 import "core:mem"
 import "core:slice"
+import "core:fmt"
 
 DEFAULT_OPTIONS: cgltf.options
 load_gltf_mesh :: proc(model_name: string) -> (data: ^cgltf.data, result: cgltf.result){
     model_name := strings.clone_to_cstring(model_name)
     defer delete(model_name)
-
-    model_path := utils.concat_cstr("resources/models/", model_name, "/glTF/", model_name, ".gltf")
+    
+    model_path := fmt.caprintf("resources/models/%s/glTF/%s.gltf", model_name, model_name)
     log.infof("model path: %s", model_path)
 
     data, result = cgltf.parse_file(DEFAULT_OPTIONS, model_path)
