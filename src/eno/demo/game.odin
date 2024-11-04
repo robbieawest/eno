@@ -8,6 +8,7 @@ import win "../window"
 import game "../game"
 import "../ecs"
 import "../model"
+import "../gpu"
 
 import "core:log"
 
@@ -31,15 +32,14 @@ before_frame :: proc(eno_game: ^game.EnoGame) {
 
 
 
-    game_scene := ecs.init_scene()
     helmet_arch := ecs.init_archetype("scifi-helmet", []ecs.LabelledComponent {
         ecs.LabelledComponent { label = "position", component = ecs.DEFAULT_CENTER_POSITION },
-        ecs.LabelledComponent { label = "draw_properties", component = ecs.DEFAULT_DRAW_PROPERTIES },
+        ecs.LabelledComponent { label = "draw_properties", component = gpu.DEFAULT_DRAW_PROPERTIES },
     })
-    ecs.add_arch_to_scene(game_scene, helmet_arch)
+    ecs.add_arch_to_scene(eno_game.scene, helmet_arch)
     
     
-    ecs.add_entities_of_archetype("scifi-helmet", 1, game_scene)
+    ecs.add_entities_of_archetype("scifi-helmet", 1, eno_game.scene)
 
     archOperands := []string{"scifi-helmet"}
     compOperands := []string{"draw_properties"}
@@ -48,12 +48,12 @@ before_frame :: proc(eno_game: ^game.EnoGame) {
 
     mesh, indices := create_mesh_and_indices()
 
-    draw_props := ecs.DEFAULT_DRAW_PROPERTIES
+    draw_props := gpu.DEFAULT_DRAW_PROPERTIES
     draw_props.mesh = mesh
     draw_props.indices = indices
     updated_components := [][][]ecs.Component{ [][]ecs.Component{ []ecs.Component{ draw_props } } }
 
-    result: ecs.QueryResult = ecs.set_components(query, updated_components[:], game_scene)
+    result: ecs.QueryResult = ecs.set_components(query, updated_components[:], eno_game.scene)
     defer ecs.destroy_query_result(result)
 }
 

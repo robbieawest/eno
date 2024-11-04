@@ -3,8 +3,6 @@ package shader
 import gl "vendor:OpenGL"
 import SDL "vendor:sdl2"
 
-import gpu "../gpu"
-import win "../window"
 import dbg "../debug"
 
 import "core:strings"
@@ -341,7 +339,6 @@ ShaderType :: enum { // Is just gl.Shader_Type
     TESS_EVALUATION
 }
 
-@(private)
 conv_gl_shader_type :: proc(type: ShaderType) -> gl.Shader_Type {
     switch (type) {
     case .NIL:
@@ -365,37 +362,7 @@ conv_gl_shader_type :: proc(type: ShaderType) -> gl.Shader_Type {
 }
 
 
-express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
-    if program.expressed do return true
 
-    dbg.debug_point(dbg.LogInfo{ msg = "Expressing Shader", level = .INFO })
-
-    switch (gpu.RENDER_API) {
-    case .OPENGL:
-        shader_ids := make([dynamic]u32, len(program.sources))
-        defer delete(shader_ids)
-
-        for shader_source, i in program.sources {
-            dbg.debug_point()
-            id, compile_ok := gl.compile_shader_from_source(shader_source.compiled_source, conv_gl_shader_type(shader_source.type))
-            if !compile_ok {
-                log.errorf("Could not compile shader source: %s", shader_source.compiled_source)
-                return ok
-            }
-            shader_ids[i] = id
-        }
-
-        program.id = gl.create_and_link_program(shader_ids[:]) or_return
-        program.expressed = true
-    case .VULKAN:
-        gpu.vulkan_not_supported()
-        return ok
-    }
-    return true
-}
-
-
-/*
 @(test)
 shader_creation_test :: proc(t: ^testing.T) {
 
@@ -462,97 +429,4 @@ build_shader_source_test :: proc(t: ^testing.T) {
     log.info(shader_source.compiled_source)
 }
 
-*/
 
-@(private)
-create_test_render_context :: proc() -> (window: ^SDL.Window, gl_context: SDL.GLContext) {
-
-	window = SDL.CreateWindow("eno engine test win", SDL.WINDOWPOS_UNDEFINED, SDL.WINDOWPOS_UNDEFINED, 400, 400, {.OPENGL})
-	if window == nil {
-		fmt.eprintln("Failed to create window")
-		return window, gl_context 
-	}
-	
-    dbg.init_debug_stack()
-	gl_context = SDL.GL_CreateContext(window)
-	SDL.GL_MakeCurrent(window, gl_context)
-	gl.load_up_to(4, 3, SDL.gl_set_proc_address)
-
-    _attr_ret: i32
-    _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_MAJOR_VERSION, 4)
-    _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_MINOR_VERSION, 3)
-    _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_PROFILE_MASK, i32(SDL.GLprofile.CORE))
-    _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_FLAGS, i32(SDL.GLcontextFlag.DEBUG_FLAG))
-    if _attr_ret != 0 do log.errorf("Could not set certain SDL parameters for OpenGL")
-
-    gl.Enable(gl.DEBUG_OUTPUT)
-    gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
-    gl.DebugMessageCallback(dbg.GL_DEBUG_CALLBACK, nil)
-
-    return window, gl_context 
-}
-
-@(test)
-express_shader_test :: proc(t: ^testing.T) {
-    window, gl_context := create_test_render_context()
-    defer dbg.destroy_debug_stack()
-    
-    vertex_shader: ^Shader = init_shader(
-                []ShaderLayout {
-                    { 0, .vec3, "a_position"},
-                    { 1, .vec4, "a_colour"}
-                }
-        )
-    add_output(vertex_shader, []ShaderInput {
-        { .vec4, "v_colour"}
-    })
-    add_uniforms(vertex_shader, []ShaderUniform {
-        { .mat4, "u_transform"}
-    })
-    add_functions(vertex_shader, []ShaderFunction {
-        { 
-            .void,
-            []ShaderFunctionArgument {},
-            "main",
-            `    gl_Position = u_transform * vec4(a_position, 1.0);
-    v_colour = a_colour;`,
-            false
-        }
-    })
-
-    vertex_source, vertex_ok := build_shader_source(vertex_shader, .VERTEX)
-    testing.expect(t, vertex_ok, "vert check")
-
-    
-    fragment_shader: ^Shader = init_shader()
-    add_input(fragment_shader, []ShaderInput {
-        { .vec4, "v_colour" }
-    })
-    add_output(fragment_shader, []ShaderInput {
-        { .vec4, "o_colour" }
-    })
-    add_functions(fragment_shader, []ShaderFunction {
-        { 
-            .void,
-            []ShaderFunctionArgument {},
-            "main",
-            `    o_colour = v_colour;`,
-            false
-        }
-    })
-
-    fragment_source, fragment_ok := build_shader_source(fragment_shader, .FRAGMENT)
-    testing.expect(t, fragment_ok, "frag ok check")
-
-    program: ^ShaderProgram = init_shader_program([]^ShaderSource {
-        vertex_source, fragment_source 
-    })
-    defer destroy_shader_program(program)
-    
-    testing.expect(t, !program.expressed, "not expressed check")
-
-    express_ok := express_shader(program)
-    testing.expect(t, express_ok, "express ok check")
-
-    testing.expect(t, program.expressed, "expressed check")
-}

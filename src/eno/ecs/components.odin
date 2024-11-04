@@ -13,16 +13,9 @@ LabelledComponent :: struct {
 Component :: union {
     int, bool, f32,
     CenterPosition,
-    DrawProperties
+    gpu.DrawProperties
 }
 
-DEFAULT_DRAW_PROPERTIES: DrawProperties
-DrawProperties :: struct {
-    mesh: model.Mesh,
-    indices: model.IndexData,
-    gpu_component: gpu.GPUComponent,
-    expressed: bool
-}
 
 DEFAULT_CENTER_POSITION: CenterPosition
 CenterPosition :: struct {
