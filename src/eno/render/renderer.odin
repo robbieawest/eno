@@ -5,8 +5,17 @@ import "../gpu"
 import "../shader"
 import dbg "../debug"
 
+import glm "core:math/linalg/glsl"
+
 // Shitty beta renderer
 
+/*
+    Renders all entities in the scene with the "draw_properties" component
+    Simply doe a single render call for each entity, with glDrawElements for OpenGL
+
+    Automatically expresses any entities which have mesh data on RAM not on VRAM
+    Has an option to create a default shader program if not already initialized
+*/
 render_all_from_scene :: proc(game_scene: ^ecs.Scene, create_default_program: bool) -> (ok: bool) {
     using ecs
 
@@ -38,15 +47,15 @@ assign_default_shader :: proc(draw_properties: ^ecs.DrawProperties) -> (ok: bool
      
     vertex_shader: ^Shader = init_shader(
                 []ShaderLayout {
-                    { 0, .vec3, "a_position"},
-                    { 1, .vec4, "a_colour"}
+                    { 0, .vec3, "a_position" },
+                    { 1, .vec4, "a_colour" }
                 }
         )
     add_output(vertex_shader, []ShaderInput {
-        { .vec4, "v_colour"}
+        { .vec4, "v_colour" }
     })
     add_uniforms(vertex_shader, []ShaderUniform {
-        { .mat4, "u_transform"}
+        { .mat4, "u_transform" }
     })
     add_functions(vertex_shader, []ShaderFunction {
         { 
@@ -89,3 +98,39 @@ assign_default_shader :: proc(draw_properties: ^ecs.DrawProperties) -> (ok: bool
 
     return true
 }
+
+/*
+    Updates the positions of entities on the GPU if:
+    entity has the "position" component
+    entity has the mat4 u_transform uniform which is available in the default_shader
+     assigned in assign_default_shader
+*/
+update_scene_positions :: proc(game_scene: ^ecs.Scene) -> (ok: bool) {
+    
+    search_query: ^SearchQuery = search_query([]string{}, []string{ "position", "draw_properties" }, 255, nil)
+    search_result: ^QueryResult = search_scene(game_scene, search_query)
+    dbg.debug_point()
+
+    for arch_label, arch_res in search_result {
+
+        for entity_label, entity_components in arch_res {
+
+            position: ^ecs.CenterPosition
+            draw_properties: ^gpu.DrawProperties
+
+            for component in entity_components {
+                switch val in component {
+                case ecs.CenterPosition: 
+                    position = &val
+                case gpu.DrawProperties:
+                    draw_properties = &val
+                }
+            }
+            
+            
+            gpu.update_shader_uniform()
+        }
+    }
+}
+
+
