@@ -4,8 +4,12 @@ import "../ecs"
 import "../gpu"
 import "../shader"
 import dbg "../debug"
+import win "../window"
+import "../model"
 
 import glm "core:math/linalg/glsl"
+import "core:fmt"
+import "core:slice"
 
 // Shitty beta renderer
 
@@ -17,40 +21,77 @@ import glm "core:math/linalg/glsl"
     Has an option to create a default shader program if not already initialized
 */
 render_all_from_scene :: proc(game_scene: ^ecs.Scene, create_default_program: bool) -> (ok: bool) {
+    dbg.debug_point()
+
     using ecs
 
-    search_query: ^SearchQuery = search_query([]string{}, []string{ "draw_properties" }, 255, nil)
-    search_result: ^QueryResult = search_scene(game_scene, search_query)
-    dbg.debug_point()
+    query: ^SearchQuery = search_query([]string{}, []string{ "draw_properties" }, 255, nil)
+    search_result: QueryResult = search_scene(game_scene, query)
+    defer destroy_query_result(search_result)
 
     for arch_label, arch_res in search_result {
 
         for entity_label, entity_components in arch_res {
             
             for component in entity_components {
-                draw_properties := component.(DrawProperties)
+                draw_properties := component.(gpu.DrawProperties)
 
-                b_is_drawable := gpu.component_is_drawable(component)
+                b_is_drawable := gpu.component_is_drawable(draw_properties.gpu_component)
                 if b_is_drawable != 0 {
-                    if b_is_drawable & b0001 > 0 do draw_properties.gpu_component = gpu.express_mesh_vertices(&draw_properties.mesh, draw_properties.gpu_component) or_return
-                    if b_is_drawable & b0010 > 0 do draw_properties.gpu_component = gpu.express_indices(&draw_properties.indices, draw_properties.gpu_component) or_return
-                    if create_default_program && b_is_drawable & b0100 > 0 do assign_default_shader(&draw_properties) or_return
+                    if b_is_drawable & 0b0001 > 0 do gpu.express_mesh_vertices(&draw_properties.mesh, &draw_properties.gpu_component) or_return
+                    if b_is_drawable & 0b0010 > 0 do gpu.express_indices(&draw_properties.indices, &draw_properties.gpu_component) or_return
+                    if create_default_program && b_is_drawable & 0b0100 > 0 do assign_default_shader(&draw_properties) or_return
                 }
                 
-                gpu.draw_elements(draw_properties.gpu_component)
+                gpu.draw_elements(draw_properties)
             }
         }
     }
+
+    return true
 }
 
-assign_default_shader :: proc(draw_properties: ^ecs.DrawProperties) -> (ok: bool) {
-     
-    vertex_shader: ^Shader = init_shader(
-                []ShaderLayout {
-                    { 0, .vec3, "a_position" },
-                    { 1, .vec4, "a_colour" }
-                }
-        )
+
+@(private)
+shader_layout_from_mesh_layout :: proc(mesh_layout: ^model.VertexLayout) -> (shader_layout: [dynamic]shader.ShaderLayout) {
+
+    shader_layout = make([dynamic]shader.ShaderLayout, len(mesh_layout.sizes))
+    defer delete(shader_layout)
+    
+    found_position: bool
+    for i: uint = 0; i < len(mesh_layout.sizes); i += 1 {
+        layout_tag: string
+        type: shader.GLSLDataType
+
+        switch mesh_layout.types[i] {
+        case .color, .tangent:
+            type = .vec4
+        case .position:
+            found_position = true
+            layout_tag = "a_position"
+            fallthrough
+        case .normal:
+            type = .vec3
+        case .texcoord:
+            type = .vec2
+        case .joints, .custom, .invalid, .weights:
+            dbg.debug_point(dbg.LogInfo{ msg = "Unsupported mesh layout type", level = .WARN })
+        }
+
+        if layout_tag == "" do layout_tag = fmt.aprintf("unspecified layout tag %d", i)
+        shader_layout[i] = { i, type, layout_tag } // check if possible!
+    }
+
+    return shader_layout
+}
+
+assign_default_shader :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool) {
+    using shader
+
+    shader_layout: [dynamic]ShaderLayout = shader_layout_from_mesh_layout(draw_properties.mesh.layout)
+    defer delete(shader_layout)
+
+    vertex_shader: ^Shader = init_shader(slice.clone(shader_layout[:]))
     add_output(vertex_shader, []ShaderInput {
         { .vec4, "v_colour" }
     })
@@ -63,7 +104,7 @@ assign_default_shader :: proc(draw_properties: ^ecs.DrawProperties) -> (ok: bool
             []ShaderFunctionArgument {},
             "main",
             `    gl_Position = u_transform * vec4(a_position, 1.0);
-    v_colour = a_colour;`,
+    v_colour = vec4(1.0, 0.0, 0.0, 1.0);`,
             false
         }
     })
@@ -106,20 +147,21 @@ assign_default_shader :: proc(draw_properties: ^ecs.DrawProperties) -> (ok: bool
      assigned in assign_default_shader
 */
 update_scene_positions :: proc(game_scene: ^ecs.Scene) -> (ok: bool) {
-    
-    search_query: ^SearchQuery = search_query([]string{}, []string{ "position", "draw_properties" }, 255, nil)
-    search_result: ^QueryResult = search_scene(game_scene, search_query)
+    using ecs
+    query: ^SearchQuery = search_query([]string{}, []string{ "position", "draw_properties" }, 255, nil)
+    search_result: QueryResult = search_scene(game_scene, query)
+    defer destroy_query_result(search_result)
     dbg.debug_point()
 
     for arch_label, arch_res in search_result {
 
         for entity_label, entity_components in arch_res {
 
-            position: ^ecs.CenterPosition
+            position: ^CenterPosition
             draw_properties: ^gpu.DrawProperties
 
             for component in entity_components {
-                switch val in component {
+                #partial switch &val in component {
                 case ecs.CenterPosition: 
                     position = &val
                 case gpu.DrawProperties:
@@ -127,10 +169,19 @@ update_scene_positions :: proc(game_scene: ^ecs.Scene) -> (ok: bool) {
                 }
             }
             
-            
-            gpu.update_shader_uniform()
+            model_mat := glm.mat4Translate({ position.x, position.y, position.z })
+            view_mat := glm.identity(glm.mat4)
+
+            fov: f32 = 90.0
+            aspect_ratio: f32 = f32(win.WINDOW_WIDTH) / f32(win.WINDOW_HEIGHT)
+            persp_mat := glm.mat4Perspective(glm.radians(fov), aspect_ratio, 0.1, 100.0)
+
+            mvp_mat := persp_mat * view_mat * model_mat
+            gpu.shader_uniform_update_mat4(draw_properties, "u_transform", &mvp_mat[0, 0]) // ignore result
         }
     }
+
+    return true
 }
 
 

@@ -8,6 +8,9 @@ import dbg "../debug"
 
 import "core:testing"
 import "core:log"
+import "core:strings"
+import glm "core:math/linalg/glsl"
+
 
 GraphicsAPI :: enum { OPENGL, VULKAN } //Making it easy for the future
 RENDER_API: GraphicsAPI = GraphicsAPI.OPENGL
@@ -92,10 +95,10 @@ express_mesh_with_indices :: proc(mesh: ^model.Mesh, index_data: ^model.IndexDat
     case .VULKAN: vulkan_not_supported(); return gpu_component, ok
     } 
 
-    ok = express_mesh_vertices(mesh, gpu_component)
+    ok = express_mesh_vertices(mesh, &gpu_component)
     if !ok do return gpu_component, ok
 
-    ok = express_indices(index_data, gpu_component)
+    ok = express_indices(index_data, &gpu_component)
     if !ok do return gpu_component, ok 
     
 
@@ -104,15 +107,15 @@ express_mesh_with_indices :: proc(mesh: ^model.Mesh, index_data: ^model.IndexDat
 
 
 //*Likely should use express_mesh_with_indices instead
-express_mesh_vertices_ :: #type proc(mesh: ^model.Mesh, component: GPUComponent) -> (ok: bool)
+express_mesh_vertices_ :: #type proc(mesh: ^model.Mesh, component: ^GPUComponent) -> (ok: bool)
 express_mesh_vertices: express_mesh_vertices_ = gl_express_mesh_vertices
 
 
 @(private)
-gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: GPUComponent) -> (ok: bool) {
+gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: ^GPUComponent) -> (ok: bool) {
     if len(mesh.vertices) == 0 { log.errorf("%s: No vertices given to express", #procedure); return ok }
 
-    gl_component := component.(gl_GPUComponent)
+    gl_component := &component.(gl_GPUComponent)
     gl_component.expressed_vert = true
 
     gl.GenVertexArrays(1, &gl_component.vao)
@@ -138,12 +141,12 @@ gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: GPUComponent) -> 
 
 
 //*Likely should use express_mesh_with_indices instead
-express_indices_ :: #type proc(index_data: ^model.IndexData, component: GPUComponent) -> (ok: bool)
+express_indices_ :: #type proc(index_data: ^model.IndexData, component: ^GPUComponent) -> (ok: bool)
 express_indices: express_indices_ = gl_express_indices
 
 @(private)
-gl_express_indices :: proc(index_data: ^model.IndexData, component: GPUComponent) -> (ok: bool){
-    gl_component := component.(gl_GPUComponent)
+gl_express_indices :: proc(index_data: ^model.IndexData, component: ^GPUComponent) -> (ok: bool){
+    gl_component := &component.(gl_GPUComponent)
     gl_component.expressed_ind = true
 
     gl.GenBuffers(1, &gl_component.ebo)
@@ -201,6 +204,39 @@ express_shader :: proc(program: ^shader.ShaderProgram) -> (ok: bool) {
     return true
 }
 
+
+// Updating shader uniforms
+
+
+
+shader_uniform_update_mat4_ :: #type proc(draw_properties: ^DrawProperties, uniform_tag: string, mat: [^]f32) -> (ok: bool) 
+shader_uniform_update_mat4: shader_uniform_update_mat4_ = gl_shader_uniform_update_mat4
+
+gl_shader_uniform_update_mat4 :: proc(draw_properties: ^DrawProperties, uniform_tag: string, mat: [^]f32) -> (ok: bool){
+    gpu_comp := &draw_properties.gpu_component.(gl_GPUComponent)
+    program: ^shader.ShaderProgram = &gpu_comp.program
+
+    if !program.expressed {
+        dbg.debug_point(dbg.LogInfo{ msg = "Shader not yet expressed", level = .ERROR })
+        return ok
+    }
+    dbg.debug_point()
+
+    tag_cstr := strings.clone_to_cstring(uniform_tag)
+    program_id := program.id.(u32)
+
+    gl.UseProgram(program_id)
+    loc := gl.GetUniformLocation(program_id, tag_cstr)
+    if loc == -1 {
+        dbg.debug_point(dbg.LogInfo{ msg = "Shader uniform does not exist", level = .ERROR })
+        return ok
+    }
+    gl.UniformMatrix4fv(loc, 1, false, mat)
+
+    return true
+}
+
+//
 
 
 vulkan_not_supported :: proc(location := #caller_location) { log.errorf("%v: Vulkan not supported", location) }

@@ -17,6 +17,9 @@ import "core:fmt"
 Windower :: enum { SDL, GLFW }
 CURRENT_WINDOWER: Windower = .SDL
 
+WINDOW_WIDTH: i32 = 1280
+WINDOW_HEIGHT: i32 = 720 
+
 
 GLFW_ERROR_CALLBACK :: proc "c" (error: i32, description: cstring) {
     context = runtime.default_context()
@@ -78,6 +81,9 @@ SDL_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..
         log.errorf("Could not initialize SDL window")
 		return window, ok
 	}
+
+    WINDOW_WIDTH = width
+    WINDOW_HEIGHT = height
 	
     // Extra steps for render apis
     switch (gpu.RENDER_API) {

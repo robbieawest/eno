@@ -20,5 +20,6 @@ Component :: union {
 DEFAULT_CENTER_POSITION: CenterPosition
 CenterPosition :: struct {
     x: f32,
-    y: f32
+    y: f32,
+    z: f32
 }
