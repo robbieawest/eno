@@ -17,8 +17,11 @@ import "core:log"
 // APIs for gltf interop and ecs are dogwater right now
 
 every_frame :: proc(eno_game: ^game.EnoGame) {
+    log.info("updating positions")
     render.update_scene_positions(eno_game.scene)
+    log.info("scene positions updated")
     render.render_all_from_scene(eno_game.scene, true)
+    log.info("rendered all")
     ok := win.swap_window_bufs(eno_game.window); if !ok do log.errorf("could not swap bufs")
 }
 

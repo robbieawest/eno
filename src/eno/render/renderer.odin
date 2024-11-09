@@ -10,6 +10,7 @@ import "../model"
 import glm "core:math/linalg/glsl"
 import "core:fmt"
 import "core:slice"
+import "core:log"
 
 // Shitty beta renderer
 
@@ -35,7 +36,7 @@ render_all_from_scene :: proc(game_scene: ^ecs.Scene, create_default_program: bo
             
             for component in entity_components {
                 draw_properties := component.(gpu.DrawProperties)
-
+                dbg.debug_point(dbg.LogInfo{ "rendering object", .INFO })
                 b_is_drawable := gpu.component_is_drawable(draw_properties.gpu_component)
                 if b_is_drawable != 0 {
                     if b_is_drawable & 0b0001 > 0 do gpu.express_mesh_vertices(&draw_properties.mesh, &draw_properties.gpu_component) or_return
@@ -149,9 +150,14 @@ assign_default_shader :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool
 update_scene_positions :: proc(game_scene: ^ecs.Scene) -> (ok: bool) {
     using ecs
     query: ^SearchQuery = search_query([]string{}, []string{ "position", "draw_properties" }, 255, nil)
+    log.info("now searching")
     search_result: QueryResult = search_scene(game_scene, query)
     defer destroy_query_result(search_result)
+
+    log.info("hi")
     dbg.debug_point()
+    log.info("hey")
+    log.infof("scene searched: %#v", search_result)
 
     for arch_label, arch_res in search_result {
 

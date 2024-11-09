@@ -1,4 +1,4 @@
-package ecs
+package old 
 
 import "core:testing"
 import "core:log"
@@ -77,24 +77,52 @@ search_scene :: proc(scene: ^Scene, query: ^SearchQuery) -> (result: QueryResult
     //No input sanitization because lazy as shit ToDo
     result = make(QueryResult)
 
+    // If archetype labels is empty in query search all archetypes
+    no_archetype_labels_buffer := make([dynamic]string, len(scene.archetypes))
+    defer delete(no_archetype_labels_buffer)
+
+    if len(query.archetypeLabelQueries) == 0 {
+        log.info("in here")
+        for archetype in scene.archetypes {
+            append(&no_archetype_labels_buffer, archetype.label)
+        }
+        query.archetypeLabelQueries = no_archetype_labels_buffer[:]
+    }
+    log.infof("past, %#v", query.archetypeLabelQueries)
+
+    
     for archetypeLabel in query.archetypeLabelQueries {
+        log.infof("label: %s", archetypeLabel)
 
         archetype: ^Archetype = &scene.archetypes[scene.archetypeLabelMatch[archetypeLabel]]
         componentMap := make(map[string][]Component)
         for componentLabel in query.componentLabelQueries {
+            log.infof("component: %s", componentLabel)
+            log.infof("component map before: %#v", componentMap)
 
-            componentList: ^[dynamic]Component = &archetype.components[archetype.componentLabelMatch[componentLabel]]
-            lowerBounds: u8 = 0
-            upperBounds: u8 = query.nEntities
+            lower_bounds: u8 = 0
+            upper_bounds: u8 = query.nEntities
             if query.entity != nil {
-                lowerBounds = query.entity.archetypeComponentIndex
-                upperBounds = lowerBounds + 1
+                lower_bounds = query.entity.archetypeComponentIndex
+                upper_bounds = lower_bounds + 1
             }
+            
+            componentList: [dynamic]Component = archetype.components[archetype.componentLabelMatch[componentLabel]]
+            slice_upper_bounds := min(upper_bounds, u8(len(componentList)))
 
-            componentMap[componentLabel] = componentList[lowerBounds:upperBounds]
+            
+            componentMap[componentLabel] = componentList[lower_bounds:slice_upper_bounds]
+            log.infof("component map: %#v", componentMap)
         }
+        log.info("out")
+        log.infof("component map: %#v", componentMap)
+        log.infof("result before: %#v", result)
         result[archetypeLabel] = componentMap
+        log.info("result after: %#v", result)
+        log.info("out2")
     }
+    log.info("jiji")
+    log.infof("hey: result: %#v", result)
 
     return result
 }

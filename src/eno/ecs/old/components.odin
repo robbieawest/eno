@@ -1,4 +1,4 @@
-package ecs
+package old
 
 import "../model"
 import "../gpu"

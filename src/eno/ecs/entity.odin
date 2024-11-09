@@ -1,147 +1,109 @@
 package ecs
 
-import "../memory"
-import "../model"
+import dbg "../debug"
 
-import "core:log"
-import "core:testing"
-import "core:fmt"
 import "core:mem"
-import "core:reflect"
 
-import "base:runtime"
-
-// Needs a rewrite or two
-
-// ************** Entities ****************
-
-MAX_ENTITIES: u8 = 255
-CurrentEntity: u8 = 0
+// Todo: Implement
+ChunkAllocator :: struct {
+    
+}
 
 
 Entity :: struct {
-    entityId: u8,
-    archetypeComponentIndex: u8
+    id: u32,
+    archetypeColumn: u32
 }
 
-// ****************************************
 
-// ************** Archetypes ****************
-
-Archetype :: struct {
+ComponentInfo :: struct {
+    size: u32,
     label: string,
-    entities: [dynamic]Entity,
-    componentLabelMatch: map[string]int,
-    components: [dynamic][dynamic]Component
+    type: typeid
 }
 
-
-init_archetype :: proc(label: string, input_components: []LabelledComponent) -> (arch: ^Archetype) {
-    ent := new(Entity)
-    defer free(ent)
-
-    ent.entityId = CurrentEntity
-    CurrentEntity += 1
-    ent.archetypeComponentIndex = 0
-
-    arch = new(Archetype)
-    arch.label = label
-append(&arch.entities, ent^)
-
-    components := make([dynamic][dynamic]Component, len(input_components), len(input_components))
-    for &innerComponentList, i in components {
-        innerComponentList = make([dynamic]Component, 1, 1)
-        innerComponentList[0] = input_components[i].component
-        arch.componentLabelMatch[input_components[i].label] = i
-    }
-
-    arch.components = components
-    return arch
+ARCHETYPE_MAX_COMPONENTS :: 0x000FFFFF
+ARCHETYPE_MAX_ENTITIES :: 0xFFFFFFFF
+ARCHETYPE_INITIAL_ENTITIES_CAPACITTY :: 100
+Archetype :: struct {
+    entities: [dynamic]Entity,  // Allocated using default heap allocator/context allocator
+    n_Components: u32,
+    components_allocator: mem.Allocator
+    components: [dynamic][dynamic]byte  // shape: ARCHETYPE_MAX_COMPONENTS * ARCHETYPE_MAX_ENTITIES
+    component_infos: []ComponentInfo,
+    component_label_match: map[string]u32 // Matches a label to an index from the components array
 }
 
-
-destroy_archetype :: proc(archetype: ^Archetype) {
-    delete(archetype.entities)
-    delete(archetype.componentLabelMatch)
-    for innerComponentList in archetype.components do delete(innerComponentList) 
-    delete(archetype.components)
-    free(archetype)
-}
-
-// ****************************************
-
-// ************** Scenes ****************
 
 Scene :: struct {
-    archetypeLabelMatch: map[string]int,
+    n_Archetypes: u32
     archetypes: [dynamic]Archetype
+    archetype_label_match: map[string]u32,  // Maps string label to index in archetypes
+    on_heap: bool
 }
 
 
-init_scene_empty :: proc() -> ^Scene {
-    return new(Scene, context.allocator)
+// Heap allocates scene (archetype data is not heap allocated)
+// Scene should be stack allocated if possible (archetype data is allocated not on stack)
+init_scene :: proc() -> (scene: ^Scene) {
+    scene = new(Scene)
+    scene.on_heap = true
+    return scene
 }
 
 
-init_scene_with_archetypes :: proc(archetypes: [dynamic]Archetype) -> (result: ^Scene) {
-    result = new(Scene)
-    for archetype, i in archetypes do result.archetypeLabelMatch[archetype.label] = i
-    result.archetypes = archetypes
-    return result
+// Does not free top level archetype
+destroy_archetype :: proc(archetype: ^Archetype, allocator := context.allocator, loc := #caller_location) {
+    delete(archetype.entities, allocator, loc)
+    delete(archetype.component_infos, allocator, loc)
+    delete(archetype.component_label_match, allocator, loc)
+    
+    for component_data in archetype.components do delete(component_data, allocator, loc)
+    delete(archetype.components, allocator, loc)
 }
 
 
-init_scene :: proc{ init_scene_empty, init_scene_with_archetypes }
+// Does not free top level scene
+destroy_scene :: proc(scene: ^Scene, allocator := context.allocator, loc := #caller_location) {
+    delete(scene.archetype_label_match, allocator, loc)
 
+    for archetype in scene.archetypes do destroy_archetype(archetype, allocator, loc)
+    delete(scene.archetypes, allocator, loc)
 
-destroy_scene :: proc(scene: ^Scene) {
-    for &archetype in scene.archetypes do destroy_archetype(&archetype)
-    free(scene)
+    if scene.on_heap do free(scene, allocator, loc)
 }
 
 
-add_arch_to_scene :: proc(scene: ^Scene, archetype: ^Archetype) {
-    append(&scene.archetypes, archetype^)
-    free(archetype)
-}
+scene_get_archetype :: proc(scene: ^Scene, archetype_label: string) -> (archetype: ^Archetype, ok: bool) {
+    match_index := scene.archetype_label_match[archetype_label]
+    if match_index == nil {
+        dbg.debug_point(dbg.LogInfo{ msg = "Attempted to retreive archetype from label which does not map to any archetype", level = .ERROR })
+        return archetype, ok
+    }
 
-// **************************************
-
-// ************** Misc utilities ****************
-
-
-//no use
-initialize_component_of_component_type :: proc (eComponent: ^Component) -> any {
-    type: typeid = reflect.union_variant_typeid(eComponent^)
-
-    a := memory.alloc_dynamic(type) or_else nil
-    if a == nil do log.error("Could not allocate component type, runtime allocator error")
-    return a
-}
-
-// **************************************
-
-@(test)
-arch_test :: proc(T: ^testing.T) {
-    numeric_components := [2]LabelledComponent{ LabelledComponent { "int", 5 }, LabelledComponent { "float", 12.2 }}
-    archetype:= init_archetype("testArch", numeric_components[:])
-    defer destroy_archetype(archetype)
-    fmt.printfln("archetype: %v", archetype)
+    return scene.archetypes[match_index], true
 }
 
 
-@(test)
-inner_comp_test ::proc(T: ^testing.T) {
+archetype_get_component_data :: proc(archetype: ^Archetype, component_label: string, m: u32, n: u32) -> (component_data: []byte, ok: bool) {
+    
+    match_index := archetype.component_label_match[component_label]
+    if match_index == nil {
+        dbg.debug_point(dbg.LogInfo{ msg = "Attempted to retreive component from label which does not map to any component", level = .ERROR })
+        return component_data, ok
+    }
+    
+    comp_data: ^[dynamic]byte = &archetype.components[match_index]
+    return comp_data[match_index][m:min(n, len(comp_data))]
+}
 
-    scene: ^Scene = init_scene_empty()
-    defer destroy_scene(scene)
 
-    numeric_components := [2]LabelledComponent{ LabelledComponent { "int", 5 }, LabelledComponent { "float", 12.2 }}
-    archetype := init_archetype("testArch", numeric_components[:])
+scene_add_archetype :: proc(scene: ^Scene, new_label: string, component_infos: ..ComponentInfo) -> (ok: bool) {
+    match_index := scene.archetype_label_match[new_label]
+    if match_index != nil {
+        dbg.debug_point(dbg.LogInfo{ msg = "Attempted to create archetype with a duplicate label", level = .ERROR })
+        return ok
+    }
 
-    add_arch_to_scene(scene, archetype) //free's top level archetype definition, could just do add_arch_to_scene(scene, init_archetype(...))
-    add_entities_of_archetype("testArch", 3, scene)
-
-    log.infof("scene: %v", scene)
-    fmt.println("break")
+    // todo
 }
