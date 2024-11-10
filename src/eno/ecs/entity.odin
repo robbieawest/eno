@@ -143,7 +143,7 @@ scene_add_archetype :: proc(scene: ^Scene, new_label: string, component_infos: .
 }
 
 /*
-   Adds n entities of a single archetype
+   Adds entities of a single archetype
    This procedure considers only byte array component data input
    The component data is a map of slices mapping entity names to component data
    component data is assumed to be ordered as is in the archetype (look component_infos)
