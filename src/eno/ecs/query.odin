@@ -84,7 +84,7 @@ Action :: #type proc(component: Component) -> (ok: bool)
 
 act_on_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, actions_per_entity: []Action) -> (ok: bool) {
     
-    entities_to_query := make([dynamic]^Entity, n_query_entities)
+    entities_to_query := make([dynamic]^Entity, len(archetype.entities))
     defer delete(entities_to_query)
 
     for entity_label in query.entities {
