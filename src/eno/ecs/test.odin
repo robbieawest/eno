@@ -11,7 +11,7 @@ TestPositionComponent :: struct {
 
 
 @(test)
-query_archetype_test :: proc(t: ^testing.T) {
+serialize_test :: proc(t: ^testing.T) {
     scene := init_scene()
     defer destroy_scene(scene)
     
