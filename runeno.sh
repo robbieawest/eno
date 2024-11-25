@@ -82,7 +82,7 @@ if [ "$dbg" == true ]; then
 fi
 
 build_options="$build_options ./src/eno/$subproj_override $out_name $debug_options $test_options"
-
+echo $build_options
 odin $build_options
 
 exit 0
