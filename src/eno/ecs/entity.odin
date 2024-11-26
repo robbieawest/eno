@@ -49,7 +49,6 @@ Scene :: struct {
     archetypes: [dynamic]Archetype,
     archetype_label_match: map[string]u32,  // Maps string label to index in archetypes
     on_heap: bool,
-    component_registry: map[string][]uintptr  // Maps all component labels in every archetype to a slice of their field offsets - namely the result of reflect.struct_field_offsets
 }
 
 
