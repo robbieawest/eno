@@ -54,7 +54,7 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
         }
 
         comp_size := archetype.component_info.component_infos[comp_index].size
-        
+
         entity_query_result: EntityQueryResult
         for entity in entities_to_query {
             component: Component
@@ -82,42 +82,66 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
 
 Action :: #type proc(component: Component) -> (ok: bool)
 
-act_on_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, actions_per_entity: []Action) -> (ok: bool) {
+// Single action across all queried entities
+act_on_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, action: Action) -> (ok: bool) {
     
-    entities_to_query := make([dynamic]^Entity, len(archetype.entities))
+    entities_to_query := make([dynamic]^Entity, 0, len(query.entities))
     defer delete(entities_to_query)
 
-    for entity_label in query.entities {
-        entity, entity_found := archetype.entities[entity_label]
-        if !entity_found {
-            dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Entity not found when querying: %s", entity_label), level = .ERROR })
-            return
-        }
-        append(&entities_to_query, &entity)
-    }
-
-    
-    for component_query in query.components {
-        comp_index, component_found := archetype.components_label_match[component_query.label]
-        if !component_found {
-            dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Component not found when querying: %s", component_query.label), level = .ERROR })
-            return
-        }
-
-        comp_size := archetype.component_info.component_infos[comp_index].size
-        
-        for entity, i in entities_to_query {
-            component: Component
-            component.label = component_query.label
-            component.type = component_query.type
-            component.data = archetype.components[comp_index][entity.archetype_column:entity.archetype_column + comp_size]
-
-            action_success := actions_per_entity[i](component)
-            if !action_success {
-                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Action was not able to be completed at index: %d", i), level = .ERROR})
+    if len(query.entities) != 0 {
+        for entity_label in query.entities {
+            entity, entity_found := archetype.entities[entity_label]
+            if !entity_found {
+                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Entity not found when querying: %s", entity_label), level = .ERROR })
                 return
             }
+            append(&entities_to_query, &entity)
         }
+    }
+    else {
+        for _, &entity in archetype.entities {
+            append(&entities_to_query, &entity)
+        }
+    }
+
+    if len(query.components) != 0 {
+        for component_query in query.components {
+            comp_index, component_found := archetype.components_label_match[component_query.label]
+            if !component_found {
+                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Component not found when querying: %s", component_query.label), level = .ERROR })
+                return
+            }
+
+            comp_size := archetype.component_info.component_infos[comp_index].size
+            ok = act_for_entities(archetype, entities_to_query, comp_index, comp_size, component_query.label, component_query.type, action)
+        }
+    }
+    else {
+        for _, comp_index in archetype.components_label_match {
+            comp_size := archetype.component_info.component_infos[comp_index].size
+            comp_info := archetype.component_info.component_infos[comp_index]
+            ok = act_for_entities(archetype, entities_to_query, comp_index, comp_size, comp_info.label, comp_info.type, action)
+        }
+    }
+
+    if !ok {
+        dbg.debug_point(dbg.LogInfo{ msg = "An action was not able to be completed", level = .ERROR})
+    }
+
+    ok = true
+    return
+}
+
+@(private)
+act_for_entities :: proc(archetype: ^Archetype, entities_to_query: [dynamic]^Entity, comp_index: u32, comp_size: u32, comp_label: string, comp_type: typeid, action: Action) -> (ok: bool) {
+
+    for entity, i in entities_to_query {
+        component: Component
+        component.label = comp_label 
+        component.type = comp_type
+        component.data = archetype.components[comp_index][entity.archetype_column:entity.archetype_column + comp_size]
+
+        action(component) or_return
     }
 
     ok = true

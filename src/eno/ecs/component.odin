@@ -26,6 +26,7 @@ components_destroy :: proc(components: $T) where intrinsics.type_is_slice(T) || 
 
 
 // Serializing component data
+// Can we do all of this without copying data?
 
 component_serialize :: proc($T: typeid, component: ^T, label: string) -> (ret: Component) {
     ret.data = make([]byte, size_of(T))

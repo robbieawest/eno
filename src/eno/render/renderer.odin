@@ -21,6 +21,7 @@ import "core:log"
     Automatically expresses any entities which have mesh data on RAM not on VRAM
     Has an option to create a default shader program if not already initialized
 */
+/*
 render_all_from_scene :: proc(game_scene: ^ecs.Scene, create_default_program: bool) -> (ok: bool) {
     dbg.debug_point()
 
@@ -36,7 +37,6 @@ render_all_from_scene :: proc(game_scene: ^ecs.Scene, create_default_program: bo
             
             for component in entity_components {
                 draw_properties := component.(gpu.DrawProperties)
-                dbg.debug_point(dbg.LogInfo{ "rendering object", .INFO })
                 b_is_drawable := gpu.component_is_drawable(draw_properties.gpu_component)
                 if b_is_drawable != 0 {
                     if b_is_drawable & 0b0001 > 0 do gpu.express_mesh_vertices(&draw_properties.mesh, &draw_properties.gpu_component) or_return
@@ -50,6 +50,35 @@ render_all_from_scene :: proc(game_scene: ^ecs.Scene, create_default_program: bo
     }
 
     return true
+}
+*/
+
+render_all_from_scene :: proc(game_scene: ^ecs.Scene) -> (ok: bool) {
+    archetype_query := ecs.ArchetypeQuery{ entities = []string{}, components = []ecs.ComponentQuery{ { label = "draw_properties", type = gpu.DrawProperties }}}
+    for &archetype in game_scene.archetypes {
+        ecs.act_on_archetype(&archetype, archetype_query, draw_action) or_return
+    }
+
+    ok = true
+    return
+}
+
+@(private)
+draw_action :: proc(component: Component) -> (ok: bool) {
+    draw_properties: gpu.DrawProperties = ecs.component_deserialize(component)
+
+    
+    b_is_drawable := gpu.component_is_drawable(draw_properties.gpu_component)
+    if b_is_drawable != 0 {
+        if b_is_drawable & 0b0001 > 0 do gpu.express_mesh_vertices(&draw_properties.mesh, &draw_properties.gpu_component) or_return
+        if b_is_drawable & 0b0010 > 0 do gpu.express_indices(&draw_properties.indices, &draw_properties.gpu_component) or_return
+        if b_is_drawable & 0b0100 > 0 do assign_default_shader(&draw_properties) or_return
+    }
+    
+    gpu.draw_elements(draw_properties)
+
+    ok = true
+    return
 }
 
 
@@ -147,6 +176,8 @@ assign_default_shader :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool
     entity has the mat4 u_transform uniform which is available in the default_shader
      assigned in assign_default_shader
 */
+
+/*
 update_scene_positions :: proc(game_scene: ^ecs.Scene) -> (ok: bool) {
     using ecs
     query: ^SearchQuery = search_query([]string{}, []string{ "position", "draw_properties" }, 255, nil)
@@ -189,5 +220,8 @@ update_scene_positions :: proc(game_scene: ^ecs.Scene) -> (ok: bool) {
 
     return true
 }
+*/
 
-
+update_scene_positions :: proc(game_scene: ^ecs.Scene) -> (ok: bool) {
+    
+}
