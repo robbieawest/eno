@@ -12,12 +12,9 @@ TestPositionComponent :: struct {
 
 @(test)
 serialize_test :: proc(t: ^testing.T) {
-    scene := init_scene()
-    defer destroy_scene(scene)
-    
     component := TestPositionComponent{ 0.25, 0.58 }
     comp: Component = component_serialize(TestPositionComponent, &component, "test comp")
-    defer component_destroy(&comp)
+    defer component_destroy(comp)
 
     log.infof("component: %#v", comp)
 
@@ -50,6 +47,26 @@ serialize_test :: proc(t: ^testing.T) {
     defer free(component_deserialized)
     testing.expect_value(t, f32(0.25), component_deserialized.x)
     testing.expect_value(t, f32(0.58), component_deserialized.y)
+}
+
+
+@(test)
+serialize_many_test :: proc(t: ^testing.T) {
+
+    component := TestPositionComponent{ 0.25, 0.58 }
+    component1 := TestPositionComponent{ 0.32, 59.81 }
+    component2 := TestPositionComponent{ -0.32, 159.81 }
+
+    serialize_ret: []Component = components_serialize(TestPositionComponent, []LabelledData(TestPositionComponent){ 
+            { &component, "component 0" },
+            { &component1, "component 1" },
+            { &component2, "component 2" }
+        }
+    )
+    defer components_destroy(serialize_ret)
+
+    log.infof("serialize many ret: %#v", serialize_ret)
+    
 }
 
 

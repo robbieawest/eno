@@ -5,6 +5,7 @@ import dbg "../debug"
 import "core:mem"
 import "core:reflect"
 import "core:log"
+import "base:intrinsics"
 
 
 Component :: struct {
@@ -13,13 +14,18 @@ Component :: struct {
     data: []byte
 }
 
-component_destroy :: proc(component: ^Component) {
+
+component_destroy :: proc(component: Component) {
     delete(component.data)
+}
+
+components_destroy :: proc(components: $T) where intrinsics.type_is_slice(T) || intrinsics.type_is_dynamic_array(T) {
+    for comp in components do delete(comp.data)
+    delete(components)
 }
 
 
 // Serializing component data
-// Write a serialize_components, deseralize_component, deserialize_components as well
 
 component_serialize :: proc($T: typeid, component: ^T, label: string) -> (ret: Component) {
     ret.data = make([]byte, size_of(T))
@@ -37,6 +43,18 @@ component_serialize :: proc($T: typeid, component: ^T, label: string) -> (ret: C
         mem.copy(&ret.data[field.offset], rawptr(p_Field_data), field.type.size)
     }
     
+    return
+}
+
+LabelledData :: struct($T: typeid) { data: ^T, label: string }
+components_serialize :: proc($T: typeid, input: []LabelledData(T)) -> (ret: []Component) {
+    //input := many_input.input
+    ret = make([]Component, len(input))
+    
+    for i := 0; i < len(input); i += 1 {
+        ret[i] = component_serialize(T, input[i].data, input[i].label)
+    }
+
     return
 }
 
