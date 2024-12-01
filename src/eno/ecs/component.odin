@@ -61,7 +61,7 @@ components_serialize :: proc($T: typeid, input: []LabelledData(T)) -> (ret: []Co
 
 // Deserialization, ret is heap allocated
 
-component_deserialize :: proc(component: ^Component, allocator := context.allocator) -> (ret: any) {
+component_deserialize :: proc(component: Component, allocator := context.allocator) -> (ret: any) {
     return component_data_deserialize(component.data, component.type, allocator)
 }
 
@@ -84,5 +84,13 @@ component_data_deserialize :: proc(component_data: []byte, T: typeid, allocator 
     }
 }
 
+components_deserialize :: proc(components: []Component, allocator := context.allocator) -> (ret: []any) {
+    ret = make([]any, len(components))
 
+    for i := 0; i < len(components); i += 1 {
+        ret[i] = component_deserialize(components[i], allocator)
+    }
+
+    return
+}
 

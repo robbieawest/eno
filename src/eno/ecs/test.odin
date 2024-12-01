@@ -39,7 +39,7 @@ serialize_test :: proc(t: ^testing.T) {
     log.infof("out f1: %f, f2: %f", out_f1, out_f2)
 
     // test deserialization
-    deserialize_ret: any = component_deserialize(&comp)
+    deserialize_ret: any = component_deserialize(comp)
     log.infof("deserialize ret: %#v", deserialize_ret)
    
     // extract data from any type
@@ -57,7 +57,7 @@ serialize_many_test :: proc(t: ^testing.T) {
     component1 := TestPositionComponent{ 0.32, 59.81 }
     component2 := TestPositionComponent{ -0.32, 159.81 }
 
-    serialize_ret: []Component = components_serialize(TestPositionComponent, []LabelledData(TestPositionComponent){ 
+    serialize_ret: []Component = components_serialize(TestPositionComponent, []LabelledData(TestPositionComponent) { 
             { &component, "component 0" },
             { &component1, "component 1" },
             { &component2, "component 2" }
@@ -66,7 +66,20 @@ serialize_many_test :: proc(t: ^testing.T) {
     defer components_destroy(serialize_ret)
 
     log.infof("serialize many ret: %#v", serialize_ret)
-    
+   
+    expected := []TestPositionComponent{component, component1, component2}
+    deserialize_many_ret := components_deserialize(serialize_ret)
+    defer {
+        for ret in deserialize_many_ret do free(ret.data)
+        delete(deserialize_many_ret)
+    }
+    log.infof("deserialize many ret: %#v", deserialize_many_ret)
+
+    testing.expect_value(t, len(expected), len(deserialize_many_ret))
+
+    for i := 0; i < len(expected); i += 1 {
+        testing.expect_value(t, expected[i], (cast(^TestPositionComponent)deserialize_many_ret[i].data)^)
+    }
 }
 
 
