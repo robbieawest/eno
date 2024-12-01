@@ -42,14 +42,13 @@ component_serialize :: proc($T: typeid, component: ^T, label: string) -> (ret: C
 
 
 // Deserialization, ret is heap allocated
-// maybe give allocator option
 
-component_deserialize :: proc(component: ^Component) -> (ret: any) {
-    return component_data_deserialize(component.data, component.type)
+component_deserialize :: proc(component: ^Component, allocator := context.allocator) -> (ret: any) {
+    return component_data_deserialize(component.data, component.type, allocator)
 }
 
-component_data_deserialize :: proc(component_data: []byte, T: typeid) -> (ret: any) {
-    component, err := mem.alloc(size_of(T))
+component_data_deserialize :: proc(component_data: []byte, T: typeid, allocator := context.allocator) -> (ret: any) {
+    component, err := mem.alloc(size_of(T), allocator = allocator)
     if err != mem.Allocator_Error.None {
         dbg.debug_point(dbg.LogInfo{ msg = "Could not allocate component data in deserialization", level = .ERROR })
         return
