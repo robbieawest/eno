@@ -45,6 +45,8 @@ A list of features detailing what eno currently implements:
 Shortly upcoming features:
 
 - Renderer advancements!
+- Better APIs for handling windower input, where SDL is still used on the user side, and for model layout input where cgltf is still being used.
+- Improvements to certain rendering utilities in the `gpu` package, for example caching uniforms is not yet implemented.
 
 Eno is made to be cross-platform where possible. I have plans to add Vulkan into the rendering utilities (which has forward compatibility for this case), and to be able to target Mac with MoltenVK.
 I have certain plans to make an option for GLFW instead of SDL as the windower, however I'd likely focus on other things first as it really does not change anything for any users.
