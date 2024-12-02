@@ -39,8 +39,8 @@ A list of features detailing what eno currently implements:
 - Entity Component System featuring a Scene > Archetype > Entity hierarchical structure, a Component API with component serializatrion/deserialization, and systems for certain batch operations. Implements a cache optimised structure for component data with byte arrays, stored within archetypes. `ecs` package
 - GLTF model loading from a scene with cgltf Odin bindings into a Model API in the `model` package
 - Dynamic shader generation within the `shader` package
-- OpenGL rendering utilities
-- A WIP renderer
+- OpenGL rendering utilities in the `gpu` package
+- A WIP renderer in the `render` package
 
 Shortly upcoming features:
 
