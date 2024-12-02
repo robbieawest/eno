@@ -113,14 +113,14 @@ act_on_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, action: A
             }
 
             comp_size := archetype.component_info.component_infos[comp_index].size
-            ok = act_for_entities(archetype, entities_to_query, comp_index, comp_size, component_query.label, component_query.type, action)
+            ok = single_act_for_entities(archetype, entities_to_query, comp_index, comp_size, component_query.label, component_query.type, action)
         }
     }
     else {
         for _, comp_index in archetype.components_label_match {
             comp_size := archetype.component_info.component_infos[comp_index].size
             comp_info := archetype.component_info.component_infos[comp_index]
-            ok = act_for_entities(archetype, entities_to_query, comp_index, comp_size, comp_info.label, comp_info.type, action)
+            ok = single_act_for_entities(archetype, entities_to_query, comp_index, comp_size, comp_info.label, comp_info.type, action)
         }
     }
 
@@ -133,7 +133,7 @@ act_on_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, action: A
 }
 
 @(private)
-act_for_entities :: proc(archetype: ^Archetype, entities_to_query: [dynamic]^Entity, comp_index: u32, comp_size: u32, comp_label: string, comp_type: typeid, action: Action) -> (ok: bool) {
+single_act_for_entities :: proc(archetype: ^Archetype, entities_to_query: [dynamic]^Entity, comp_index: u32, comp_size: u32, comp_label: string, comp_type: typeid, action: Action) -> (ok: bool) {
 
     for entity, i in entities_to_query {
         component: Component
@@ -148,3 +148,59 @@ act_for_entities :: proc(archetype: ^Archetype, entities_to_query: [dynamic]^Ent
     return
 }
 
+MultiAction :: #type proc(components: []Component) -> (ok: bool)
+
+act_on_archetype_multiple :: proc(archetype: ^Archetype, query: ArchetypeQuery, action: MultiAction) -> (ok: bool) {
+    entities_to_query := make([dynamic]^Entity, 0, len(query.entities))
+    defer delete(entities_to_query)
+
+    if len(query.entities) != 0 {
+        for entity_label in query.entities {
+            entity, entity_found := archetype.entities[entity_label]
+            if !entity_found {
+                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Entity not found when querying: %s", entity_label), level = .ERROR })
+                return
+            }
+            append(&entities_to_query, &entity)
+        }
+    }
+    else {
+        for _, &entity in archetype.entities {
+            append(&entities_to_query, &entity)
+        }
+    }
+
+    component_indicies: [dynamic]u32
+    defer delete(component_indicies)
+    if len(query.components) != 0 {
+        component_indicies = make([dynamic]u32, len(query.components))
+        for component_query, i in query.components {
+            comp_index, component_found := archetype.components_label_match[component_query.label]
+            if !component_found {
+                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Component not found when querying: %s", component_query.label), level = .ERROR })
+                return
+            }
+            
+            component_indicies[i] = comp_index
+        }
+    }
+    else {
+        component_indices = make([dynamic]u32, len(archetype.components_label_match))
+        for _, comp_index, i in archetype.components_label_match {
+            component_indices[i] = comp_index
+        }
+    }
+
+    ok = multi_act_for_entities(archetype, entities_to_query, component_indicies, action)
+    if !ok {
+        dbg.debug_point(dbg.LogInfo{ msg = "The multi action was not able to be completed", level = .ERROR})
+    }
+
+    ok = true
+    return
+}
+
+@(private)
+multi_act_for_entities :: proc(archetype: ^Archetype, entities_to_query: [dynamic]^Entity, component_indices: []u32, action: MultiAction) -> (ok: bool) {
+
+}
