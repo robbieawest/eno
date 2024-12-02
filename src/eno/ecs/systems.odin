@@ -135,7 +135,7 @@ act_on_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, action: A
 @(private)
 single_act_for_entities :: proc(archetype: ^Archetype, entities_to_query: [dynamic]^Entity, comp_index: u32, comp_size: u32, comp_label: string, comp_type: typeid, action: Action) -> (ok: bool) {
 
-    for entity, i in entities_to_query {
+    for entity in entities_to_query {
         component: Component
         component.label = comp_label 
         component.type = comp_type
@@ -147,6 +147,7 @@ single_act_for_entities :: proc(archetype: ^Archetype, entities_to_query: [dynam
     ok = true
     return
 }
+
 
 MultiAction :: #type proc(components: []Component) -> (ok: bool)
 
@@ -172,6 +173,7 @@ act_on_archetype_multiple :: proc(archetype: ^Archetype, query: ArchetypeQuery, 
 
     component_indicies: [dynamic]u32
     defer delete(component_indicies)
+
     if len(query.components) != 0 {
         component_indicies = make([dynamic]u32, len(query.components))
         for component_query, i in query.components {
@@ -202,5 +204,19 @@ act_on_archetype_multiple :: proc(archetype: ^Archetype, query: ArchetypeQuery, 
 
 @(private)
 multi_act_for_entities :: proc(archetype: ^Archetype, entities_to_query: [dynamic]^Entity, component_indices: []u32, action: MultiAction) -> (ok: bool) {
+    components := make([]Component, len(component_indices))
+    defer delete(components)
 
+    for entity in entities_to_query {
+        for comp_index, i in component_indices {
+            components[i].label = comp_label 
+            components[i].type = comp_type
+            components[i].data = archetype.components[comp_index][entity.archetype_column:entity.archetype_column + comp_size]
+        }
+
+        action(components) or_return
+    }
+
+    ok = true
+    return
 }
