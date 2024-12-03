@@ -85,7 +85,7 @@ DrawProperties :: struct {
 
 // Procedures to express mesh structures on the GPU, a shader is assumed to already be attached
 
-express_mesh_with_indices :: proc(mesh: ^model.Mesh, index_data: ^model.IndexData) -> (gpu_component: GPUComponent ok: bool) {
+express_mesh_with_indices :: proc(mesh: ^model.Mesh, index_data: ^model.IndexData) -> (gpu_component: GPUComponent, ok: bool) {
 
     switch RENDER_API {
     case .OPENGL:

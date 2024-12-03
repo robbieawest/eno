@@ -86,7 +86,7 @@ destroy_scene :: proc(scene: ^Scene, allocator := context.allocator, loc := #cal
 scene_get_archetype :: proc(scene: ^Scene, archetype_label: string) -> (archetype: ^Archetype, ok: bool) {
     archetype_index, archetype_exists := scene.archetype_label_match[archetype_label]
     if !archetype_exists {
-        dbg.debug_point(dbg.LogInfo{ msg = "Attempted to retreive archetype from label which does not map to any archetype", level = .ERROR })
+    dbg.debug_point(dbg.LogInfo{ msg = "Attempted to retreive archetype from label which does not map to any archetype", level = .ERROR })
         return
     }
 
@@ -144,12 +144,10 @@ scene_add_archetype :: proc(scene: ^Scene, new_label: string, component_infos: .
 
 /*
    Adds entities of a single archetype
-   This procedure considers only byte array component data input
-   The component data is a map of slices mapping entity names to component data
-   component data is assumed to be ordered as is in the archetype (look component_infos)
+   Input is serialized component data
 */
-scene_add_entities :: proc(scene: ^Scene, archetype_label: string, entity_component_data: map[string][]byte) -> (ok: bool) {
 
+scene_add_entities :: proc(scene: ^Scene, archetype_label: string, entity_component_data: map[string][]ComponentData) -> (ok: bool) {
     archetype: ^Archetype = scene_get_archetype(scene, archetype_label) or_return
     for entity_label, component_data in entity_component_data {
         archetype_add_entity(scene, archetype, entity_label, component_data) or_return
@@ -160,8 +158,9 @@ scene_add_entities :: proc(scene: ^Scene, archetype_label: string, entity_compon
 }
 
 
+
 @(private)
-archetype_add_entity_checks :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, component_data: []byte) -> (ok: bool) {
+archetype_add_entity_checks :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string) -> (ok: bool) {
     duplicate_entity_label := entity_label in archetype.entities
     if duplicate_entity_label {
         dbg.debug_point(dbg.LogInfo{ msg = "Attempted to create entity with a duplicate label", level = .ERROR })
@@ -178,17 +177,17 @@ archetype_add_entity_checks :: proc(scene: ^Scene, archetype: ^Archetype, entity
         return
     }
 
-    if u32(len(component_data)) != archetype.component_info.total_size_per_entity {
-        dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Component data size mismatch when adding entity", ARCHETYPE_MAX_ENTITIES), level = .ERROR })
-        return
-    }
-
     ok = true
     return
 }
 
-archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, component_data: []byte) -> (ok: bool) {
-    archetype_add_entity_checks(scene, archetype, entity_label, component_data) or_return
+
+archetype_add_entity_component_data :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, component_data: []byte) -> (ok: bool) {
+    archetype_add_entity_checks(scene, archetype, entity_label) or_return
+    if u32(len(component_data)) != archetype.component_info.total_size_per_entity {
+        dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Component data size mismatch when adding entity", ARCHETYPE_MAX_ENTITIES), level = .ERROR })
+        return
+    }
 
     entity: Entity
     entity.id = scene.n_Entities
@@ -203,6 +202,32 @@ archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label:
         end_of_component := start_of_component + component_info.size
         append_elems(&archetype.components[i], ..component_data[start_of_component:end_of_component])
         start_of_component += component_info.size
+    }
+
+    ok = true
+    return
+}
+
+
+archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, component_data: []ComponentData) -> (ok: bool) {
+    archetype_add_entity_checks(scene, archetype, entity_label) or_return
+
+    entity: Entity
+    entity.id = scene.n_Entities
+    scene.n_Entities += 1
+
+    entity.archetype_column = archetype.n_Entities
+    archetype.n_Entities += 1
+
+    for data in component_data {
+        comp_index, component_exists := archetype.components_label_match[data.label]
+        if !component_exists {
+            dbg.debug_point(dbg.LogInfo{ msg = "Component could not be found", level = .ERROR})
+            return
+        }
+        
+        serialized_component := component_serialize(data)
+        append_elems(&archetype.components[comp_index], ..serialized_component.data)
     }
 
     ok = true

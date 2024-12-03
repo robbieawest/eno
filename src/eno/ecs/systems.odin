@@ -171,11 +171,11 @@ act_on_archetype_multiple :: proc(archetype: ^Archetype, query: ArchetypeQuery, 
         }
     }
 
-    component_indicies: [dynamic]u32
-    defer delete(component_indicies)
+    component_indices: [dynamic]u32
+    defer delete(component_indices)
 
     if len(query.components) != 0 {
-        component_indicies = make([dynamic]u32, len(query.components))
+        component_indices = make([dynamic]u32, len(query.components))
         for component_query, i in query.components {
             comp_index, component_found := archetype.components_label_match[component_query.label]
             if !component_found {
@@ -183,17 +183,19 @@ act_on_archetype_multiple :: proc(archetype: ^Archetype, query: ArchetypeQuery, 
                 return
             }
             
-            component_indicies[i] = comp_index
+            component_indices[i] = comp_index
         }
     }
     else {
         component_indices = make([dynamic]u32, len(archetype.components_label_match))
-        for _, comp_index, i in archetype.components_label_match {
+        i := 0
+        for _, comp_index in archetype.components_label_match {
             component_indices[i] = comp_index
+            i += 1
         }
     }
 
-    ok = multi_act_for_entities(archetype, entities_to_query, component_indicies, action)
+    ok = multi_act_for_entities(archetype, entities_to_query, component_indices[:], action)
     if !ok {
         dbg.debug_point(dbg.LogInfo{ msg = "The multi action was not able to be completed", level = .ERROR})
     }
@@ -209,9 +211,10 @@ multi_act_for_entities :: proc(archetype: ^Archetype, entities_to_query: [dynami
 
     for entity in entities_to_query {
         for comp_index, i in component_indices {
-            components[i].label = comp_label 
-            components[i].type = comp_type
-            components[i].data = archetype.components[comp_index][entity.archetype_column:entity.archetype_column + comp_size]
+            component_info := archetype.component_info.component_infos[comp_index]
+            components[i].label = component_info.label
+            components[i].type = component_info.type
+            components[i].data = archetype.components[comp_index][entity.archetype_column:entity.archetype_column + component_info.size]
         }
 
         action(components) or_return

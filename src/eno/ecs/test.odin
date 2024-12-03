@@ -1,8 +1,11 @@
 package ecs
 
+import "../gpu"
+
 import "core:testing"
 import "core:log"
 import "core:fmt"
+
 
 TestPositionComponent :: struct {
     x: f32,
@@ -12,8 +15,8 @@ TestPositionComponent :: struct {
 
 @(test)
 serialize_test :: proc(t: ^testing.T) {
-    component := TestPositionComponent{ 0.25, 0.58 }
-    comp: Component = component_serialize(TestPositionComponent, &component, "test comp")
+    component := TestPositionComponent{ 0.25, 0.58 }; p_Component := &component
+    comp: Component = component_serialize(make_component_data(p_Component, "test_label"))
     defer component_destroy(comp)
 
     log.infof("component: %#v", comp)
@@ -39,7 +42,8 @@ serialize_test :: proc(t: ^testing.T) {
     log.infof("out f1: %f, f2: %f", out_f1, out_f2)
 
     // test deserialization
-    deserialize_ret: any = component_deserialize(comp)
+    deserialize_ret, deserialize_ok := component_deserialize(comp)
+    testing.expect(t, deserialize_ok, "deserialize ok check")
     log.infof("deserialize ret: %#v", deserialize_ret)
    
     // extract data from any type
@@ -49,30 +53,30 @@ serialize_test :: proc(t: ^testing.T) {
     testing.expect_value(t, f32(0.58), component_deserialized.y)
 }
 
-
 @(test)
 serialize_many_test :: proc(t: ^testing.T) {
 
-    component := TestPositionComponent{ 0.25, 0.58 }
-    component1 := TestPositionComponent{ 0.32, 59.81 }
-    component2 := TestPositionComponent{ -0.32, 159.81 }
+    component := TestPositionComponent{ 0.25, 0.58 }; p_Component := &component
+    component1 := TestPositionComponent{ 0.32, 59.81 }; p_Component1 := &component1
+    component2 := TestPositionComponent{ -0.32, 159.81 }; p_Component2 := &component
 
-    serialize_ret: []Component = components_serialize(TestPositionComponent, []LabelledData(TestPositionComponent) { 
-            { &component, "component 0" },
-            { &component1, "component 1" },
-            { &component2, "component 2" }
-        }
+    serialize_ret: []Component = components_serialize( 
+            make_component_data(p_Component, "component 0"),
+            make_component_data(p_Component1, "component 1"),
+            make_component_data(p_Component2, "component 2")
     )
     defer components_destroy(serialize_ret)
 
     log.infof("serialize many ret: %#v", serialize_ret)
    
     expected := []TestPositionComponent{component, component1, component2}
-    deserialize_many_ret := components_deserialize(serialize_ret)
+    deserialize_many_ret, deserialize_ok := components_deserialize(..serialize_ret)
     defer {
         for ret in deserialize_many_ret do free(ret.data)
         delete(deserialize_many_ret)
     }
+
+    testing.expect(t, deserialize_ok, "deserialize many ok check")
     log.infof("deserialize many ret: %#v", deserialize_many_ret)
 
     testing.expect_value(t, len(expected), len(deserialize_many_ret))
@@ -81,6 +85,20 @@ serialize_many_test :: proc(t: ^testing.T) {
         testing.expect_value(t, expected[i], (cast(^TestPositionComponent)deserialize_many_ret[i].data)^)
     }
 }
+
+/*
+@(test)
+act_on_archetype_test :: proc(t: ^testing.T) {
+
+    scene := init_scene()
+    scene_add_archetype(scene, "test_archetype", Position3DInfo, DrawPropertiesInfo)
+
+    draw_properties: gpu.DrawProperties
+    position: Position3D
+    new_entity_match := map[string]Component { "new_entity"}
+    //scene_add_entities(scene, "test_archetype", )
+}
+*/
 
 
 
