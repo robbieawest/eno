@@ -8,8 +8,10 @@ import "core:log"
 import "base:intrinsics"
 
 
-// Component represents serialized component data, and ComponentData represented unserialized component_data
-// ComponentData is essentially just any with a label
+/*
+   Component represents serialized component data, and ComponentData represented unserialized component_data
+   ComponentData is essentially just any with a label
+*/
 
 Component :: struct {
     label: string,
@@ -17,18 +19,52 @@ Component :: struct {
     data: []byte
 }
 
-ComponentData :: struct {
+/* 
+   This should only be used if you are working solely with a Component and no compile-time type
+   Although this is Untyped, it does contain the runtime type as the type field
+*/
+ComponentDataUntyped :: struct {
     label: string,
     type: typeid,
     data: rawptr
 }
 
-make_component_data :: proc(component_in: ^$T, label: string) -> (component_data: ComponentData) {
+/* This, and associated procedures, should be used if you have the compile-time type */
+ComponentData :: struct ($T: typeid) {
+    label: string,
+    data: ^T
+}
+
+
+/* _s postfix refers to stack allocated */
+make_component_data_untyped_s :: proc(component_in: ^$T, label: string, allocator := context.allocator) -> (component_data: ComponentData) {
     return ComponentData{
         label = label,
         type = T,
         data = rawptr(component_in)
     }
+}
+
+/* _s postfix refers to stack allocated */
+make_component_data_s :: proc(component_in: ^$T, label: string) -> (component_data: ^TypedComponentData(T)) {
+    return TypedComponentData {
+        label = label,
+        data = component_in
+    }
+}
+
+make_component_data_untyped :: proc(component_in: ^$T, label: string, allocator := context.allocator) -> (component_data: ^ComponentData) {
+    component_data = new(ComponentDataUntyped, allocator)
+    component_data.label = label
+    component_data.data = rawptr(component_in)
+    component_data.type = T
+}
+
+make_component_data :: proc(component_in: ^$T, label: string, allocator := context.allocator) -> (component_data: ^ComponentData(T)) {
+    component_data = new(ComponentData(T), allocator)
+    component_data.label = label
+    component_data.data = component_in
+    return
 }
 
 
