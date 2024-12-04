@@ -42,7 +42,7 @@ serialize_test :: proc(t: ^testing.T) {
     log.infof("out f1: %f, f2: %f", out_f1, out_f2)
 
     // test deserialization
-    deserialize_ret, deserialize_ok := component_deserialize(comp)
+    deserialize_ret, deserialize_ok := component_deserialize_noncopy(comp)
     testing.expect(t, deserialize_ok, "deserialize ok check")
     log.infof("deserialize ret: %#v", deserialize_ret)
    
@@ -58,7 +58,7 @@ serialize_many_test :: proc(t: ^testing.T) {
 
     component := TestPositionComponent{ 0.25, 0.58 }; p_Component := &component
     component1 := TestPositionComponent{ 0.32, 59.81 }; p_Component1 := &component1
-    component2 := TestPositionComponent{ -0.32, 159.81 }; p_Component2 := &component
+    component2 := TestPositionComponent{ -0.32, 159.81 }; p_Component2 := &component2
 
     serialize_ret: []Component = components_serialize( 
             make_component_data(p_Component, "component 0"),

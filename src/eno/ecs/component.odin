@@ -17,7 +17,6 @@ Component :: struct {
     data: []byte
 }
 
-// Todo: Update usaged of LabelledData in this file with ComponentData
 ComponentData :: struct {
     label: string,
     type: typeid,
@@ -144,6 +143,15 @@ components_deserialize :: proc(components: ..Component, allocator := context.all
     }
 
     ok = true
+    return
+}
+
+
+component_deserialize_noncopy :: proc(component: Component) -> (component_data: ComponentData, ok: bool) {
+    ok = true
+    component_data.type = component.type
+    component_data.data = rawptr(&component.data[0])
+    component_data.label = component.label
     return
 }
 
