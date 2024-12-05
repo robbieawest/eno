@@ -21,7 +21,7 @@ ArchetypeQueryResult :: [dynamic]EntityQueryResult
 
 
 EntityQueryResult :: struct {
-    data: #soa[dynamic]Component  // SoA structure here allows for easy AoS user access of component data, while being quick for batch operations
+    data: #soa[dynamic]Component
 }
 
 
@@ -60,12 +60,66 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
             component: Component
             component.label = component_query.label
             component.type = component_query.type
-            component.data = archetype.components[comp_index][entity.archetype_column:entity.archetype_column + comp_size]
+            component.data = archetype.components[comp_index][entity.archetype_column:entity.archetype_column + comp_size]  // Smells bad
             append(&entity_query_result.data, component)
         }
         append(&result, entity_query_result)
     }
 
+    ok = true
+    return
+}
+
+/*
+    Queries a single components data from the archetype
+    Returns data uncopied as compile typed ComponentData
+*/
+query_component_from_archetype_checked :: proc(archetype: ^Archetype, component_label: string, $T: typeid, entity_labels: ..string) -> (ret: []ComponentData(T), ok: bool) {
+    if !component_label in archetype.components_label_match {
+        dbg.debug_point(dbg.LogInfo { msg = fmt.aprintf("Component does not exist: %s", component_label), level = .ERROR })
+        return
+    }
+
+    return query_component_from_archetype_unchecked(archetype, component_label, T, entity_labels)
+}
+
+@(private)
+query_component_from_archetype_unchecked :: proc(archetype: ^Archetype, component_label: string, $T: typeid, entity_labels: ..string) -> (ret: []ComponentData(T), ok: bool) {
+
+    // Get component information
+    component_index := archetype.components_label_match[component_label]
+    component_info := archetype.component_info.component_infos[component_index]
+
+    if T != component_info.type {
+        dbg.debug_point(dbg.LogInfo {
+            msg = fmt.aprintf("Type mismatch with component: %s. Expected type: %v, got: %v", component_label, component_info.type, T),
+            level = .ERROR
+        })
+        return
+    }
+
+    components := make([dynamic]Component, 0)
+    defer delete(components)  // No use after free since components are referencing ECS data
+
+    if len(entity_labels) == 0 {
+        // Loop through all entities
+        for i := 0; i < archetype.n_Entities; i += 1 {
+            append(&components, archetype_get_component_data_from_column(archetype, component_label, i))
+        }
+    }
+    else {
+        for entity_label in entity_labels {
+            entity, entity_exists := archetype.entities[entity_label]
+            if !entity_exists {
+                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Entity does not exist: %s", entity_label), level = .ERROR })
+                return
+            }
+
+            append(&components, archetype_get_component_data_from_column(archetype, component_label, entity.archetype_column))
+        }
+    }
+
+    ret = components_deserialize(T, ..components[:])
     ok = true
     return
 }
@@ -78,6 +132,8 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
 
     An action should take one component as input, and when using act_on_archetype actions and entities in each query should be treated parallel.
 
+    Honestly there is not much of a reason to use these
+    You could just query, and then iterate and act yourself
 */
 
 Action :: #type proc(component: Component) -> (ok: bool)

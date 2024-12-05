@@ -93,17 +93,23 @@ scene_get_archetype :: proc(scene: ^Scene, archetype_label: string) -> (archetyp
     return &scene.archetypes[archetype_index], true
 }
 
+// Unchecked component_label, should really not use unless it is already verified
+archetype_get_component_data :: proc(archetype: ^Archetype, component_label: string, m: u32, n: u32) -> (component_data: []byte) {
+    
+    component_index := archetype.components_label_match[component_label]
 
-archetype_get_component_data :: proc(archetype: ^Archetype, component_label: string, m: u32, n: u32) -> (component_data: []byte, ok: bool) {
-    
-    component_index, component_exists := archetype.components_label_match[component_label]
-    if !component_exists {
-        dbg.debug_point(dbg.LogInfo{ msg = "Attempted to retreive component from label which does not map to any component", level = .ERROR })
-        return
-    }
-    
     comp_data: ^[dynamic]byte = &archetype.components[component_index]
-    return comp_data[m:min(n, u32(len(comp_data)))], true
+    return comp_data[m:min(n, u32(len(comp_data)))]
+}
+
+archetype_get_component_data_from_column :: proc(archetype: ^Archetype, component_label: string, column: int) -> (component: Component) {
+
+    component_index := archetype.components_label_match[component_label]
+    component_info := archetype.component_info.component_infos[component_index]
+    comp_data: ^[dynamic]byte = &archetype.components[component_index]
+    into_data := column * int(component_info.size)
+
+    return Component {label = component_label, data = comp_data[into_data:into_data + int(component_info.size)] , type = component_info.type }
 }
 
 
