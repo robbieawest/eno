@@ -60,12 +60,13 @@ serialize_many_test :: proc(t: ^testing.T) {
     component1 := TestPositionComponent{ 0.32, 59.81 }; p_Component1 := &component1
     component2 := TestPositionComponent{ -0.32, 159.81 }; p_Component2 := &component2
 
-    serialize_ret: []Component = components_serialize(TestPositionComponent,
+    serialize_ret: []Component = components_serialize(context.allocator, TestPositionComponent,  // Odin bug needs context.allocator
             make_component_data_s(p_Component, "component 0"),
             make_component_data_s(p_Component1, "component 1"),
             make_component_data_s(p_Component2, "component 2")
     )
-    defer components_destroy(serialize_ret)
+    defer delete(serialize_ret)
+    //defer components_destroy(serialize_ret) deleted later, uncomment and bad free
 
     log.infof("serialize many ret: %#v", serialize_ret)
    

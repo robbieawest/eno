@@ -100,7 +100,7 @@ components_destroy :: proc(components_data: $T) where
 
 component_serialize :: proc { component_serialize_untyped, component_serialize_typed }
 
-component_serialize_untyped :: proc(component_data: ComponentDataUntyped) -> (ret: Component) {
+component_serialize_untyped :: proc(component_data: ComponentDataUntyped, allocator := context.allocator) -> (ret: Component) {
     ret.data = make([]byte, size_of(component_data.type))
     ret.label = component_data.label
     ret.type = component_data.type
@@ -119,7 +119,7 @@ component_serialize_untyped :: proc(component_data: ComponentDataUntyped) -> (re
     return
 }
 
-component_serialize_typed :: proc($T: typeid, component_data: ComponentData(T)) -> (ret: Component) {
+component_serialize_typed :: proc($T: typeid, component_data: ComponentData(T), allocator := context.allocator) -> (ret: Component) {
     ret.data = make([]byte, size_of(T))
     ret.label = component_data.label
     ret.type = T
@@ -139,7 +139,7 @@ component_serialize_typed :: proc($T: typeid, component_data: ComponentData(T)) 
 }
 
 
-components_serialize_untyped :: proc(input: ..ComponentDataUntyped) -> (ret: []Component) {
+components_serialize_untyped :: proc(allocator := context.allocator, input: ..ComponentDataUntyped) -> (ret: []Component) {
     ret = make([]Component, len(input))
     
     for i := 0; i < len(input); i += 1 {
@@ -150,7 +150,7 @@ components_serialize_untyped :: proc(input: ..ComponentDataUntyped) -> (ret: []C
 
 }
 
-components_serialize :: proc($T: typeid, input: ..ComponentData(T)) -> (ret: []Component) {
+components_serialize :: proc(allocator := context.allocator, $T: typeid, input: ..ComponentData(T)) -> (ret: []Component) {
     ret = make([]Component, len(input))
     
     for i := 0; i < len(input); i += 1 {

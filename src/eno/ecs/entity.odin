@@ -147,7 +147,7 @@ scene_add_archetype :: proc(scene: ^Scene, new_label: string, component_infos: .
    Input is serialized component data
 */
 
-scene_add_entities :: proc(scene: ^Scene, archetype_label: string, entity_component_data: map[string][]ComponentData) -> (ok: bool) {
+scene_add_entities :: proc(scene: ^Scene, archetype_label: string, entity_component_data: map[string][]ComponentDataUntyped) -> (ok: bool) {
     archetype: ^Archetype = scene_get_archetype(scene, archetype_label) or_return
     for entity_label, component_data in entity_component_data {
         archetype_add_entity(scene, archetype, entity_label, component_data) or_return
@@ -209,7 +209,7 @@ archetype_add_entity_component_data :: proc(scene: ^Scene, archetype: ^Archetype
 }
 
 
-archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, component_data: []ComponentData) -> (ok: bool) {
+archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, component_data: []ComponentDataUntyped) -> (ok: bool) {
     archetype_add_entity_checks(scene, archetype, entity_label) or_return
 
     entity: Entity
