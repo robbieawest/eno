@@ -1,6 +1,7 @@
 package ecs
 
 import "../gpu"
+import dbg "../debug"
 
 import "core:testing"
 import "core:log"
@@ -103,14 +104,18 @@ act_on_archetype_test :: proc(t: ^testing.T) {
 
 
 
-/*
 @(test)
 query_archetype_test :: proc(t: ^testing.T) {
     scene := init_scene()
+    dbg.init_debug_stack()
+    defer dbg.destroy_debug_stack()
 
-    scene_add_archetype(scene, "testArchetype", ComponentInfo{ size = size_of(TestPositionComponent), label = "position", type = typeid_of(TestPositionComponent) })
+    scene_add_archetype(scene, "testArchetype", ComponentInfo{ size = size_of(TestPositionComponent), label = "position", type = TestPositionComponent })
 
-    archetype: ^Archetype = scene_get_archetype(scene, "testArchetype")
-    archetype_add_entity(scene, archetype, "")
+    position := TestPositionComponent { x = 0.25, y = 19.8 }
+    archetype, _ := scene_get_archetype(scene, "testArchetype")
+    archetype_add_entity(scene, archetype, "test_entity", []ComponentDataUntyped {
+        make_component_data_untyped_s(&position, "position")
+    })
+
 }
-*/

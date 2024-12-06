@@ -24,7 +24,6 @@ EntityQueryResult :: struct {
     data: #soa[dynamic]Component
 }
 
-
 query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result: ArchetypeQueryResult, ok: bool) {
 
     query_all_entities := len(query.entities) == 0
@@ -69,6 +68,7 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
     ok = true
     return
 }
+
 
 /*
     Queries a single components data from the archetype

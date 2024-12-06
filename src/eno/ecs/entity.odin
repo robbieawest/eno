@@ -3,7 +3,6 @@ package ecs
 import dbg "../debug"
 
 import "core:mem"
-import "core:slice"
 import "core:fmt"
 
 // Todo: Implement
