@@ -56,6 +56,7 @@ Scene :: struct {
 init_scene :: proc() -> (scene: ^Scene) {
     scene = new(Scene)
     scene.on_heap = true
+    //scene.archetype_label_match = make(map[string]u32, 0)
     return
 }
 
@@ -142,7 +143,9 @@ scene_add_archetype :: proc(scene: ^Scene, new_label: string, component_infos: .
         archetype.components_label_match[component_info.label] = u32(i)
     }
 
+    scene.archetype_label_match[new_label] = scene.n_Archetypes
     append(&scene.archetypes, archetype)
+    scene.n_Archetypes += 1
     ok = true
     return
 }
