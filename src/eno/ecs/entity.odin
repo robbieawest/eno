@@ -4,6 +4,7 @@ import dbg "../debug"
 
 import "core:mem"
 import "core:fmt"
+import "core:slice"
 
 // Todo: Implement
 ChunkAllocator :: struct {
@@ -125,7 +126,7 @@ scene_add_archetype :: proc(scene: ^Scene, new_label: string, component_infos: .
     for component_info in component_infos {
         archetype.component_info.total_size_per_entity += component_info.size
     }
-    archetype.component_info.component_infos = component_infos
+    archetype.component_info.component_infos = slice.clone(component_infos)
 
     archetype.components_allocator = components_allocator 
     archetype.n_Components = u32(len(component_infos))
@@ -226,6 +227,7 @@ archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label:
 
     entity.archetype_column = archetype.n_Entities
     archetype.n_Entities += 1
+    archetype.entities[entity_label] = entity
 
     for data in component_data {
         comp_index, component_exists := archetype.components_label_match[data.label]

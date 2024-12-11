@@ -107,6 +107,8 @@ act_on_archetype_test :: proc(t: ^testing.T) {
 @(test)
 query_archetype_test :: proc(t: ^testing.T) {
     scene := init_scene()
+    defer destroy_scene(scene)
+
     dbg.init_debug_stack()
     defer dbg.destroy_debug_stack()
 
@@ -118,4 +120,14 @@ query_archetype_test :: proc(t: ^testing.T) {
         make_component_data_untyped_s(&position, "position")
     })
 
+    comp_data, ok := query_component_from_archetype_checked(archetype, "position", TestPositionComponent, "test_entity")
+    defer delete(comp_data)
+
+    testing.expect(t, ok)
+
+    log.infof("comp data: %#v", comp_data)
+    position_comp_ret := cast(^TestPositionComponent)comp_data[0].data
+
+    testing.expect_value(t, f32(0.25), position_comp_ret.x)
+    testing.expect_value(t, f32(19.8), position_comp_ret.y)
 }

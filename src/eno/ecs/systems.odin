@@ -75,12 +75,12 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
     Returns data uncopied as compile typed ComponentData
 */
 query_component_from_archetype_checked :: proc(archetype: ^Archetype, component_label: string, $T: typeid, entity_labels: ..string) -> (ret: []ComponentData(T), ok: bool) {
-    if !component_label in archetype.components_label_match {
+    if !(component_label in archetype.components_label_match) {
         dbg.debug_point(dbg.LogInfo { msg = fmt.aprintf("Component does not exist: %s", component_label), level = .ERROR })
         return
     }
 
-    return query_component_from_archetype_unchecked(archetype, component_label, T, entity_labels)
+    return query_component_from_archetype_unchecked(archetype, component_label, T, ..entity_labels)
 }
 
 @(private)
@@ -92,7 +92,7 @@ query_component_from_archetype_unchecked :: proc(archetype: ^Archetype, componen
 
     if T != component_info.type {
         dbg.debug_point(dbg.LogInfo {
-            msg = fmt.aprintf("Type mismatch with component: %s. Expected type: %v, got: %v", component_label, component_info.type, T),
+            msg = fmt.aprintf("Type mismatch with component: %s. Expected type: %v, got: %v", component_label, component_info.type, typeid_of(T)),
             level = .ERROR
         })
         return
@@ -103,7 +103,7 @@ query_component_from_archetype_unchecked :: proc(archetype: ^Archetype, componen
 
     if len(entity_labels) == 0 {
         // Loop through all entities
-        for i := 0; i < archetype.n_Entities; i += 1 {
+        for i := 0; i < int(archetype.n_Entities); i += 1 {
             append(&components, archetype_get_component_data_from_column(archetype, component_label, i))
         }
     }
@@ -115,11 +115,11 @@ query_component_from_archetype_unchecked :: proc(archetype: ^Archetype, componen
                 return
             }
 
-            append(&components, archetype_get_component_data_from_column(archetype, component_label, entity.archetype_column))
+            append(&components, archetype_get_component_data_from_column(archetype, component_label, int(entity.archetype_column)))
         }
     }
 
-    ret = components_deserialize(T, ..components[:])
+    ret = components_deserialize(T, ..components[:]) or_return
     ok = true
     return
 }
