@@ -1,10 +1,15 @@
 #!/bin/bash
 
-build=true
+build=false
 run=false
 testing=false
 dbg=false
 memory_tracking=true
+
+executable_suffix=""
+if [ "$OSTYPE" = "cygwin" ] || [ "$OSTYPE" = "msys" ]; then
+  executable_suffix=".exe"
+fi
 
 usage() {
     echo "Usage: runeno.sh [
@@ -64,6 +69,7 @@ if [ "$build" == true ]; then
     out_name="$out_name-build"
 fi
 if [ "$testing" == true ]; then
+  echo "testing"
     if [ "$build" == true ]; then
         build_mode="-build-mode:test"
     else
@@ -84,6 +90,8 @@ if [ "$dbg" == true ]; then
     out_name="$out_name-debug"
     debug_options="-debug"
 fi
+
+out_name="$out_name$executable_suffix"
 
 build_options="$build_options ./src/eno/$subproj_override $out_name $debug_options $test_options $build_mode"
 echo $build_options
