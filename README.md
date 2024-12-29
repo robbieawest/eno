@@ -31,6 +31,8 @@ Usage: runeno.sh [
 ```
 Permissions may have to be updated before running the build script.
 
+* On Windows you may need to add SDL2.dll to `bin/`, you can find this in `{odin_dir}/vendor/sdl2`.
+
 ## Features and scope
 A list of features detailing what eno currently implements:
 
