@@ -85,8 +85,15 @@ DrawProperties :: struct {
 }
 
 
-// Procedures to express mesh structures on the GPU, a shader is assumed to already be attached
+/* Main output returned via side effects */
+express_draw_properties :: proc(draw_properties: ^DrawProperties) -> (ok: bool) {
+    draw_properties.gpu_component, ok = express_mesh_with_indices(&draw_properties.mesh, &draw_properties.indices)
+    return
+}
 
+
+// Procedures to express mesh structures on the GPU, a shader is assumed to already be attached
+// todo proper error handling
 express_mesh_with_indices :: proc(mesh: ^model.Mesh, index_data: ^model.IndexData) -> (gpu_component: GPUComponent, ok: bool) {
 
     switch RENDER_API {

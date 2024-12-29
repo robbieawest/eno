@@ -12,22 +12,20 @@ import "../gpu"
 import "../render"
 
 import "core:log"
+import "core:math/linalg"
 
 // Implement your before_frame and every_frame procedures in a file like this
 // APIs for gltf interop and ecs are dogwater right now
 
 every_frame :: proc(eno_game: ^game.EnoGame) {
-    log.info("updating positions")
-    render.update_scene_positions(eno_game.scene)
-    log.info("scene positions updated")
-    render.render_all_from_scene(eno_game.scene, true)
-    log.info("rendered all")
+    render.draw_indexed_entities(eno_game.scene, "helmet_arch", "helmet_entity")
     ok := win.swap_window_bufs(eno_game.window); if !ok do log.errorf("could not swap bufs")
 }
 
 
 before_frame :: proc(eno_game: ^game.EnoGame) {
-    
+
+    // I'd like for these event and keycode values to be migrated to eno constants from SDL
     ok := game.map_sdl_events(eno_game, []game.SDLEventPair {
         { SDL.EventType.QUIT, proc(g: ^game.EnoGame) { game.quit_game(g) }}
     }); if !ok do log.errorf("Could not map SDL event")
@@ -37,36 +35,27 @@ before_frame :: proc(eno_game: ^game.EnoGame) {
     }); if !ok do log.errorf("Could not map SDL key event")
 
 
+    helmet_arch, _ := ecs.scene_add_archetype(eno_game.scene, "helmet_arch", context.allocator,
+        ecs.make_component_info(gpu.DrawProperties, "draw_properties"),
+        ecs.make_component_info(linalg.Vector3f32, "position")
+    )
 
-    helmet_arch := ecs.init_archetype("scifi-helmet", []ecs.LabelledComponent {
-        ecs.LabelledComponent { label = "position", component = ecs.DEFAULT_CENTER_POSITION },
-        ecs.LabelledComponent { label = "draw_properties", component = gpu.DEFAULT_DRAW_PROPERTIES },
-    })
-    ecs.add_arch_to_scene(eno_game.scene, helmet_arch)
-    
-    
-    ecs.add_entities_of_archetype("scifi-helmet", 1, eno_game.scene)
 
-    archOperands := []string{"scifi-helmet"}
-    compOperands := []string{"draw_properties"}
-    query := ecs.search_query(archOperands, compOperands, 1, nil)
-    defer free(query)
+    position: linalg.Vector3f32
+    helmet_draw_properties: gpu.DrawProperties
+    helmet_draw_properties.mesh, helmet_draw_properties.indices = helmet_mesh_and_indices()
+    gpu.express_draw_properties(&helmet_draw_properties)
 
-    mesh, indices := create_mesh_and_indices()
-
-    draw_props := gpu.DEFAULT_DRAW_PROPERTIES
-    draw_props.mesh = mesh
-    draw_props.indices = indices
-    updated_components := [][][]ecs.Component{ [][]ecs.Component{ []ecs.Component{ draw_props } } }
-
-    result: ecs.QueryResult = ecs.set_components(query, updated_components[:], eno_game.scene)
-    defer ecs.destroy_query_result(result)
+    ecs.archetype_add_entity(eno_game.scene, helmet_arch, "helmet_entity",
+        ecs.make_component_data_untyped_s(&helmet_draw_properties, "draw_properties"),
+        ecs.make_component_data_untyped_s(&position, "position")
+    )
 }
 
 
 
 @(private)
-create_mesh_and_indices :: proc() -> (mesh: model.Mesh, indices: model.IndexData) {
+helmet_mesh_and_indices :: proc() -> (mesh: model.Mesh, indices: model.IndexData) {
     
     vertex_layout := model.VertexLayout { []uint{3, 3, 4, 2}, []cgltf.attribute_type {
             cgltf.attribute_type.normal,
@@ -84,7 +73,7 @@ create_mesh_and_indices :: proc() -> (mesh: model.Mesh, indices: model.IndexData
 @(private)
 read_meshes_and_indices_from_gltf :: proc(model_name: string, vertex_layouts: []^model.VertexLayout) -> (meshes: []model.Mesh, indices: []model.IndexData) {
     data, result := model.load_gltf_mesh(model_name)
-    assert(result == .success, "gltf read success assertion")
+    assert(result == .success, "gltf read success assertion") // todo switch to log
     assert(len(data.meshes) > 0, "gltf data meshes available assertion")
 
     ok := false

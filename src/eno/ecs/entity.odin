@@ -24,6 +24,10 @@ ComponentInfo :: struct {
     type: typeid
 }
 
+make_component_info :: proc(T: typeid, label: string) -> ComponentInfo {
+    return ComponentInfo{ size = size_of(T), label = label, type = T }
+}
+
 ArchetypeComponentInfo :: struct {
     total_size_per_entity: u32,
     component_infos: []ComponentInfo
@@ -114,7 +118,7 @@ archetype_get_component_data_from_column :: proc(archetype: ^Archetype, componen
 }
 
 
-scene_add_archetype :: proc(scene: ^Scene, new_label: string, component_infos: ..ComponentInfo, components_allocator := context.allocator) -> (ok: bool) {
+scene_add_archetype :: proc(scene: ^Scene, new_label: string, components_allocator: mem.Allocator, component_infos: ..ComponentInfo) -> (ret: ^Archetype, ok: bool) {
     duplicate_archetype := new_label in scene.archetype_label_match
     if duplicate_archetype {
         dbg.debug_point(dbg.LogInfo{ msg = "Attempted to create archetype with a duplicate label", level = .ERROR })
@@ -148,6 +152,7 @@ scene_add_archetype :: proc(scene: ^Scene, new_label: string, component_infos: .
     append(&scene.archetypes, archetype)
     scene.n_Archetypes += 1
     ok = true
+    ret = &scene.archetypes[len(scene.archetypes) - 1]
     return
 }
 
@@ -159,7 +164,7 @@ scene_add_archetype :: proc(scene: ^Scene, new_label: string, component_infos: .
 scene_add_entities :: proc(scene: ^Scene, archetype_label: string, entity_component_data: map[string][]ComponentDataUntyped) -> (ok: bool) {
     archetype: ^Archetype = scene_get_archetype(scene, archetype_label) or_return
     for entity_label, component_data in entity_component_data {
-        archetype_add_entity(scene, archetype, entity_label, component_data) or_return
+        archetype_add_entity(scene, archetype, entity_label, ..component_data) or_return
     }
 
     ok = true
@@ -218,7 +223,7 @@ archetype_add_entity_component_data :: proc(scene: ^Scene, archetype: ^Archetype
 }
 
 
-archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, component_data: []ComponentDataUntyped) -> (ok: bool) {
+archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, component_data: ..ComponentDataUntyped) -> (ok: bool) {
     archetype_add_entity_checks(scene, archetype, entity_label) or_return
 
     entity: Entity

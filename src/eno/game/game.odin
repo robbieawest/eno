@@ -64,7 +64,7 @@ init_game_with_scene :: proc(scene: ^ecs.Scene, window: win.WindowTarget, every_
 
 init_game_default_scene :: proc(window: win.WindowTarget, every_frame: frame_loop_proc_, before_frame: before_loop_proc_) -> (game: ^EnoGame) {
     game = new(EnoGame)
-    game.scene = ecs.init_scene_empty()
+    game.scene = ecs.init_scene()
     game.window = window
     game.every_frame = every_frame
     game.before_frame = before_frame

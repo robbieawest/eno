@@ -112,15 +112,15 @@ query_archetype_test :: proc(t: ^testing.T) {
     dbg.init_debug_stack()
     defer dbg.destroy_debug_stack()
 
-    scene_add_archetype(scene, "testArchetype", ComponentInfo{ size = size_of(TestPositionComponent), label = "position", type = TestPositionComponent })
+    scene_add_archetype(scene, "testArchetype", context.allocator, ComponentInfo{ size = size_of(TestPositionComponent), label = "position", type = TestPositionComponent })
 
     position := TestPositionComponent { x = 0.25, y = 19.8 }
     archetype, _ := scene_get_archetype(scene, "testArchetype")
-    archetype_add_entity(scene, archetype, "test_entity", []ComponentDataUntyped {
+    archetype_add_entity(scene, archetype, "test_entity",
         make_component_data_untyped_s(&position, "position")
-    })
+    )
 
-    comp_data, ok := query_component_from_archetype_checked(archetype, "position", TestPositionComponent, "test_entity")
+    comp_data, ok := query_component_from_archetype(archetype, "position", TestPositionComponent, "test_entity")
     defer delete(comp_data)
 
     testing.expect(t, ok)
