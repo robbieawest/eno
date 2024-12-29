@@ -37,6 +37,8 @@ vl_GPUComponent :: struct {
     vlwhatthefuckwouldgohere: u32
 }
 
+// ToDo add proper checks for expressedness and drawability for components
+
 /*
    Returns if a specific GPU component is able to be drawn to the screen
    Returns an error code (binary representation more apt)
@@ -159,10 +161,10 @@ gl_express_indices :: proc(index_data: ^model.IndexData, component: ^GPUComponen
 //
 
 
-draw_elements_ :: #type proc(draw_properties: DrawProperties)
+draw_elements_ :: #type proc(draw_properties: ^DrawProperties)
 draw_elements: draw_elements_ = gl_draw_elements
 
-gl_draw_elements :: proc(draw_properties: DrawProperties) {
+gl_draw_elements :: proc(draw_properties: ^DrawProperties) {
     comp := draw_properties.gpu_component.(gl_GPUComponent)
     gl.BindVertexArray(comp.vao)
     gl.UseProgram(comp.program.id.(u32))

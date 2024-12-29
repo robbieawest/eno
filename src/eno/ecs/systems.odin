@@ -74,7 +74,7 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
     Queries a single components data from the archetype
     Returns data uncopied as compile typed ComponentData
 */
-query_component_from_archetype_checked :: proc(archetype: ^Archetype, component_label: string, $T: typeid, entity_labels: ..string) -> (ret: []ComponentData(T), ok: bool) {
+query_component_from_archetype :: proc(archetype: ^Archetype, component_label: string, $T: typeid, entity_labels: ..string) -> (ret: []ComponentData(T), ok: bool) {
     if !(component_label in archetype.components_label_match) {
         dbg.debug_point(dbg.LogInfo { msg = fmt.aprintf("Component does not exist: %s", component_label), level = .ERROR })
         return
@@ -83,8 +83,12 @@ query_component_from_archetype_checked :: proc(archetype: ^Archetype, component_
     return query_component_from_archetype_unchecked(archetype, component_label, T, ..entity_labels)
 }
 
+/*
+    Returns deserialized components given T and x entity labels
+    Errors handled internally
+*/
 @(private)
-query_component_from_archetype_unchecked :: proc(archetype: ^Archetype, component_label: string, $T: typeid, entity_labels: ..string) -> (ret: []ComponentData(T), ok: bool) {
+query_component_from_archetype_unchecked :: proc(archetype: ^Archetype, component_label: string, $T: typeid, entity_labels: ..string) -> (ret: []ComponentData(T), ok: bool) #optional_ok {
 
     // Get component information
     component_index := archetype.components_label_match[component_label]
