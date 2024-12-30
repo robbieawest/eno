@@ -5,28 +5,52 @@ import "vendor:cgltf"
 import "core:testing"
 import "core:log"
 import "core:slice"
+import "core:reflect"
 
+/*
+VertexLayout :: struct {
+    sizes : []u32,
+    types: []cgltf.attribute_type
+}
+*/
 
-VertexComponent :: struct {
-    element_size: uint,
-    attr_type: cgltf.attribute_type
+VertexLayout :: #soa [dynamic]MeshAttributeInfo
+
+MeshAttributeInfo :: struct {
+    type: MeshAttributeType,  // Describes the type of the attribute (position, normal etc)
+    element_type: MeshElementType,  // Describes the direct datatype of each element (vec2, vec3 etc)
+    byte_stride: u32,  // Describes attribute length in bytes
+    float_stride: u32,  // Describes attribute length in number of floats (f32) (byte_stride / 8)
 }
 
 
-VertexLayout :: struct {
-    sizes : []uint, //Want as u32
-    types: []cgltf.attribute_type
+MeshElementType :: enum {
+    invalid,
+    scalar,
+    vec2,
+    vec3,
+    vec4,
+    mat2,
+    mat3,
+    mat4,
+}
+
+MeshAttributeType :: enum {
+    invalid,
+    position,
+    normal,
+    tangent,
+    texcoord,
+    color,
+    joints,
+    weights,
+    custom,
 }
 
 
 Mesh :: struct {
-    vertices: [dynamic]VertexData,
-    layout: ^VertexLayout
-}
-
-
-VertexData :: struct {
-    raw_data: [dynamic]f32
+    vertex_data: [dynamic]f32,
+    layout: VertexLayout
 }
 
 
@@ -36,8 +60,7 @@ IndexData :: struct {
 
 
 destroy_mesh :: proc(mesh: ^Mesh) {
-    for &vertex in mesh.vertices do delete(vertex.raw_data)
-    delete(mesh.vertices)
+    delete(mesh.vertex_data)
 }
 
 
@@ -48,13 +71,9 @@ destroy_index_data :: proc(index_data: ^IndexData) {
 
 @(test)
 destroy_mesh_test :: proc(t: ^testing.T) {
-    rawdata: [dynamic]f32
-    append(&rawdata, 0.25)
+    vertex_data: [dynamic]f32 = { 0.25 }
 
-    vert: [dynamic]VertexData
-    append(&vert, VertexData{ rawdata })
-
-    vertex_layout := VertexLayout { []uint{3, 3, 4, 2}, []cgltf.attribute_type {
+    vertex_layout := VertexLayout { []u32{3, 3, 4, 2}, []cgltf.attribute_type {
             cgltf.attribute_type.normal,
             cgltf.attribute_type.position,
             cgltf.attribute_type.tangent,
@@ -62,8 +81,8 @@ destroy_mesh_test :: proc(t: ^testing.T) {
     }}
 
     mesh: Mesh
-    mesh.vertices = vert
-    mesh.layout = &vertex_layout
+    mesh.vertex_data = vertex_data
+    mesh.layout = vertex_layout
     defer destroy_mesh(&mesh)
    // log.infof("mesh leak test, check for leaks: %#v", mesh)
 }

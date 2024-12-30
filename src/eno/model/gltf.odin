@@ -3,6 +3,7 @@ package model
 import "vendor:cgltf"
 
 import utils "../utils"
+import dbg "../debug"
 
 import "core:log"
 import "core:testing"
@@ -49,8 +50,8 @@ load_model_test :: proc(t: ^testing.T) {
     //log.infof("data: \n%#v", data)
 }
 
-
-extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layouts: []^VertexLayout) -> (result: []Mesh, ok: bool) {
+/*
+extract_gltf_mesh :: proc(mesh: ^cgltf.mesh, vertex_layouts: []VertexLayout) -> (result: []Mesh, ok: bool) {
 
     //This is assuming all mesh attributes (aside from indices) have the same count (for each primitive/mesh output)
 
@@ -118,7 +119,84 @@ extract_mesh_from_cgltf :: proc(mesh: ^cgltf.mesh, vertex_layouts: []^VertexLayo
 
     return mesh_data[:], true
 }
+*/
 
+/*
+    Gives an eno mesh for each primitive in the cgltf "mesh"
+*/
+extract_cgltf_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []Mesh, ok: bool) {
+
+    //This is assuming all mesh attributes (aside from indices) have the same count (for each primitive/mesh output)
+
+    log.infof("mesh: \n%#v", mesh)
+
+    mesh_data := make([dynamic]Mesh, len(mesh.primitives))
+    defer delete(mesh_data)
+
+
+    // todo maybe remove _ prefix from var names
+    for _primitive, i in mesh.primitives {
+        mesh_ret: Mesh
+
+        // Construct layout
+        for _attribute in _primitive.attributes {
+            _accessor := _attribute.data
+
+            attribute_info := MeshAttributeInfo{
+                cast(MeshAttributeType)int(_attribute.type),
+                cast(MeshElementType)int(_accessor.type),
+                u32(_accessor.stride),
+                u32(_accessor.stride >> 3)
+            }
+            append(&mesh_ret.layout, attribute_info)
+        }
+
+        // Get float stride - the number of floats needed for each vertex
+        float_stride: u32 = 0; for mesh_attribute_info in mesh_ret.layout do float_stride += mesh_attribute_info.float_stride
+
+        element_count_throughout: uint = 0
+        element_offset: u32 = 0
+        for _attribute, j in _primitive.attributes {
+            _accessor := _attribute.data
+
+            //Todo: Consider other datatypes by matching component type of accessor against odin type (maybe just raise error when found)
+
+            element_size := mesh_ret.layout[j].float_stride  // Number of floats in current element
+            log.infof("accessor: %#v", _accessor)
+
+            //Validating mesh
+            count := _accessor.count
+            if element_count_throughout != 0 && count != element_count_throughout {
+                log.errorf("%s: Attributes/accessors of mesh primitive must contain the same count/number of elements", #procedure)
+                return result, false
+            } else if element_count_throughout == 0 {
+                // Initializes vertex data for entire mesh
+                utils.append_n_defaults(&mesh_ret.vertex_data, float_stride * u32(count))
+            }
+            element_count_throughout = count
+
+
+            next_offset := element_offset + element_size
+            vertex_offset: u32 = 0
+            for k in 0..<count {
+                raw_vertex_data : [^]f32 = raw_data(mesh_ret.vertex_data[vertex_offset + element_offset:vertex_offset + next_offset])
+
+                read_res: b32 = cgltf.accessor_read_float(_accessor, k, raw_vertex_data, uint(element_size))
+                if read_res == false {
+                    dbg.debug_point(dbg.LogInfo{ msg = "Error while reading float from accessor", level = .ERROR})
+                    return
+                }
+
+                vertex_offset += float_stride
+            }
+            element_offset = next_offset
+        }
+    }
+
+    ok = true
+    result = mesh_data[:]
+    return
+}
 
 extract_index_data_from_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []IndexData, ok: bool) {
     index_data := make([dynamic]IndexData, len(mesh.primitives))
@@ -128,7 +206,7 @@ extract_index_data_from_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []IndexData,
         _accessor := _primitive.indices
         indices: IndexData
 
-        utils.append_n_defaults(&indices.raw_data, _accessor.count)
+        utils.append_n_defaults(&indices.raw_data, u32(_accessor.count))
         for k in 0..<_accessor.count {
             raw_index_data: [^]u32 = raw_data(indices.raw_data[k:k+1])
             read_res: b32 = cgltf.accessor_read_uint(_accessor, k, raw_index_data, 1)
@@ -154,31 +232,18 @@ extract_vertex_data_test :: proc(t: ^testing.T) {
     //Expected usage is defined here.
     //destroy_mesh does not clean up the vertex_layout, so you must do it yourself if you allocate a VertexLayout
 
-    vertex_layout := VertexLayout { []uint{3, 3, 4, 2}, []cgltf.attribute_type {
-            cgltf.attribute_type.normal,
-            cgltf.attribute_type.position,
-            cgltf.attribute_type.tangent,
-            cgltf.attribute_type.texcoord
-    }}
 
-    res, ok := extract_mesh_from_cgltf(&data.meshes[0], []^VertexLayout{&vertex_layout})
+    res, ok := extract_cgltf_mesh(&data.meshes[0])
     defer for &mesh in res do destroy_mesh(&mesh)
 
     testing.expect(t, ok, "ok check")
-    log.infof("meshes size: %d, mesh components: %v, len mesh vertices: %d", len(res), res[0].layout, len(res[0].vertices))
+    log.infof("meshes size: %d, mesh components: %v, len mesh vertices: %d", len(res), res[0].layout, len(res[0].vertex_data))
 }
 
 
 @(test)
 extract_index_data_test :: proc(t: ^testing.T) {
     data, result := load_gltf_mesh("SciFiHelmet")
-
-    vertex_layout := VertexLayout { []uint{3, 3, 4, 2}, []cgltf.attribute_type {
-            cgltf.attribute_type.normal,
-            cgltf.attribute_type.position,
-            cgltf.attribute_type.tangent,
-            cgltf.attribute_type.texcoord
-    }}
 
     res, ok := extract_index_data_from_mesh(&data.meshes[0])
     defer for &index_data in res do destroy_index_data(&index_data)

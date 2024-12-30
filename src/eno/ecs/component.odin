@@ -1,6 +1,8 @@
 package ecs
 
 import dbg "../debug"
+import "../model"
+import "../gpu"
 
 import "core:mem"
 import "core:reflect"
@@ -101,7 +103,9 @@ components_destroy :: proc(components_data: $T) where
 component_serialize :: proc { component_serialize_untyped, component_serialize_typed }
 
 component_serialize_untyped :: proc(component_data: ComponentDataUntyped, allocator := context.allocator) -> (ret: Component) {
-    ret.data = make([]byte, size_of(component_data.type))
+    log.infof("component data: %#v, type size: %d, type info: %v", component_data, size_of(component_data.type), type_info_of(component_data.type).size)
+    log.infof("mesh: %d, draw comp: %#v", size_of(model.Mesh), type_info_of(gpu.DrawProperties).size)
+    ret.data = make([]byte, type_info_of(component_data.type).size)
     ret.label = component_data.label
     ret.type = component_data.type
     
@@ -112,7 +116,7 @@ component_serialize_untyped :: proc(component_data: ComponentDataUntyped, alloca
         
         // Insert field data into correct space in ret.data
         // Looking at ret.data with field.offset
-        
+        log.infof("field: %#v, field_size: %d", field, field.type.size)
         mem.copy(&ret.data[field.offset], rawptr(p_Field_data), field.type.size)
     }
     

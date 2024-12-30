@@ -9,6 +9,8 @@ import dbg "../debug"
 import "core:testing"
 import "core:log"
 import "core:strings"
+import "core:fmt"
+import "base:runtime"
 import glm "core:math/linalg/glsl"
 
 
@@ -122,6 +124,7 @@ express_mesh_vertices: express_mesh_vertices_ = gl_express_mesh_vertices
 
 @(private)
 gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: ^GPUComponent) -> (ok: bool) {
+    dbg.debug_point(dbg.LogInfo{ msg = "Expressing gl mesh vertices", level = .INFO})
     if len(mesh.vertices) == 0 { log.errorf("%s: No vertices given to express", #procedure); return ok }
 
     gl_component := &component.(gl_GPUComponent)
@@ -134,7 +137,16 @@ gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: ^GPUComponent) ->
     gl.BindBuffer(gl.ARRAY_BUFFER, gl_component.vbo)
 
     stride: int = len(mesh.vertices[0].raw_data) * size_of(f32)
-    gl.BufferData(gl_component.vbo, len(mesh.vertices) * stride, raw_data(mesh.vertices), gl.STATIC_DRAW)
+    log.infof("vbo: %d", gl_component.vbo)
+    log.infof("stride: %d", stride)
+    log.infof("mesh: %#v, layout: %#v, s: %d", len(mesh.vertices), mesh.layout, len(mesh.vertices[0].raw_data))
+    gl.BufferData(gl.ARRAY_BUFFER, len(mesh.vertices) * stride, raw_data(mesh.vertices), gl.STATIC_DRAW)
+ //   fmt.println("oiujawduinhawd")
+ //   fmt.panicf("hi %s", "awwadawd")
+    runtime.panic("hi")
+    /*
+    log.info("here")
+    log.info("awoiudhjiuawhduiawhd")
 
     offset, current_ind: u32 = 0, 0
     for size in mesh.layout.sizes {
@@ -146,6 +158,7 @@ gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: ^GPUComponent) ->
     }
 
     return true
+    */
 }
 
 
@@ -155,6 +168,7 @@ express_indices: express_indices_ = gl_express_indices
 
 @(private)
 gl_express_indices :: proc(index_data: ^model.IndexData, component: ^GPUComponent) -> (ok: bool){
+    dbg.debug_point(dbg.LogInfo{ msg = "Expressing gl mesh indices", level = .INFO})
     gl_component := &component.(gl_GPUComponent)
     gl_component.expressed_ind = true
 

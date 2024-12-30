@@ -28,7 +28,7 @@ GL_DEBUG_CALLBACK :: proc "c" (source: u32, type: u32, id: u32, severity: u32, l
     defer strings.builder_destroy(&builder)
     if err != mem.Allocator_Error.None do log.errorf("Could not allocate debug stack builder")
 
-    fmt.sbprintfln(&builder, "\n************* Opengl error! **************\nMessage: %s", strings.clone_from_cstring(message))
+    fmt.sbprintfln(&builder, "\n************* OpenGL Log **************\nMessage: %s", strings.clone_from_cstring(message))
     
     debug_stack_out_depth := DEBUG_PANIC_ON_ERROR ? DEBUG_STACK.curr_items : 3
     

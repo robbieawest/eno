@@ -119,6 +119,8 @@ archetype_get_component_data_from_column :: proc(archetype: ^Archetype, componen
 
 
 scene_add_archetype :: proc(scene: ^Scene, new_label: string, components_allocator: mem.Allocator, component_infos: ..ComponentInfo) -> (ret: ^Archetype, ok: bool) {
+    dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("New archetype in scene: %s", new_label), level = .INFO})
+
     duplicate_archetype := new_label in scene.archetype_label_match
     if duplicate_archetype {
         dbg.debug_point(dbg.LogInfo{ msg = "Attempted to create archetype with a duplicate label", level = .ERROR })
@@ -224,6 +226,7 @@ archetype_add_entity_component_data :: proc(scene: ^Scene, archetype: ^Archetype
 
 
 archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, component_data: ..ComponentDataUntyped) -> (ok: bool) {
+    dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Adding archetype entity: %s", entity_label), level = .INFO})
     archetype_add_entity_checks(scene, archetype, entity_label) or_return
 
     entity: Entity
