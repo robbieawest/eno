@@ -73,16 +73,8 @@ destroy_index_data :: proc(index_data: ^IndexData) {
 destroy_mesh_test :: proc(t: ^testing.T) {
     vertex_data: [dynamic]f32 = { 0.25 }
 
-    vertex_layout := VertexLayout { []u32{3, 3, 4, 2}, []cgltf.attribute_type {
-            cgltf.attribute_type.normal,
-            cgltf.attribute_type.position,
-            cgltf.attribute_type.tangent,
-            cgltf.attribute_type.texcoord
-    }}
-
     mesh: Mesh
     mesh.vertex_data = vertex_data
-    mesh.layout = vertex_layout
     defer destroy_mesh(&mesh)
-   // log.infof("mesh leak test, check for leaks: %#v", mesh)
+    log.infof("mesh leak test, check for leaks: %#v", mesh)
 }

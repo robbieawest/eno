@@ -56,28 +56,20 @@ before_frame :: proc(eno_game: ^game.EnoGame) {
 
 @(private)
 helmet_mesh_and_indices :: proc() -> (mesh: model.Mesh, indices: model.IndexData) {
-    
-    vertex_layout := model.VertexLayout { []u32{3, 3, 4, 2}, []cgltf.attribute_type {
-            cgltf.attribute_type.normal,
-            cgltf.attribute_type.position,
-            cgltf.attribute_type.tangent,
-            cgltf.attribute_type.texcoord
-    }}
-
-    meshes, index_datas := read_meshes_and_indices_from_gltf("SciFiHelmet", []model.VertexLayout{ vertex_layout })
+    meshes, index_datas := read_meshes_and_indices_from_gltf("SciFiHelmet")
     return meshes[0], index_datas[0]
 }
 
 
 // Move this into gltf.odin
 @(private)
-read_meshes_and_indices_from_gltf :: proc(model_name: string, vertex_layouts: []model.VertexLayout) -> (meshes: []model.Mesh, indices: []model.IndexData) {
+read_meshes_and_indices_from_gltf :: proc(model_name: string) -> (meshes: []model.Mesh, indices: []model.IndexData) {
     data, result := model.load_gltf_mesh(model_name)
     assert(result == .success, "gltf read success assertion") // todo switch to log
     assert(len(data.meshes) > 0, "gltf data meshes available assertion")
 
     ok := false
-    meshes, ok = model.extract_cgltf_mesh(&data.meshes[0], vertex_layouts)
+    meshes, ok = model.extract_cgltf_mesh(&data.meshes[0])
     if !ok {
         log.error("Failed to read mesh")
         return meshes, indices

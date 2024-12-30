@@ -125,7 +125,7 @@ express_mesh_vertices: express_mesh_vertices_ = gl_express_mesh_vertices
 @(private)
 gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: ^GPUComponent) -> (ok: bool) {
     dbg.debug_point(dbg.LogInfo{ msg = "Expressing gl mesh vertices", level = .INFO})
-    if len(mesh.vertices) == 0 { log.errorf("%s: No vertices given to express", #procedure); return ok }
+    if len(mesh.vertex_data) == 0 { log.errorf("%s: No vertices given to express", #procedure); return ok }
 
     gl_component := &component.(gl_GPUComponent)
     gl_component.expressed_vert = true
@@ -136,11 +136,12 @@ gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: ^GPUComponent) ->
     gl.BindVertexArray(gl_component.vao)
     gl.BindBuffer(gl.ARRAY_BUFFER, gl_component.vbo)
 
-    stride: int = len(mesh.vertices[0].raw_data) * size_of(f32)
+  //  stride: int = 0; for attribute_layout in mesh.layout do stride += attribute_layout.byte_stride
+
     log.infof("vbo: %d", gl_component.vbo)
-    log.infof("stride: %d", stride)
-    log.infof("mesh: %#v, layout: %#v, s: %d", len(mesh.vertices), mesh.layout, len(mesh.vertices[0].raw_data))
-    gl.BufferData(gl.ARRAY_BUFFER, len(mesh.vertices) * stride, raw_data(mesh.vertices), gl.STATIC_DRAW)
+   // log.infof("stride: %d", stride)
+    log.infof("mesh: %#v, layout: %#v, s: %d", len(mesh.vertex_data), mesh.layout, len(mesh.vertex_data))
+    gl.BufferData(gl.ARRAY_BUFFER, len(mesh.vertex_data) * size_of(f32), raw_data(mesh.vertex_data), gl.STATIC_DRAW)
  //   fmt.println("oiujawduinhawd")
  //   fmt.panicf("hi %s", "awwadawd")
     runtime.panic("hi")

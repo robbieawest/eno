@@ -132,11 +132,11 @@ _debug_point_log :: proc(log_info: LogInfo, loc := #caller_location) {
 
     switch log_info.level {
     case .INFO:
-        log.info(log_info.msg)
+        log.info(log_info.msg, location = loc)
     case .WARN:
-        log.warn(log_info.msg)
+        log.warn(log_info.msg, location = loc)
     case .ERROR:
-        log.error(log_info.msg)
+        log.error(log_info.msg, location = loc)
     }
 }
 

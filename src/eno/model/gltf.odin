@@ -136,7 +136,7 @@ extract_cgltf_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []Mesh, ok: bool) {
 
     // todo maybe remove _ prefix from var names
     for _primitive, i in mesh.primitives {
-        mesh_ret: Mesh
+        mesh_ret := &mesh_data[i]
 
         // Construct layout
         for _attribute in _primitive.attributes {
@@ -146,10 +146,12 @@ extract_cgltf_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []Mesh, ok: bool) {
                 cast(MeshAttributeType)int(_attribute.type),
                 cast(MeshElementType)int(_accessor.type),
                 u32(_accessor.stride),
-                u32(_accessor.stride >> 3)
+                u32(_accessor.stride >> 2)
             }
             append(&mesh_ret.layout, attribute_info)
         }
+
+        log.infof("layout: %#v", mesh_ret.layout)
 
         // Get float stride - the number of floats needed for each vertex
         float_stride: u32 = 0; for mesh_attribute_info in mesh_ret.layout do float_stride += mesh_attribute_info.float_stride
@@ -191,6 +193,7 @@ extract_cgltf_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []Mesh, ok: bool) {
             }
             element_offset = next_offset
         }
+
     }
 
     ok = true
@@ -237,7 +240,8 @@ extract_vertex_data_test :: proc(t: ^testing.T) {
     defer for &mesh in res do destroy_mesh(&mesh)
 
     testing.expect(t, ok, "ok check")
-    log.infof("meshes size: %d, mesh components: %v, len mesh vertices: %d", len(res), res[0].layout, len(res[0].vertex_data))
+    testing.expect_value(t, 70074, len(res[0].vertex_data) / 12)
+    log.infof("meshes size: %d, mesh components: %#v, len mesh vertices: %d", len(res), res[0].layout, len(res[0].vertex_data) / 12)
 }
 
 
