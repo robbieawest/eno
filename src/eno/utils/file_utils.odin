@@ -1,17 +1,32 @@
 package utils
 
+import dbg "../debug"
+
 import "core:os"
 import "core:testing"
 import "core:strings"
 import "core:log"
 import "core:mem"
+import "core:fmt"
 
 
 read_lines_from_file :: proc(filepath: string) -> (lines: []string, ok: bool) #optional_ok {
+    source := read_file_source(filepath) or_return
+
+    err: mem.Allocator_Error; lines, err = strings.split_lines(source)
+    if err != mem.Allocator_Error.None {
+        log.errorf("%s: Allocator error when splitting file into lines", #procedure)
+        return nil, false
+    } 
+    
+    return lines, true
+}
+
+read_file_source :: proc(filepath: string) -> (source: string, ok: bool) {
     f, err := os.open(filepath)
     if err != os.ERROR_NONE {
         log.errorf("%s: Could not open file specified: %s", #procedure, filepath)
-        return nil, false
+        return
     }
     defer os.close(f)
 
@@ -19,8 +34,8 @@ read_lines_from_file :: proc(filepath: string) -> (lines: []string, ok: bool) #o
     defer delete(bytes)
 
     if !success {
-        log.errorf("%s: File %s could not be read into bytes", #procedure, filepath)
-        return nil, false
+        dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("%s: File %s could not be read into bytes", #procedure, filepath), level = .ERROR })
+        return
     }
 
     builder: strings.Builder = strings.builder_make_len(len(bytes))
@@ -29,19 +44,12 @@ read_lines_from_file :: proc(filepath: string) -> (lines: []string, ok: bool) #o
     written_bytes := strings.write_bytes(&builder, bytes)
     if written_bytes != len(bytes) {
         log.errorf("%s: Could not write all bytes from file to builder", #procedure)
-        return nil, false
+        return
     }
-    file_as_string: string = strings.to_string(builder)
 
-    log.infof("file as string: \n%v", file_as_string)
-
-    lines, err = strings.split_lines(file_as_string)
-    if err != mem.Allocator_Error.None {
-        log.errorf("%s: Allocator error when splitting file into lines", #procedure)
-        return nil, false
-    } 
-    
-    return lines, true
+    ok = true
+    source = strings.to_string(builder)
+    return
 }
 
 

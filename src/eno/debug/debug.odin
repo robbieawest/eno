@@ -2,8 +2,6 @@ package debug
 
 import gl "vendor:OpenGL"
 
-import "../utils"
-
 import "core:log"
 import "core:strings"
 import "core:fmt"

@@ -187,6 +187,7 @@ draw_elements_ :: #type proc(draw_properties: ^DrawProperties)
 draw_elements: draw_elements_ = gl_draw_elements
 
 gl_draw_elements :: proc(draw_properties: ^DrawProperties) {
+    // todo add checks for expressedness of components
     comp := draw_properties.gpu_component.(gl_GPUComponent)
     gl.BindVertexArray(comp.vao)
     gl.UseProgram(comp.program.id.(u32))

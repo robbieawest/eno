@@ -2,6 +2,7 @@ package tests
 
 import "vendor:cgltf"
 import gl "vendor:OpenGL"
+import SDL "vendor:sdl2"
 
 import "../model"
 import "../utils"
@@ -11,9 +12,9 @@ import dbg "../debug"
 
 import "core:testing"
 import "core:log"
+import "core:fmt"
 
-
-
+// Tests put here to avoid circular imports, specifically needed for expresses tests which require a render context
 
 @(private)
 create_test_render_context :: proc() -> (window: ^SDL.Window, gl_context: SDL.GLContext) {
@@ -103,7 +104,7 @@ express_shader_test :: proc(t: ^testing.T) {
     
     testing.expect(t, !program.expressed, "not expressed check")
 
-    express_ok := express_shader(program)
+    express_ok := gpu.express_shader(program)
     testing.expect(t, express_ok, "express ok check")
 
     testing.expect(t, program.expressed, "expressed check")
