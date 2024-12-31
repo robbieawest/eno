@@ -3,7 +3,6 @@ package gpu
 import gl "vendor:OpenGL"
 
 import "../model"
-import "../shader"
 import dbg "../debug"
 
 import "core:testing"
@@ -32,7 +31,7 @@ GPUComponent :: union #no_nil {
 gl_GPUComponent :: struct {
     vao, vbo, ebo: u32,
     expressed_vert, expressed_ind: bool,
-    program: shader.ShaderProgram
+    program: ShaderProgram
 }
 
 vl_GPUComponent :: struct {
@@ -138,19 +137,14 @@ gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: ^GPUComponent) ->
 
   //  stride: int = 0; for attribute_layout in mesh.layout do stride += attribute_layout.byte_stride
 
-    log.infof("vbo: %d", gl_component.vbo)
+   // log.infof("vbo: %d", gl_component.vbo)
    // log.infof("stride: %d", stride)
-    log.infof("mesh: %#v, layout: %#v, s: %d", len(mesh.vertex_data), mesh.layout, len(mesh.vertex_data))
+   // log.infof("mesh: %#v, layout: %#v, s: %d", len(mesh.vertex_data), mesh.layout, len(mesh.vertex_data))
     gl.BufferData(gl.ARRAY_BUFFER, len(mesh.vertex_data) * size_of(f32), raw_data(mesh.vertex_data), gl.STATIC_DRAW)
- //   fmt.println("oiujawduinhawd")
- //   fmt.panicf("hi %s", "awwadawd")
-    runtime.panic("hi")
-    /*
-    log.info("here")
-    log.info("awoiudhjiuawhduiawhd")
 
+    // todo fix:
     offset, current_ind: u32 = 0, 0
-    for size in mesh.layout.sizes {
+    for size in mesh.layout {
         gl.EnableVertexAttribArray(current_ind)
         gl.VertexAttribPointer(current_ind, i32(size), gl.FLOAT, gl.FALSE, i32(stride), uintptr(offset))
 
@@ -159,7 +153,6 @@ gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: ^GPUComponent) ->
     }
 
     return true
-    */
 }
 
 
@@ -193,75 +186,6 @@ gl_draw_elements :: proc(draw_properties: ^DrawProperties) {
     gl.UseProgram(comp.program.id.(u32))
     gl.DrawElements(gl.TRIANGLES, i32(len(draw_properties.indices.raw_data)), gl.UNSIGNED_INT, nil)
 }
-
-
-express_shader :: proc(program: ^shader.ShaderProgram) -> (ok: bool) {
-    using shader
-    if RENDER_API == .VULKAN {
-        vulkan_not_supported()
-        return ok
-    }
-    if program.expressed do return true
-
-    dbg.debug_point(dbg.LogInfo{ msg = "Expressing Shader", level = .INFO })
-
-    switch (RENDER_API) {
-    case .OPENGL:
-        shader_ids := make([dynamic]u32, len(program.sources))
-        defer delete(shader_ids)
-
-        for shader_source, i in program.sources {
-            dbg.debug_point()
-            id, compile_ok := gl.compile_shader_from_source(shader_source.compiled_source, conv_gl_shader_type(shader_source.type))
-            if !compile_ok {
-                log.errorf("Could not compile shader source: %s", shader_source.compiled_source)
-                return ok
-            }
-            shader_ids[i] = id
-        }
-
-        program.id = gl.create_and_link_program(shader_ids[:]) or_return
-        program.expressed = true
-    case .VULKAN:
-        vulkan_not_supported()
-        return ok
-    }
-    return true
-}
-
-
-// Updating shader uniforms
-
-
-
-shader_uniform_update_mat4_ :: #type proc(draw_properties: ^DrawProperties, uniform_tag: string, mat: [^]f32) -> (ok: bool) 
-shader_uniform_update_mat4: shader_uniform_update_mat4_ = gl_shader_uniform_update_mat4
-
-gl_shader_uniform_update_mat4 :: proc(draw_properties: ^DrawProperties, uniform_tag: string, mat: [^]f32) -> (ok: bool){
-    gpu_comp := &draw_properties.gpu_component.(gl_GPUComponent)
-    program: ^shader.ShaderProgram = &gpu_comp.program
-
-    if !program.expressed {
-        dbg.debug_point(dbg.LogInfo{ msg = "Shader not yet expressed", level = .ERROR })
-        return ok
-    }
-    dbg.debug_point()
-
-    tag_cstr := strings.clone_to_cstring(uniform_tag)
-    program_id := program.id.(u32)
-
-    gl.UseProgram(program_id)
-    loc := gl.GetUniformLocation(program_id, tag_cstr)
-    if loc == -1 {
-        dbg.debug_point(dbg.LogInfo{ msg = "Shader uniform does not exist", level = .ERROR })
-        return ok
-    }
-    gl.UniformMatrix4fv(loc, 1, false, mat)
-
-    return true
-}
-
-//
 
 
 vulkan_not_supported :: proc(location := #caller_location) { log.errorf("%v: Vulkan not supported", location) }
