@@ -13,19 +13,16 @@ import "base:runtime"
 import glm "core:math/linalg/glsl"
 
 
-GraphicsAPI :: enum { OPENGL, VULKAN } //Making it easy for the future
+GraphicsAPI :: enum { OPENGL, VULKAN } //Making it easy for the future - Is it really? Not doing vulkan any time soon no need to keep doing this
 RENDER_API: GraphicsAPI = GraphicsAPI.OPENGL
 
 
 // Defined way to store VAO, VBO, EBO in the entity component system
-// A link to release_gpu_components should be stored as a component when creating an entity with GPUComponents as another component
-// ToDo: Maybe combine these into a single struct?
 
 GPUComponent :: union #no_nil {
     gl_GPUComponent,
     vl_GPUComponent
 }
-
 
 
 gl_GPUComponent :: struct {
@@ -70,7 +67,6 @@ release_gpu_component :: proc(component: GPUComponent) {
         gl.DeleteBuffers(1, &gl_component.vbo)
         gl.DeleteBuffers(1, &gl_component.ebo)
         gl.DeleteProgram(gl_component.program.id.(u32))
-        free(&gl_component)
     case .VULKAN: vulkan_not_supported();
     }
 }
@@ -94,7 +90,6 @@ express_draw_properties :: proc(draw_properties: ^DrawProperties) -> (ok: bool) 
 
 
 // Procedures to express mesh structures on the GPU, a shader is assumed to already be attached
-// todo proper error handling
 express_mesh_with_indices :: proc(mesh: ^model.Mesh, index_data: ^model.IndexData) -> (gpu_component: GPUComponent, ok: bool) {
 
     switch RENDER_API {
@@ -110,7 +105,6 @@ express_mesh_with_indices :: proc(mesh: ^model.Mesh, index_data: ^model.IndexDat
 
     ok = express_indices(index_data, &gpu_component)
     if !ok do return gpu_component, ok 
-    
 
     return gpu_component, true
 }
@@ -124,9 +118,13 @@ express_mesh_vertices: express_mesh_vertices_ = gl_express_mesh_vertices
 @(private)
 gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: ^GPUComponent) -> (ok: bool) {
     dbg.debug_point(dbg.LogInfo{ msg = "Expressing gl mesh vertices", level = .INFO})
-    if len(mesh.vertex_data) == 0 { log.errorf("%s: No vertices given to express", #procedure); return ok }
+    if len(mesh.vertex_data) == 0 {
+        dbg.debug_point(dbg.LogInfo{ msg = "No vertices given to express", level = .ERROR });
+        return
+    }
 
     gl_component := &component.(gl_GPUComponent)
+    if gl_component.expressed_vert do return true
     gl_component.expressed_vert = true
 
     gl.GenVertexArrays(1, &gl_component.vao)
@@ -163,6 +161,8 @@ express_indices: express_indices_ = gl_express_indices
 gl_express_indices :: proc(index_data: ^model.IndexData, component: ^GPUComponent) -> (ok: bool){
     dbg.debug_point(dbg.LogInfo{ msg = "Expressing gl mesh indices", level = .INFO})
     gl_component := &component.(gl_GPUComponent)
+
+    if gl_component.expressed_ind do return true
     gl_component.expressed_ind = true
 
     gl.GenBuffers(1, &gl_component.ebo)
@@ -187,4 +187,4 @@ gl_draw_elements :: proc(draw_properties: ^DrawProperties) {
 }
 
 
-vulkan_not_supported :: proc(location := #caller_location) { log.errorf("%v: Vulkan not supported", location) }
+vulkan_not_supported :: proc(location := #caller_location) { dbg.debug_point(dbg.LogInfo{ msg = "Vulkan not supported", level = .ERROR }, location) }

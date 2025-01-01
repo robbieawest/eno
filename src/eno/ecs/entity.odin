@@ -6,6 +6,9 @@ import "core:mem"
 import "core:fmt"
 import "core:slice"
 
+// Todo: look into component/entity deletion and custom allocators
+// Relate it to every type defined in eno
+
 // Todo: Implement
 ChunkAllocator :: struct {
     
