@@ -135,7 +135,7 @@ gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: ^GPUComponent) ->
     gl.BindVertexArray(gl_component.vao)
     gl.BindBuffer(gl.ARRAY_BUFFER, gl_component.vbo)
 
-    stride: int = 0; for attribute_layout in mesh.layout do stride += attribute_layout.byte_stride
+    stride: u32 = 0; for attribute_layout in mesh.layout do stride += attribute_layout.byte_stride
 
    // log.infof("vbo: %d", gl_component.vbo)
    // log.infof("stride: %d", stride)
