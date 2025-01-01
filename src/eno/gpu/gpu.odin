@@ -135,20 +135,19 @@ gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: ^GPUComponent) ->
     gl.BindVertexArray(gl_component.vao)
     gl.BindBuffer(gl.ARRAY_BUFFER, gl_component.vbo)
 
-  //  stride: int = 0; for attribute_layout in mesh.layout do stride += attribute_layout.byte_stride
+    stride: int = 0; for attribute_layout in mesh.layout do stride += attribute_layout.byte_stride
 
    // log.infof("vbo: %d", gl_component.vbo)
    // log.infof("stride: %d", stride)
    // log.infof("mesh: %#v, layout: %#v, s: %d", len(mesh.vertex_data), mesh.layout, len(mesh.vertex_data))
     gl.BufferData(gl.ARRAY_BUFFER, len(mesh.vertex_data) * size_of(f32), raw_data(mesh.vertex_data), gl.STATIC_DRAW)
 
-    // todo fix:
     offset, current_ind: u32 = 0, 0
-    for size in mesh.layout {
+    for attribute_info in mesh.layout {
         gl.EnableVertexAttribArray(current_ind)
-        gl.VertexAttribPointer(current_ind, i32(size), gl.FLOAT, gl.FALSE, i32(stride), uintptr(offset))
+        gl.VertexAttribPointer(current_ind, i32(attribute_info.float_stride), gl.FLOAT, gl.FALSE, i32(stride), uintptr(offset))
 
-        offset += u32(size)
+        offset += attribute_info.float_stride
         current_ind += 1
     }
 
