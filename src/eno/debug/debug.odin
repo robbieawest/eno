@@ -10,7 +10,7 @@ import "base:runtime"
 
 // ToDo Write options for debugging
 
-DEBUG_STACK: ^DebugStack
+DEBUG_STACK: ^DebugStack = nil
 init_debug_stack :: proc() {
     DEBUG_STACK = new(DebugStack)
 }
@@ -29,20 +29,25 @@ GL_DEBUG_CALLBACK :: proc "c" (source: u32, type: u32, id: u32, severity: u32, l
     fmt.sbprintfln(&builder, "\n************* OpenGL Log **************\nMessage: %s", strings.clone_from_cstring(message))
     
     debug_stack_out_depth := DEBUG_PANIC_ON_ERROR ? DEBUG_STACK.curr_items : 3
-    
-    fmt.sbprint(&builder,
+
+
+    if DEBUG_STACK == nil {
+        log.warn("Debug stack has not been initialized, no head to return")
+    }
+    else {
+        fmt.sbprint(&builder,
         "\n\n**** Returning head of debug stack : head size = ",
         uint(debug_stack_out_depth),
         " ****\n\n"
-    )
+        )
 
-    debug_stack_head: ^StackItem = DEBUG_STACK.stack_head
-    debug_info: ^DebugInfo = nil
+        debug_stack_head: ^StackItem = DEBUG_STACK.stack_head
+        debug_info: ^DebugInfo = nil
 
-    i: u32 
-    for i = 0; i < debug_stack_out_depth && debug_stack_head != nil; i += 1 {
-        debug_info, debug_stack_head = read_last_debug_point(debug_stack_head)
-        fmt.sbprintfln(&builder, 
+        i: u32
+        for i = 0; i < debug_stack_out_depth && debug_stack_head != nil; i += 1 {
+            debug_info, debug_stack_head = read_last_debug_point(debug_stack_head)
+            fmt.sbprintfln(&builder,
             "Debug point >> %s '%s' %s:%s:%d:%d",
             log_level_to_string(debug_info.log_info.level),
             debug_info.log_info.msg,
@@ -50,10 +55,10 @@ GL_DEBUG_CALLBACK :: proc "c" (source: u32, type: u32, id: u32, severity: u32, l
             debug_info.loc.procedure,
             int(debug_info.loc.line),
             int(debug_info.loc.column),
-        )
+            )
+        }
+        if i < debug_stack_out_depth do fmt.sbprint(&builder, "Stack smaller than head size\n")
     }
-    if i < debug_stack_out_depth do fmt.sbprint(&builder, "Stack smaller than head size\n")
-
 
     switch (severity) {
     case gl.DEBUG_SEVERITY_MEDIUM, gl.DEBUG_SEVERITY_HIGH:
@@ -141,7 +146,10 @@ _debug_point_log :: proc(log_info: LogInfo, loc := #caller_location) {
 
 @(private)
 push_to_debug_stack :: proc(stack: ^DebugStack, debug_info: ^DebugInfo) {
-    if (stack == nil) do log.error("Debug stack not yet initialized")
+    if (stack == nil) {
+        log.error("Debug stack not yet initialized")
+        return
+    }
 
     if (stack.curr_items == MAX_DEBUG_STACK) {
         // Remove off of tail

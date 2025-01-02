@@ -96,7 +96,6 @@ express_mesh_with_indices :: proc(mesh: ^model.Mesh, index_data: ^model.IndexDat
     case .OPENGL:
         gl_def_comp: gl_GPUComponent
         gpu_component = gl_def_comp
-        
     case .VULKAN: vulkan_not_supported(); return gpu_component, ok
     } 
 
@@ -153,7 +152,7 @@ gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: ^GPUComponent) ->
 }
 
 
-//*Likely should use express_mesh_with_indices instead
+//* Should use express_mesh_with_indices instead
 express_indices_ :: #type proc(index_data: ^model.IndexData, component: ^GPUComponent) -> (ok: bool)
 express_indices: express_indices_ = gl_express_indices
 

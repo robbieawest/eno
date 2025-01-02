@@ -83,51 +83,70 @@ destroy_shader :: proc(shader: ^Shader) {
 
 // Procs to handle shader fields
 
-init_shader :: proc { _init_shader_empty, _init_shader_with_layout }
+add_layout :: proc(shader: ^Shader, layout: ..ShaderLayout) -> (ok: bool) {
+    n, err := append_elems(&shader.layout, ..layout)
+    if n != len(layout) || err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogInfo{ msg = "Failed to allocate shader layout", level = .ERROR })
+        return
+    }
 
-@(private)
-_init_shader_empty :: proc() -> (shader: ^Shader) {
-    shader = new(Shader)
-    return shader
+    ok = true
+    return
 }
 
+add_input :: proc(shader: ^Shader, input: ..ShaderInput) -> (ok: bool) {
+    n, err := append_elems(&shader.input, ..input)
+    if n != len(input) || err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogInfo{ msg = "Failed to allocate shader input", level = .ERROR })
+        return
+    }
 
-@(private)
-_init_shader_with_layout :: proc(layout: []ShaderLayout) -> (shader: ^Shader) {
-    shader = new(Shader)
-    append_elems(&shader.layout, ..layout)
-    return shader
+    ok = true
+    return
 }
 
+add_output :: proc(shader: ^Shader, output: ..ShaderOutput) -> (ok: bool) {
+    n, err := append_elems(&shader.output, ..output)
+    if n != len(output) || err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogInfo{ msg = "Failed to allocate shader output", level = .ERROR })
+        return
+    }
 
-add_layout :: proc(shader: ^Shader, layout: []ShaderLayout) -> ^Shader {
-    append_elems(&shader.layout, ..layout)
-    return shader
+    ok = true
+    return
 }
 
-add_input :: proc(shader: ^Shader, input: []ShaderInput) -> ^Shader {
-    append_elems(&shader.input, ..input)
-    return shader
+add_uniforms :: proc(shader: ^Shader, uniforms: ..ShaderUniform) -> (ok: bool) {
+    n, err := append_elems(&shader.uniforms, ..uniforms)
+    if n != len(uniforms) || err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogInfo{ msg = "Failed to allocate shader uniforms", level = .ERROR })
+        return
+    }
+
+    ok = true
+    return
 }
 
-add_output :: proc(shader: ^Shader, output: []ShaderOutput) -> ^Shader {
-    append_elems(&shader.output, ..output)
-    return shader
+add_structs :: proc(shader: ^Shader, structs: ..ShaderStruct) -> (ok: bool) {
+    n, err := append_elems(&shader.structs, ..structs)
+    if n != len(structs) || err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogInfo{ msg = "Failed to allocate shader structs", level = .ERROR })
+        return
+    }
+
+    ok = true
+    return
 }
 
-add_uniforms :: proc(shader: ^Shader, uniforms: []ShaderUniform) -> ^Shader {
-    append_elems(&shader.uniforms, ..uniforms)
-    return shader
-}
+add_functions :: proc(shader: ^Shader, functions: ..ShaderFunction) -> (ok: bool) {
+    n, err := append_elems(&shader.functions, ..functions)
+    if n != len(functions) || err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogInfo{ msg = "Failed to allocate shader functions", level = .ERROR })
+        return
+    }
 
-add_structs :: proc(shader: ^Shader, structs: []ShaderStruct) -> ^Shader {
-    append_elems(&shader.structs, ..structs)
-    return shader
-}
-
-add_functions :: proc(shader: ^Shader, functions: []ShaderFunction) -> ^Shader {
-    append_elems(&shader.functions, ..functions)
-    return shader
+    ok = true
+    return
 }
 
 //
@@ -147,8 +166,11 @@ ShaderType :: enum { // Is just gl.Shader_Type
 ShaderSource :: struct {
     type: ShaderType,
     source: string,
+
+    // Serialized shader representation, you can start with this or start with a string source(e.g. from a file)
+    // , where you can apply the Parse flag to serialize the source into a Shader instance
     shader: Shader,
-    parsed: bool
+    is_serialized: bool
 }
 
 destroy_shader_source :: proc(source: ^ShaderSource) {
@@ -158,7 +180,7 @@ destroy_shader_source :: proc(source: ^ShaderSource) {
 
 ShaderIdentifier :: union {
     u32,  // Stores program id for OpenGL
-    //VkShaderModule or a pipeline
+    //VkShaderModule or a pipeline ?
 }
 
 ShaderProgram :: struct {
@@ -204,18 +226,19 @@ conv_gl_shader_type :: proc(type: ShaderType) -> gl.Shader_Type {  // Likely cou
 }
 
 /*
-    Builds the source as a single string with newlines
+    Builds/Deserializes the source as a single string with newlines
     Uses glsl version 430 core
     Todo: Control for versioning
 */
 build_shader_source :: proc(shader: Shader, type: ShaderType) -> (source: ShaderSource, ok: bool) {
     dbg.debug_point(dbg.LogInfo{ msg = "BUILDING SHADER SOURCE", level = .INFO })
 
-    builder, _alloc_err := strings.builder_make(); if _alloc_err != mem.Allocator_Error.None {
-        log.error("Allocator error while building shader source")
+    builder, err := strings.builder_make(); if err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogInfo{ msg = "Allocator error while building shader source", level = .ERROR })
         return source, ok
     }
     defer strings.builder_destroy(&builder)
+
 
     strings.write_string(&builder, "#version 430 core\n")
     for layout in shader.layout {
@@ -246,7 +269,7 @@ build_shader_source :: proc(shader: Shader, type: ShaderType) -> (source: Shader
         strings.write_string(&builder, "\n")
         if function.is_typed_source do strings.write_string(&builder, function.source)
         else {
-            fmt.sbprintfln(&builder, "%s %s(", extended_glsl_type_to_string(function.return_type), function.label)
+            fmt.sbprintf(&builder, "%s %s(", extended_glsl_type_to_string(function.return_type), function.label)
             for argument, i in function.arguments {
                 fmt.sbprintf(&builder, "%s %s", extended_glsl_type_to_string(argument.type), argument.name)
                 if i != len(function.arguments) - 1 do strings.write_string(&builder, ",")
@@ -256,9 +279,11 @@ build_shader_source :: proc(shader: Shader, type: ShaderType) -> (source: Shader
         strings.write_string(&builder, "\n")
     }
 
+
     source.source = strings.to_string(builder)
     source.type = type
     source.shader = shader
+    source.is_serialized = true
 
     return source, true
 }
@@ -330,6 +355,8 @@ extended_glsl_type_to_string :: proc(type: ExtendedGLSLType, caller_location := 
         dbg.debug_point(dbg.LogInfo{ msg = "GLSL type given as nil", level = .ERROR })
         return "*INVALID TYPE*"
     }
+
+    return
 }
 
 //
@@ -345,7 +372,7 @@ express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
     }
     if program.expressed do return true
 
-    switch (.RENDER_API) {
+    switch (RENDER_API) {
     case .OPENGL:
         shader_ids := make([dynamic]u32, len(program.sources))
         defer delete(shader_ids)
@@ -377,7 +404,7 @@ shader_uniform_update_mat4: shader_uniform_update_mat4_ = gl_shader_uniform_upda
 
 gl_shader_uniform_update_mat4 :: proc(draw_properties: ^DrawProperties, uniform_tag: string, mat: [^]f32) -> (ok: bool){
     gpu_comp := &draw_properties.gpu_component.(gl_GPUComponent)
-    program: ^shader.ShaderProgram = &gpu_comp.program
+    program: ^ShaderProgram = &gpu_comp.program
 
     if !program.expressed {
         dbg.debug_point(dbg.LogInfo{ msg = "Shader not yet expressed", level = .ERROR })
@@ -431,11 +458,23 @@ extension_to_shader_type_s :: proc(ext: string) -> (type: ShaderType) {
     return
 }
 
-
+/*
 ShaderReadFlag :: enum {
     Parse,
     Express
 }; ShaderReadFlags :: bit_set[ShaderReadFlag]
+*/
+ShadingLanguage :: enum {
+    GLSL,
+    HLSL,
+    // ...
+}
+
+ShaderReadFlags :: bit_field u8 {
+    Parse: bool     | 1,
+    Express: bool   | 1,
+    ShaderLanguage: ShadingLanguage | 3
+}
 
 read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (program: ShaderProgram, ok: bool) {
 
@@ -462,11 +501,9 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
     shader_sources: [dynamic]ShaderSource
     for source, type in source_type_map {
         shader_source: ShaderSource
-        shader_source.type = type; shader_source.source = source; shader_source.parsed = flags.Parse
+        shader_source.type = type; shader_source.source = source; shader_source.is_serialized = flags.Parse
 
-        if flags.Parse {
-        // todo implement parsing string source to Shader type
-        }
+        if flags.Parse do shader_source.shader = parse_shader_source(source, flags) or_return
 
         append(&shader_sources, shader_source)
     }
