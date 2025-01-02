@@ -6,18 +6,20 @@ import "core:testing"
 import "core:log"
 import "core:fmt"
 
+/*
 @(init)
 debug_setup :: proc() {
     dbg.init_debug_stack()
 }
+*/
 
 @(test)
 shader_creation_test :: proc(t: ^testing.T) {
 
     shader: Shader
     add_layout(&shader,
-    { 0, .vec3, "a_position"},
-    { 1, .vec4, "a_colour"}
+        { 0, .vec3, "a_position"},
+        { 1, .vec4, "a_colour"}
     )
 
     add_output(&shader, { .vec4, "v_colour"})

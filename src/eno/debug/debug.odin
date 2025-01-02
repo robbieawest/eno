@@ -147,7 +147,7 @@ _debug_point_log :: proc(log_info: LogInfo, loc := #caller_location) {
 @(private)
 push_to_debug_stack :: proc(stack: ^DebugStack, debug_info: ^DebugInfo) {
     if (stack == nil) {
-        log.error("Debug stack not yet initialized")
+        log.warn("Debug stack not initialized", location = debug_info.loc)
         return
     }
 

@@ -485,15 +485,29 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
         split_filename := strings.split(filename, ".")
         if len(split_filename) == 2 {
             if extension, extension_accepted := reflect.enum_from_name(ACCEPTED_SHADER_EXTENSIONS, split_filename[1]); extension_accepted {
-                source_type_map[utils.read_file_source(filename) or_return] = extension_to_shader_type(extension)
+                source, err := utils.read_file_source(filename); handle_file_read_error(filename, err) or_return
+                source_type_map[source] = extension_to_shader_type(extension)
             }
-            else do dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Shader extension not accepted: %s", extension), level = .ERROR })
+            else {
+                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Shader extension not accepted: %s", extension), level = .ERROR })
+            }
         }
         else {  // Extension not given
             accepted_extensions := reflect.enum_field_names(ACCEPTED_SHADER_EXTENSIONS)
+            file_found := false
             for extension in accepted_extensions {
-                source, file_exists := utils.read_file_source(fmt.aprintf("%s.%s", filename, extension))
-                if file_exists do source_type_map[source] = extension_to_shader_type(extension)
+                source, err := utils.read_file_source(fmt.aprintf("%s.%s", filename, extension))
+
+                file_read_err, is_file_read_err := err.(utils.FileReadError)
+                if is_file_read_err && file_read_err == .None {
+                    dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Successfully read file. File path: \"%s\"", filename), level = .INFO })
+                    source_type_map[source] = extension_to_shader_type(extension)
+                    file_found = true
+                }
+            }
+
+            if !file_found {
+                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("File could not be found in any linked shader directory. File path: \"%s\"", filename), level = .ERROR})
             }
         }
 
@@ -515,5 +529,38 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
     }
 
     ok = true
+    return
+}
+
+@(private)
+handle_file_read_error :: proc(filepath: string, err: utils.FileError, loc := #caller_location) -> (ok: bool) {
+    ok = true
+
+    switch error in err {
+        case mem.Allocator_Error:
+            dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Allocator error while trying to read file. File path: \"%s\"", filepath)}, loc)
+            ok = false
+        case utils.FileReadError:
+            message: string; level: dbg.LogLevel = .ERROR
+
+            switch error {
+            case .PathDoesNotResolve:
+                message = "Could not resolve file path"
+                ok = false
+            case .FileReadError:
+                message = "Error while reading contents of file"
+                ok = false
+            case .PartialFileReadError:
+                message = "File could only partially be read"
+                ok = false
+                level = .WARN
+            case .None:
+                message = "Successfully read file"
+                level = .INFO
+            }
+
+            dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("%s. File path: \"%s\"", message, filepath), level = level}, loc)
+    }
+
     return
 }
