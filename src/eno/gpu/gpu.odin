@@ -66,7 +66,7 @@ release_gpu_component :: proc(component: GPUComponent) {
         gl.DeleteVertexArrays(1, &gl_component.vao)
         gl.DeleteBuffers(1, &gl_component.vbo)
         gl.DeleteBuffers(1, &gl_component.ebo)
-        gl.DeleteProgram(gl_component.program.id.(u32))
+        gl.DeleteProgram(u32(gl_component.program.id.(i32)))
     case .VULKAN: vulkan_not_supported();
     }
 }
@@ -181,7 +181,7 @@ gl_draw_elements :: proc(draw_properties: ^DrawProperties) {
     // todo add checks for expressedness of components
     comp := draw_properties.gpu_component.(gl_GPUComponent)
     gl.BindVertexArray(comp.vao)
-    gl.UseProgram(comp.program.id.(u32))
+    gl.UseProgram(u32(comp.program.id.(i32)))
     gl.DrawElements(gl.TRIANGLES, i32(len(draw_properties.indices.raw_data)), gl.UNSIGNED_INT, nil)
 }
 

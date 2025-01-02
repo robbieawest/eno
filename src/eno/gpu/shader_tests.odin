@@ -4,7 +4,12 @@ import dbg "../debug"
 
 import "core:testing"
 import "core:log"
+import "core:fmt"
 
+@(init)
+debug_setup :: proc() {
+    dbg.init_debug_stack()
+}
 
 @(test)
 shader_creation_test :: proc(t: ^testing.T) {
@@ -34,7 +39,6 @@ shader_creation_test :: proc(t: ^testing.T) {
 
 @(test)
 build_shader_source_test :: proc(t: ^testing.T) {
-    dbg.init_debug_stack()
     shader: Shader
     add_layout(&shader,
         { 0, .vec3, "a_position"},
@@ -63,4 +67,11 @@ build_shader_source_test :: proc(t: ^testing.T) {
     log.info(shader_source.source)
 }
 
-// todo write shader read tests
+@(test)
+shader_read_test :: proc(t: ^testing.T) {
+    program, ok := read_shader_source({ Express = true, ShaderLanguage = .GLSL }, "demo_shader")
+
+    testing.expect(t, ok, "ok check")
+    testing.expect(t, program.id != -1)
+    log.infof("%#v", program)
+}

@@ -177,9 +177,9 @@ destroy_shader_source :: proc(source: ^ShaderSource) {
     destroy_shader(&source.shader)
 }
 
-
+// todo This needs to be rethought I think
 ShaderIdentifier :: union {
-    u32,  // Stores program id for OpenGL
+    i32,  // Stores program id for OpenGL
     //VkShaderModule or a pipeline ?
 }
 
@@ -191,6 +191,7 @@ ShaderProgram :: struct {
 
 init_shader_program :: proc(shader_sources: []ShaderSource) -> (program: ShaderProgram){
     dbg.debug_point()
+    program.id = -1
     program.sources = shader_sources
     return program
 }
@@ -387,7 +388,7 @@ express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
             shader_ids[i] = id
         }
 
-        program.id = gl.create_and_link_program(shader_ids[:]) or_return
+        program.id = i32(gl.create_and_link_program(shader_ids[:]) or_return)
         program.expressed = true
     case .VULKAN:
         vulkan_not_supported()
@@ -413,10 +414,10 @@ gl_shader_uniform_update_mat4 :: proc(draw_properties: ^DrawProperties, uniform_
     dbg.debug_point()
 
     tag_cstr := strings.clone_to_cstring(uniform_tag)
-    program_id := program.id.(u32)
+    program_id := program.id.(i32)
 
-    gl.UseProgram(program_id)
-    loc := gl.GetUniformLocation(program_id, tag_cstr)
+    gl.UseProgram(u32(program_id))
+    loc := gl.GetUniformLocation(u32(program_id), tag_cstr)
     if loc == -1 {
         dbg.debug_point(dbg.LogInfo{ msg = "Shader uniform does not exist", level = .ERROR })
         return ok
