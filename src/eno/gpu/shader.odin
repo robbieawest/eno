@@ -12,6 +12,8 @@ import "core:log"
 import "core:fmt"
 import "core:testing"
 import "core:reflect"
+import "core:slice"
+import "core:os"
 
 /*
     File for everything shaders
@@ -435,23 +437,11 @@ gl_shader_uniform_update_mat4 :: proc(draw_properties: ^DrawProperties, uniform_
     A shader source does not need to have a valid serialized Shader instance attached to it, it can be a single whole source as well.
 */
 
-ACCEPTED_SHADER_EXTENSIONS :: enum {
-    vert, frag
-}
+ACCEPTED_SHADER_EXTENSIONS :: []string{ "frag", "vert" }
 
-extension_to_shader_type :: proc{ extension_to_shader_type_e, extension_to_shader_type_s }
 
 @(private)
-extension_to_shader_type_e :: proc(ext: ACCEPTED_SHADER_EXTENSIONS) -> (type: ShaderType) {
-    switch ext {
-    case .vert: type =.VERTEX
-    case .frag: type =.FRAGMENT
-    }
-    return
-}
-
-@(private)
-extension_to_shader_type_s :: proc(ext: string) -> (type: ShaderType) {
+extension_to_shader_type :: proc(ext: string) -> (type: ShaderType) {
     switch ext {
     case "vert": type = .VERTEX
     case "frag": type = .FRAGMENT
@@ -465,6 +455,7 @@ ShaderReadFlag :: enum {
     Express
 }; ShaderReadFlags :: bit_set[ShaderReadFlag]
 */
+
 ShadingLanguage :: enum {
     GLSL,
     HLSL,
@@ -477,40 +468,43 @@ ShaderReadFlags :: bit_field u8 {
     ShaderLanguage: ShadingLanguage | 3
 }
 
-read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (program: ShaderProgram, ok: bool) {
+ShaderReadDirectories := [dynamic]string{ "./", "../shaders/", "../resources/shaders" }
+add_shader_directory :: proc(dir: string) {  // May not be thread safe
+    if !slice.contains(ShaderReadDirectories[:], dir) do append(&ShaderReadDirectories, dir)
+}
+
+read_shader_source :: proc(flags: ShaderReadFlags, filepaths: ..string) -> (program: ShaderProgram, ok: bool) {
+    // Whole thing is pretty sphagetti
 
     source_type_map: map[string]ShaderType
-    for filename in filenames {
+    for filepath in filepaths {
+        error_to_output: utils.FileError
+        last_path: string
 
-        split_filename := strings.split(filename, ".")
-        if len(split_filename) == 2 {
-            if extension, extension_accepted := reflect.enum_from_name(ACCEPTED_SHADER_EXTENSIONS, split_filename[1]); extension_accepted {
-                source, err := utils.read_file_source(filename); handle_file_read_error(filename, err) or_return
-                source_type_map[source] = extension_to_shader_type(extension)
+        directory_loop: for directory in ShaderReadDirectories {
+            filepath_to_check := fmt.aprintf("%s/%s", directory, filepath)
+
+            source, path, type, err := check_shader_filepath(filepath_to_check)
+            if err == utils.FileReadError.None {
+                source_type_map[source] = type
+                error_to_output = err
+                last_path = path
+
+                break directory_loop
             }
             else {
-                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Shader extension not accepted: %s", extension), level = .ERROR })
-            }
-        }
-        else {  // Extension not given
-            accepted_extensions := reflect.enum_field_names(ACCEPTED_SHADER_EXTENSIONS)
-            file_found := false
-            for extension in accepted_extensions {
-                source, err := utils.read_file_source(fmt.aprintf("%s.%s", filename, extension))
-
-                file_read_err, is_file_read_err := err.(utils.FileReadError)
-                if is_file_read_err && file_read_err == .None {
-                    dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Successfully read file. File path: \"%s\"", filename), level = .INFO })
-                    source_type_map[source] = extension_to_shader_type(extension)
-                    file_found = true
-                }
-            }
-
-            if !file_found {
-                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("File could not be found in any linked shader directory. File path: \"%s\"", filename), level = .ERROR})
+                // sphagetti induced via unions :(
+                // it's like a min check for the ordinality of utils.fileReadError to get the most important error
+                if _, ok := err.(mem.Allocator_Error); ok do error_to_output = err
+                else if file_read_err, ok := error_to_output.(utils.FileReadError); ok && file_read_err > err.(utils.FileReadError) do error_to_output = err
             }
         }
 
+        handle_shader_read_error(last_path, error_to_output) or_return
+    }
+    if len(source_type_map) == 0 {
+        dbg.debug_point(dbg.LogInfo{ msg = "Failed to read any shaders", level = .ERROR })
+        return
     }
 
     shader_sources: [dynamic]ShaderSource
@@ -532,8 +526,54 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
     return
 }
 
+@(private = "file")
+check_shader_filepath :: proc(filepath: string) -> (source: string, path: string, shader_type: ShaderType, err: utils.FileError) {
+    filepath := filepath
+    check_extension_validity := false
+    extensions: []string = ACCEPTED_SHADER_EXTENSIONS
+
+    // Handle case where extension is given
+    split_filepath := strings.split(filepath, ".")
+    if len(split_filepath) == 2 {
+        check_extension_validity = true
+        filepath := split_filepath[0]
+        extensions = []string{ split_filepath[1] }
+    }
+
+    log.infof("extensions: %#v", extensions)
+
+    found_filepath: string; found_extension: string
+    file_handle: os.Handle; defer os.close(file_handle)  // Ignore error on defer
+    found_file := false
+
+    for extension in extensions {
+        filepath_to_check := fmt.aprintf("%s.%s", filepath, extension)
+
+        handle, os_path_err := os.open(filepath_to_check);
+        if os_path_err == os.ERROR_NONE {
+            file_handle = handle
+            found_filepath = filepath_to_check
+            found_file = true
+            found_extension = extension
+
+            break
+        }
+    }
+    if !found_file do handle_shader_read_error(filepath, utils.FileReadError.PathDoesNotResolve)
+
+    if check_extension_validity && slice.contains(ACCEPTED_SHADER_EXTENSIONS, found_extension) {
+        dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Shader extension not accepted: %s", found_extension), level = .ERROR })
+        return
+    }
+
+    source, err = utils.read_source_from_handle(file_handle);
+    shader_type = extension_to_shader_type(found_extension)
+    path = found_filepath
+    return
+}
+
 @(private)
-handle_file_read_error :: proc(filepath: string, err: utils.FileError, loc := #caller_location) -> (ok: bool) {
+handle_shader_read_error :: proc(filepath: string, err: utils.FileError, loc := #caller_location) -> (ok: bool) {
     ok = true
 
     switch error in err {

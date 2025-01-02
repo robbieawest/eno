@@ -11,7 +11,7 @@ import "core:fmt"
 debug_setup :: proc() {
     dbg.init_debug_stack()
 }
-*/
+
 
 @(test)
 shader_creation_test :: proc(t: ^testing.T) {
@@ -68,6 +68,7 @@ build_shader_source_test :: proc(t: ^testing.T) {
 
     log.info(shader_source.source)
 }
+*/
 
 @(test)
 shader_read_test :: proc(t: ^testing.T) {

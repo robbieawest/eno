@@ -16,9 +16,9 @@ FileError :: union {
 
 FileReadError :: enum {
     None,
-    PathDoesNotResolve,
-    FileReadError,
     PartialFileReadError,
+    FileReadError,
+    PathDoesNotResolve,
 }
 
 read_lines_from_file :: proc(filepath: string) -> (lines: []string, err: FileError) {
@@ -33,16 +33,49 @@ read_lines_from_file :: proc(filepath: string) -> (lines: []string, err: FileErr
     return lines, FileReadError.None
 }
 
+
+read_lines_from_file_handle :: proc(file: os.Handle) -> (lines: []string, err: FileError) {
+    source: string; source, err = read_source_from_handle(file)
+
+    alloc_err: mem.Allocator_Error; lines, alloc_err = strings.split_lines(source)
+    if alloc_err != mem.Allocator_Error.None {
+        err = alloc_err
+        return
+    }
+
+    return lines, FileReadError.None
+}
+
 read_file_source :: proc(filepath: string) -> (source: string, err: FileError) {
     err = FileReadError.None
 
-    f, os_path_err := os.open(filepath); defer os.close(f)
+    file, os_path_err := os.open(filepath); defer os.close(file)
     if os_path_err != os.ERROR_NONE {
         err = FileReadError.PathDoesNotResolve
         return
     }
 
-    bytes, os_read_err := os.read_entire_file_from_handle_or_err(f); defer delete(bytes)
+    bytes, os_read_err := os.read_entire_file_from_handle_or_err(file); defer delete(bytes)
+    if os_read_err != os.ERROR_NONE {
+        err = FileReadError.FileReadError
+        return
+    }
+
+    builder := strings.builder_make_len(len(bytes)); defer strings.builder_destroy(&builder)
+
+    written_bytes := strings.write_bytes(&builder, bytes)
+    if written_bytes != len(bytes) {
+        err = FileReadError.PartialFileReadError
+    }
+
+    source = strings.to_string(builder)
+    return
+}
+
+read_source_from_handle :: proc(file: os.Handle) -> (source: string, err: FileError) {
+    err = FileReadError.None
+
+    bytes, os_read_err := os.read_entire_file_from_handle_or_err(file); defer delete(bytes)
     if os_read_err != os.ERROR_NONE {
         err = FileReadError.FileReadError
         return
