@@ -475,7 +475,7 @@ ShaderPath :: struct {
 
 read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (program: ShaderProgram, ok: bool) {
     _init_shader_source :: proc(source: string, extension: string, flags: ShaderReadFlags) -> (shader_source: ShaderSource, ok: bool) {
-        shader_source.source = source
+        shader_source.source = string(source)
         shader_source.type = extension_to_shader_type(extension)
         if flags.Parse {
             shader_source.shader = parse_shader_source(source, flags) or_return
@@ -487,6 +487,7 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
     }
 
     shader_sources: [dynamic]ShaderSource
+    defer delete(shader_sources)
 
     for filename in filenames {
         last_ellipse_location := strings.last_index(filename, ".")
@@ -507,11 +508,14 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
             // Extension not given
             file_found := false
             for extension in ACCEPTED_SHADER_EXTENSIONS {
-                source, err := utils.read_file_source(fmt.aprintf("%s.%s", filename, extension))
+                full_path := utils.concat(filename, ".", extension); defer delete(full_path)
+                source, err := utils.read_file_source(full_path); defer delete(source)
+
+                log.infof("source: %#v, err: %#v", source, err)
 
                 file_read_err, is_file_read_err := err.(utils.FileReadError)
                 if is_file_read_err && file_read_err == .None {
-                    dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Successfully read file. File path: \"%s\"", filename), level = .INFO })
+                    dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Successfully read file. File path: \"%s\"", full_path), level = .INFO })
                     append(&shader_sources, _init_shader_source(source, extension, flags) or_return)
                     file_found = true
                 }

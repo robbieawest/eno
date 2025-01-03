@@ -131,7 +131,7 @@ concat :: proc(string_inp: ..string) -> string {
 
     for str in string_inp do strings.write_string(&builder, str)
 
-    return strings.to_string(builder)
+    return string_from_builder(builder)
 }
 
 
@@ -155,7 +155,9 @@ concat_cstr :: proc(string_inp: ..cstring) -> cstring {
 
 
 MAX_KEY_BYTES :: 256
+@(deprecated="Ass procedure, use string_from_builder instead")
 to_string_no_alloc :: proc(b: strings.Builder) -> (result: string, err: mem.Allocator_Error)  {
+    // this literally just redoes core:strings functionality
     err = mem.Allocator_Error.None
     if len(b.buf) > MAX_KEY_BYTES do return "", mem.Allocator_Error.Invalid_Argument
     
@@ -163,4 +165,13 @@ to_string_no_alloc :: proc(b: strings.Builder) -> (result: string, err: mem.Allo
     if num_copied := copy_slice(stack_bytes[:], b.buf[:]); num_copied < len(b.buf) do err = mem.Allocator_Error.Out_Of_Memory
 
     return string(stack_bytes[:]), err
+}
+
+/*
+    To be used when ownership needs to be taken from builder
+    For example a procedure deletes the builder internally and by virtue invalidates the ret string upon strings.to_string(builder)
+    This would be used in such an example
+*/
+string_from_builder :: proc(builder: strings.Builder) -> string {
+    return strings.clone_from_bytes(builder.buf[:])
 }

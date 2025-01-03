@@ -74,7 +74,7 @@ read_source_from_handle :: proc(file: os.Handle) -> (source: string, err: FileEr
         err = FileReadError.PartialFileReadError
     }
 
-    source = strings.to_string(builder)
+    source = strings.clone_from_bytes(builder.buf[:])
     return
 }
 
