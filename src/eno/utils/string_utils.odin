@@ -58,7 +58,6 @@ test_is_bool :: proc(t: ^testing.T) {
 // STRING here is defined as "\"{...}\"", NOT_APPLICABLE is for example "nanvaluehere", the STRING equivalent would be "\"nanvaluehere\""
 StringTypeResult :: enum { NOT_APPLICABLE, TRUE, FALSE, STRING, NEG_INT, POS_INT, NEG_REAL, POS_REAL }
 
-
 is_number :: proc(s: string) -> StringTypeResult {
     if len(s) == 0 do return .NOT_APPLICABLE
     neg := s[0] == '-'
@@ -74,9 +73,8 @@ is_number :: proc(s: string) -> StringTypeResult {
         }
     }
 
-    return real ? neg ? .NEG_REAL : .POS_REAL : neg ? .NEG_INT : .POS_INT
+    return real ? (neg ? .NEG_REAL : .POS_REAL) : neg ? .NEG_INT : .POS_INT
 }
-
 
 @(test)
 is_number_test :: proc(t: ^testing.T) {
@@ -127,11 +125,10 @@ substring_test :: proc(t: ^testing.T) {
 
 concat :: proc(string_inp: ..string) -> string {
     builder := strings.builder_make()
-    defer strings.builder_destroy(&builder)
 
     for str in string_inp do strings.write_string(&builder, str)
 
-    return string_from_builder(builder)
+    return strings.to_string(builder)
 }
 
 
@@ -165,13 +162,4 @@ to_string_no_alloc :: proc(b: strings.Builder) -> (result: string, err: mem.Allo
     if num_copied := copy_slice(stack_bytes[:], b.buf[:]); num_copied < len(b.buf) do err = mem.Allocator_Error.Out_Of_Memory
 
     return string(stack_bytes[:]), err
-}
-
-/*
-    To be used when ownership needs to be taken from builder
-    For example a procedure deletes the builder internally and by virtue invalidates the ret string upon strings.to_string(builder)
-    This would be used in such an example
-*/
-string_from_builder :: proc(builder: strings.Builder) -> string {
-    return strings.clone_from_bytes(builder.buf[:])
 }

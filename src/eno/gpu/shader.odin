@@ -497,7 +497,9 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
             extension := filename[last_ellipse_location:]
 
             if slice.contains(ACCEPTED_SHADER_EXTENSIONS, extension) {
-                source, err := utils.read_file_source(filename); handle_file_read_error(filename, err) or_return
+                source, err := utils.read_file_source(filename); defer delete(source);
+                handle_file_read_error(filename, err) or_return
+
                 append(&shader_sources, _init_shader_source(source, extension, flags) or_return)
             }
             else {
@@ -513,21 +515,28 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
 
                 log.infof("source: %#v, err: %#v", source, err)
 
-                file_read_err, is_file_read_err := err.(utils.FileReadError)
-                if is_file_read_err && file_read_err == .None {
+                if err == .None {
                     dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Successfully read file. File path: \"%s\"", full_path), level = .INFO })
                     append(&shader_sources, _init_shader_source(source, extension, flags) or_return)
                     file_found = true
+                }
+                else if err == .FileReadError {
+                    file_found = true
+                    dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Error occurred while reading the contents of file. Filename: \"%s\"", full_path), level = .ERROR })
                 }
             }
 
             if !file_found {
                 cwd := os.get_current_directory()
                 defer delete(cwd)
-                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("File could not be found from the current directory. File path: \"%s\", Current directory: \"%s\"", filename, cwd), level = .ERROR})
+                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("File could not be found from the current directory. File path: \"%s\", Current directory: \"%s\"", filename, cwd), level = .ERROR })
             }
         }
 
+    }
+
+    if len(shader_sources) == 0 {
+        dbg.debug_point(dbg.LogInfo{ msg = "Failed to read any shader file sources", level = .ERROR })
     }
 
     program = init_shader_program(shader_sources[:])
@@ -540,34 +549,22 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
 }
 
 @(private)
-handle_file_read_error :: proc(filepath: string, err: utils.FileError, loc := #caller_location) -> (ok: bool) {
+handle_file_read_error :: proc(filepath: string, err: utils.FileReadError, loc := #caller_location) -> (ok: bool) {
     ok = true
 
-    switch error in err {
-    case mem.Allocator_Error:
-        dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Allocator error while trying to read file. File path: \"%s\"", filepath)}, loc)
+    message: string; level: dbg.LogLevel = .ERROR
+    switch err {
+    case .PathDoesNotResolve:
+        message = "Could not resolve file path"
         ok = false
-    case utils.FileReadError:
-        message: string; level: dbg.LogLevel = .ERROR
-
-        switch error {
-        case .PathDoesNotResolve:
-            message = "Could not resolve file path"
-            ok = false
-        case .FileReadError:
-            message = "Error while reading contents of file"
-            ok = false
-        case .PartialFileReadError:
-            message = "File could only partially be read"
-            ok = false
-            level = .WARN
-        case .None:
-            message = "Successfully read file"
-            level = .INFO
-        }
-
-        dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("%s. File path: \"%s\"", message, filepath), level = level}, loc)
+    case .FileReadError:
+        message = "Error while reading contents of file"
+        ok = false
+    case .None:
+        message = "Successfully read file"
+        level = .INFO
     }
+    dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("%s. File path: \"%s\"", message, filepath), level = level}, loc)
 
     return
 }

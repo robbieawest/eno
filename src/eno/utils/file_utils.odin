@@ -9,44 +9,39 @@ import "core:log"
 import "core:mem"
 import "core:fmt"
 
-FileError :: union {
-    mem.Allocator_Error,
-    FileReadError
-}
 
 FileReadError :: enum {
     None,
-    PartialFileReadError,
     FileReadError,
     PathDoesNotResolve,
 }
 
-read_lines_from_file :: proc(filepath: string) -> (lines: []string, err: FileError) {
+read_lines_from_file :: proc(filepath: string) -> (lines: []string, err: FileReadError) {
     source: string; source, err = read_file_source(filepath)
 
     alloc_err: mem.Allocator_Error; lines, alloc_err = strings.split_lines(source)
     if alloc_err != mem.Allocator_Error.None {
-        err = alloc_err
+        err = .FileReadError
         return
      }
     
-    return lines, FileReadError.None
+    return lines, .None
 }
 
 
-read_lines_from_file_handle :: proc(file: os.Handle) -> (lines: []string, err: FileError) {
+read_lines_from_file_handle :: proc(file: os.Handle) -> (lines: []string, err: FileReadError) {
     source: string; source, err = read_source_from_handle(file)
 
     alloc_err: mem.Allocator_Error; lines, alloc_err = strings.split_lines(source)
     if alloc_err != mem.Allocator_Error.None {
-        err = alloc_err
+        err = .FileReadError
         return
     }
 
     return lines, FileReadError.None
 }
 
-read_file_source :: proc(filepath: string) -> (source: string, err: FileError) {
+read_file_source :: proc(filepath: string) -> (source: string, err: FileReadError) {
     err = FileReadError.None
 
     file, os_path_err := os.open(filepath); defer os.close(file)
@@ -58,7 +53,7 @@ read_file_source :: proc(filepath: string) -> (source: string, err: FileError) {
     return read_source_from_handle(file)
 }
 
-read_source_from_handle :: proc(file: os.Handle) -> (source: string, err: FileError) {
+read_source_from_handle :: proc(file: os.Handle) -> (source: string, err: FileReadError) {
     err = FileReadError.None
 
     bytes, os_read_err := os.read_entire_file_from_handle_or_err(file); defer delete(bytes)
@@ -67,14 +62,7 @@ read_source_from_handle :: proc(file: os.Handle) -> (source: string, err: FileEr
         return
     }
 
-    builder := strings.builder_make(); defer strings.builder_destroy(&builder)
-
-    written_bytes := strings.write_bytes(&builder, bytes)
-    if written_bytes != len(bytes) {
-        err = FileReadError.PartialFileReadError
-    }
-
-    source = strings.clone_from_bytes(builder.buf[:])
+    source = string(bytes)
     return
 }
 
@@ -84,9 +72,7 @@ read_lines_test :: proc(t: ^testing.T) {
     lines, err := read_lines_from_file("resources/shaders/demo_shader.vert")
     defer delete(lines)
 
-    fileReadError, union_ok := err.(FileReadError)
-    testing.expect(t, union_ok)
-    testing.expect_value(t, FileReadError.None, fileReadError)
+    testing.expect_value(t, FileReadError.None, err)
 
     log.infof("lines: %#s", lines)
 }
@@ -95,9 +81,7 @@ read_lines_test :: proc(t: ^testing.T) {
 read_source_test :: proc(t: ^testing.T) {
     source, err := read_file_source("resources/shaders/demo_shader.frag")
 
-    fileReadError, union_ok := err.(FileReadError)
-    testing.expect(t, union_ok)
-    testing.expect_value(t, FileReadError.None, fileReadError)
+    testing.expect_value(t, FileReadError.None, err)
 
     log.infof("source: %#s", source)
 }

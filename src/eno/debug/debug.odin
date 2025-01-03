@@ -99,13 +99,7 @@ DebugInfo :: struct {
 StackItem :: struct {
     prev: ^StackItem,
     next: ^StackItem,
-    data: ^DebugInfo 
-}
-
-@(private)
-destroy_stack_item :: proc(item: ^StackItem) {
-    free(item.data)
-    free(item)
+    data: DebugInfo
 }
 
 
@@ -117,21 +111,18 @@ DebugStack :: struct {
 }
 
 
-debug_point :: proc { _debug_point_no_log, _debug_point_log }
+debug_point :: proc { debug_point_no_log, debug_point_log }
 
 @(private)
-_debug_point_no_log :: proc(loc := #caller_location) {
-    debug_info := new(DebugInfo)
+debug_point_no_log :: proc(loc := #caller_location) {
+    debug_info: DebugInfo
     debug_info.loc = loc
     push_to_debug_stack(DEBUG_STACK, debug_info)
 }
 
 @(private)
-_debug_point_log :: proc(log_info: LogInfo, loc := #caller_location) {
-    debug_info := new(DebugInfo)
-    debug_info.loc = loc
-    debug_info.log_info = log_info
-    push_to_debug_stack(DEBUG_STACK, debug_info)
+debug_point_log :: proc(log_info: LogInfo, loc := #caller_location) {
+    push_to_debug_stack(DEBUG_STACK, DebugInfo{ loc, log_info })
 
     switch log_info.level {
     case .INFO:
@@ -145,7 +136,7 @@ _debug_point_log :: proc(log_info: LogInfo, loc := #caller_location) {
 
 
 @(private)
-push_to_debug_stack :: proc(stack: ^DebugStack, debug_info: ^DebugInfo) {
+push_to_debug_stack :: proc(stack: ^DebugStack, debug_info: DebugInfo) {
     if (stack == nil) {
         log.warn("Debug stack not initialized", location = debug_info.loc)
         return
@@ -155,7 +146,6 @@ push_to_debug_stack :: proc(stack: ^DebugStack, debug_info: ^DebugInfo) {
         // Remove off of tail
         temp_stack_tail := stack.stack_tail
         stack.stack_tail = stack.stack_tail.next
-        destroy_stack_item(temp_stack_tail)
         stack.curr_items -= 1
     }
 
@@ -180,7 +170,6 @@ pop_from_debug_stack :: proc(stack: ^DebugStack) {
 
     temp_stack_head := stack.stack_head
     stack.stack_head = stack.stack_head.prev
-    destroy_stack_item(temp_stack_head)
     stack.curr_items -= 1
 }
 
@@ -190,25 +179,15 @@ read_last_debug_point :: proc { read_top_debug_stack, read_top_debug_stack_item 
 @(private)
 read_top_debug_stack :: proc(stack: ^DebugStack) -> (debug_info: ^DebugInfo, debug_short_stack: ^StackItem) { // Nullable
     if (stack.stack_head == nil) do return nil, nil
-    return stack.stack_head.data, stack.stack_head.prev
+    return &stack.stack_head.data, stack.stack_head.prev
 }
 
 @(private)
 read_top_debug_stack_item :: proc(stack_item: ^StackItem) -> (debug_info: ^DebugInfo, debug_short_stack: ^StackItem) { // Nullable
     if (stack_item == nil) do return nil, nil
-    return stack_item.data, stack_item.prev
+    return &stack_item.data, stack_item.prev
 }
 
 destroy_debug_stack :: proc() {
-    destroy_debug_stack_inner(DEBUG_STACK.stack_tail)
     free(DEBUG_STACK)
 }
-
-@(private)
-destroy_debug_stack_inner :: proc(item: ^StackItem) {
-    if item == nil do return
-    destroy_debug_stack_inner(item.next)
-    destroy_stack_item(item)
-}
-
-
