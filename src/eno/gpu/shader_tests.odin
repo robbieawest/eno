@@ -6,12 +6,6 @@ import "core:testing"
 import "core:log"
 import "core:fmt"
 
-/*
-@(init)
-debug_setup :: proc() {
-    dbg.init_debug_stack()
-}
-
 
 @(test)
 shader_creation_test :: proc(t: ^testing.T) {
@@ -68,11 +62,11 @@ build_shader_source_test :: proc(t: ^testing.T) {
 
     log.info(shader_source.source)
 }
-*/
+
 
 @(test)
 shader_read_test :: proc(t: ^testing.T) {
-    program, ok := read_shader_source({ ShaderLanguage = .GLSL }, "resources/shaders/demo_shadesadr")
+    program, ok := read_shader_source({ ShaderLanguage = .GLSL }, "resources/shaders/demo_shader")
     defer destroy_shader_program(&program)
 
     testing.expect(t, ok, "ok check")
