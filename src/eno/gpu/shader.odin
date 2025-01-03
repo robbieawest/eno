@@ -474,16 +474,30 @@ ShaderPath :: struct {
 }
 
 read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (program: ShaderProgram, ok: bool) {
-    source_type_map: map[string]ShaderType
+    _init_shader_source :: proc(source: string, extension: string, flags: ShaderReadFlags) -> (shader_source: ShaderSource, ok: bool) {
+        shader_source.source = source
+        shader_source.type = extension_to_shader_type(extension)
+        if flags.Parse {
+            shader_source.shader = parse_shader_source(source, flags) or_return
+            shader_source.is_serialized = true
+        }
+
+        ok = true
+        return
+    }
+
+    shader_sources: [dynamic]ShaderSource
+
     for filename in filenames {
         last_ellipse_location := strings.last_index(filename, ".")
         log.infof("filename: %s, last loc: %d", filename, last_ellipse_location)
         if last_ellipse_location != -1 && !strings.contains(filename[last_ellipse_location:], "/") {
             // Extension given
             extension := filename[last_ellipse_location:]
+
             if slice.contains(ACCEPTED_SHADER_EXTENSIONS, extension) {
                 source, err := utils.read_file_source(filename); handle_file_read_error(filename, err) or_return
-                source_type_map[source] = extension_to_shader_type(extension)
+                append(&shader_sources, _init_shader_source(source, extension, flags) or_return)
             }
             else {
                 dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Shader extension not accepted: %s", extension), level = .ERROR })
@@ -498,7 +512,7 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
                 file_read_err, is_file_read_err := err.(utils.FileReadError)
                 if is_file_read_err && file_read_err == .None {
                     dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Successfully read file. File path: \"%s\"", filename), level = .INFO })
-                    source_type_map[source] = extension_to_shader_type(extension)
+                    append(&shader_sources, _init_shader_source(source, extension, flags) or_return)
                     file_found = true
                 }
             }
@@ -510,16 +524,6 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
             }
         }
 
-    }
-
-    shader_sources: [dynamic]ShaderSource
-    for source, type in source_type_map {
-        shader_source: ShaderSource
-        shader_source.type = type; shader_source.source = source; shader_source.is_serialized = flags.Parse
-
-        if flags.Parse do shader_source.shader = parse_shader_source(source, flags) or_return
-
-        append(&shader_sources, shader_source)
     }
 
     program = init_shader_program(shader_sources[:])

@@ -55,21 +55,7 @@ read_file_source :: proc(filepath: string) -> (source: string, err: FileError) {
         return
     }
 
-    bytes, os_read_err := os.read_entire_file_from_handle_or_err(file); defer delete(bytes)
-    if os_read_err != os.ERROR_NONE {
-        err = FileReadError.FileReadError
-        return
-    }
-
-    builder := strings.builder_make_len(len(bytes)); defer strings.builder_destroy(&builder)
-
-    written_bytes := strings.write_bytes(&builder, bytes)
-    if written_bytes != len(bytes) {
-        err = FileReadError.PartialFileReadError
-    }
-
-    source = strings.to_string(builder)
-    return
+    return read_source_from_handle(file)
 }
 
 read_source_from_handle :: proc(file: os.Handle) -> (source: string, err: FileError) {
@@ -81,7 +67,7 @@ read_source_from_handle :: proc(file: os.Handle) -> (source: string, err: FileEr
         return
     }
 
-    builder := strings.builder_make_len(len(bytes)); defer strings.builder_destroy(&builder)
+    builder := strings.builder_make(); defer strings.builder_destroy(&builder)
 
     written_bytes := strings.write_bytes(&builder, bytes)
     if written_bytes != len(bytes) {
@@ -95,12 +81,23 @@ read_source_from_handle :: proc(file: os.Handle) -> (source: string, err: FileEr
 
 @(test)
 read_lines_test :: proc(t: ^testing.T) {
-    lines, err := read_lines_from_file("resources/jsontest1.txt")
+    lines, err := read_lines_from_file("resources/shaders/demo_shader.vert")
     defer delete(lines)
 
     fileReadError, union_ok := err.(FileReadError)
     testing.expect(t, union_ok)
     testing.expect_value(t, FileReadError.None, fileReadError)
 
-    log.infof("lines: %s", lines)
+    log.infof("lines: %#s", lines)
+}
+
+@(test)
+read_source_test :: proc(t: ^testing.T) {
+    source, err := read_file_source("resources/shaders/demo_shader.frag")
+
+    fileReadError, union_ok := err.(FileReadError)
+    testing.expect(t, union_ok)
+    testing.expect_value(t, FileReadError.None, fileReadError)
+
+    log.infof("source: %#s", source)
 }

@@ -78,6 +78,6 @@ shader_read_test :: proc(t: ^testing.T) {
     testing.expect(t, ok, "ok check")
     testing.expect_value(t, i32(-1), program.id.(i32))
     log.infof("%#v", program)
-    log.infof("%s", program.sources[0].source)
-    log.infof("%s", program.sources[1].source)
+    log.infof("%s, %s", program.sources[0].type, program.sources[0].source)
+    log.infof("%s, %s", program.sources[1].type, program.sources[1].source)
 }
