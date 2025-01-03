@@ -72,10 +72,12 @@ build_shader_source_test :: proc(t: ^testing.T) {
 
 @(test)
 shader_read_test :: proc(t: ^testing.T) {
-    program, ok := read_shader_source({ ShaderLanguage = .GLSL }, "demo_shader")
+    program, ok := read_shader_source({ ShaderLanguage = .GLSL }, "resources/shaders/demo_shader")
     defer destroy_shader_program(&program)
 
     testing.expect(t, ok, "ok check")
     testing.expect_value(t, i32(-1), program.id.(i32))
     log.infof("%#v", program)
+    log.infof("%s", program.sources[0].source)
+    log.infof("%s", program.sources[1].source)
 }

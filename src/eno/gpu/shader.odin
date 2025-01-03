@@ -468,6 +468,103 @@ ShaderReadFlags :: bit_field u8 {
     ShaderLanguage: ShadingLanguage | 3
 }
 
+ShaderPath :: struct {
+    directory: string,
+    filename: string
+}
+
+read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (program: ShaderProgram, ok: bool) {
+    source_type_map: map[string]ShaderType
+    for filename in filenames {
+        last_ellipse_location := strings.last_index(filename, ".")
+        log.infof("filename: %s, last loc: %d", filename, last_ellipse_location)
+        if last_ellipse_location != -1 && !strings.contains(filename[last_ellipse_location:], "/") {
+            // Extension given
+            extension := filename[last_ellipse_location:]
+            if slice.contains(ACCEPTED_SHADER_EXTENSIONS, extension) {
+                source, err := utils.read_file_source(filename); handle_file_read_error(filename, err) or_return
+                source_type_map[source] = extension_to_shader_type(extension)
+            }
+            else {
+                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Shader extension not accepted: %s", extension), level = .ERROR })
+            }
+        }
+        else {
+            // Extension not given
+            file_found := false
+            for extension in ACCEPTED_SHADER_EXTENSIONS {
+                source, err := utils.read_file_source(fmt.aprintf("%s.%s", filename, extension))
+
+                file_read_err, is_file_read_err := err.(utils.FileReadError)
+                if is_file_read_err && file_read_err == .None {
+                    dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Successfully read file. File path: \"%s\"", filename), level = .INFO })
+                    source_type_map[source] = extension_to_shader_type(extension)
+                    file_found = true
+                }
+            }
+
+            if !file_found {
+                cwd := os.get_current_directory()
+                defer delete(cwd)
+                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("File could not be found from the current directory. File path: \"%s\", Current directory: \"%s\"", filename, cwd), level = .ERROR})
+            }
+        }
+
+    }
+
+    shader_sources: [dynamic]ShaderSource
+    for source, type in source_type_map {
+        shader_source: ShaderSource
+        shader_source.type = type; shader_source.source = source; shader_source.is_serialized = flags.Parse
+
+        if flags.Parse do shader_source.shader = parse_shader_source(source, flags) or_return
+
+        append(&shader_sources, shader_source)
+    }
+
+    program = init_shader_program(shader_sources[:])
+    if flags.Express {
+        express_shader(&program)
+    }
+
+    ok = true
+    return
+}
+
+@(private)
+handle_file_read_error :: proc(filepath: string, err: utils.FileError, loc := #caller_location) -> (ok: bool) {
+    ok = true
+
+    switch error in err {
+    case mem.Allocator_Error:
+        dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Allocator error while trying to read file. File path: \"%s\"", filepath)}, loc)
+        ok = false
+    case utils.FileReadError:
+        message: string; level: dbg.LogLevel = .ERROR
+
+        switch error {
+        case .PathDoesNotResolve:
+            message = "Could not resolve file path"
+            ok = false
+        case .FileReadError:
+            message = "Error while reading contents of file"
+            ok = false
+        case .PartialFileReadError:
+            message = "File could only partially be read"
+            ok = false
+            level = .WARN
+        case .None:
+            message = "Successfully read file"
+            level = .INFO
+        }
+
+        dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("%s. File path: \"%s\"", message, filepath), level = level}, loc)
+    }
+
+    return
+}
+
+/* Old
 // Directory must end in a slash
 ShaderReadDirectories := [dynamic]string{ "./", "./shaders/", "./resources/shaders/" }
 add_shader_directory :: proc(dir: string) {  // May not be thread safe
@@ -527,7 +624,7 @@ read_shader_source :: proc(flags: ShaderReadFlags, filepaths: ..string) -> (prog
 
 // needs to return multiple for each extension
 @(private = "file")
-check_shader_filepath :: proc(filepath: string, extension: string) -> (source: string, path: string, shader_type: ShaderType, err: utils.FileError) {
+check_shader_filepath :: proc(filepath: string, extension: string) -> (sources: []string, paths: []string, shader_type: ShaderType, err: utils.FileError) {
     err = utils.FileReadError.None
     filepath := filepath
     check_extension_validity := false
@@ -574,6 +671,7 @@ check_shader_filepath :: proc(filepath: string, extension: string) -> (source: s
     return
 }
 
+
 @(private)
 handle_shader_read_error :: proc(filepath: string, err: utils.FileError, loc := #caller_location) -> (ok: bool) {
     ok = true
@@ -606,3 +704,4 @@ handle_shader_read_error :: proc(filepath: string, err: utils.FileError, loc := 
 
     return
 }
+*/
