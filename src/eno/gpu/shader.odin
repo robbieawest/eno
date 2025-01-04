@@ -5,6 +5,7 @@ import SDL "vendor:sdl2"
 
 import dbg "../debug"
 import "../utils"
+import futils "../file_utils"
 
 import "core:strings"
 import "core:mem"

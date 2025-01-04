@@ -6,10 +6,15 @@ import "core:strings"
 import "core:mem"
 import "core:fmt"
 
+// Utils package must not depend on any other package
+// If certain functionality needs to be dependent on another package, just make another package
+// ^ See file_utils
 
-// Below all deprecated
+// Quite a few of these were made for json conversion, which as a whole is deprecated
+
 
 //type_checking for conversion
+@(deprecated="Used for deprecated package")
 is_string :: proc(s: string) -> bool {
     in_quotes := false
     n_quotes := 0
@@ -36,6 +41,7 @@ test_is_string :: proc(t: ^testing.T) {
 }
 
 
+@(deprecated="Used for deprecated package")
 is_bool :: proc(s: string) -> StringTypeResult {
     s := strings.trim_space(s)
     return s == "true" ? .TRUE : s == "false" ? .FALSE : .NOT_APPLICABLE
@@ -58,6 +64,7 @@ test_is_bool :: proc(t: ^testing.T) {
 // STRING here is defined as "\"{...}\"", NOT_APPLICABLE is for example "nanvaluehere", the STRING equivalent would be "\"nanvaluehere\""
 StringTypeResult :: enum { NOT_APPLICABLE, TRUE, FALSE, STRING, NEG_INT, POS_INT, NEG_REAL, POS_REAL }
 
+@(deprecated="Used for deprecated package")
 is_number :: proc(s: string) -> StringTypeResult {
     if len(s) == 0 do return .NOT_APPLICABLE
     neg := s[0] == '-'
@@ -87,6 +94,7 @@ is_number_test :: proc(t: ^testing.T) {
 }
 
 
+@(deprecated="Used for deprecated package")
 get_string_encoded_type :: proc(s: string) -> StringTypeResult {
     if is_string(s) do return .STRING
     bool_res := is_bool(s)
@@ -109,6 +117,7 @@ string_encoded_type :: proc(t: ^testing.T) {
 
 //useless
 @(private)
+@(deprecated="???????????")
 substring_internal :: proc(s: string, sub_start, sub_end_exclusive: int) -> (result: string) {
     return s[sub_start:sub_end_exclusive]
 }
