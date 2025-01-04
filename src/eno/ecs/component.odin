@@ -103,8 +103,8 @@ components_destroy :: proc(components_data: $T) where
 component_serialize :: proc { component_serialize_untyped, component_serialize_typed }
 
 component_serialize_untyped :: proc(component_data: ComponentDataUntyped, allocator := context.allocator) -> (ret: Component) {
-    log.infof("component data: %#v, type size: %d, type info: %v", component_data, size_of(component_data.type), type_info_of(component_data.type).size)
-    log.infof("mesh: %d, draw comp: %#v", size_of(model.Mesh), type_info_of(gpu.DrawProperties).size)
+    //log.infof("component data: %#v, type size: %d, type info: %v", component_data, size_of(component_data.type), type_info_of(component_data.type).size)
+    //log.infof("mesh: %d, draw comp: %#v", size_of(model.Mesh), type_info_of(gpu.DrawProperties).size)
     ret.data = make([]byte, type_info_of(component_data.type).size)
     ret.label = component_data.label
     ret.type = component_data.type
@@ -116,7 +116,7 @@ component_serialize_untyped :: proc(component_data: ComponentDataUntyped, alloca
         
         // Insert field data into correct space in ret.data
         // Looking at ret.data with field.offset
-        log.infof("field: %#v, field_size: %d", field, field.type.size)
+      //  log.infof("field: %#v, field_size: %d", field, field.type.size)
         mem.copy(&ret.data[field.offset], rawptr(p_Field_data), field.type.size)
     }
     
@@ -186,7 +186,7 @@ component_deserialize_untyped_inner :: proc(component: Component) -> (component_
 component_deserialize_copy_untyped :: proc(component: Component, allocator: mem.Allocator) -> (component_data: ComponentDataUntyped, ok: bool) {
     r_Component_data, err := mem.alloc(size_of(component.type), allocator = allocator)
     if err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogInfo{ msg = "Could not allocate component data in deserialization", level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate component data in deserialization")
         return
     }
 
@@ -226,7 +226,7 @@ component_deserialize_typed :: proc($T: typeid, component: Component) -> (compon
 component_deserialize_copy_typed :: proc($T: typeid, component: Component, allocator := context.allocator) -> (component_data: ComponentData(T), ok: bool) {
     r_Component_data, err := mem.alloc(size_of(T), allocator = allocator)
     if err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogInfo{ msg = "Could not allocate component data in deserialization", level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate component data in deserialization")
         return
     }
 

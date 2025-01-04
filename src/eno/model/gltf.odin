@@ -18,20 +18,20 @@ load_gltf_mesh :: proc(model_name: string) -> (data: ^cgltf.data, result: cgltf.
     defer delete(model_name)
     
     model_path := fmt.caprintf("resources/models/%s/glTF/%s.gltf", model_name, model_name)
-    log.infof("model path: %s", model_path)
+    dbg.debug_point(dbg.LogLevel.INFO, "Reading gltf mesh. Path: \"%s\"", model_path)
 
     data, result = cgltf.parse_file(DEFAULT_OPTIONS, model_path)
 
     if result != .success {
-        log.errorf("%s: .gltf model unable to load - %s", #procedure, result)
+        dbg.debug_point(dbg.LogLevel.ERROR, "Unable to load gltf mesh. Path: \"%s\"", model_path)
         return nil, result
     }
     if result = cgltf.load_buffers(DEFAULT_OPTIONS, data, model_path); result != .success {
-        log.errorf("%s: .gltf unable to load buffers - %s", #procedure, result)
+        dbg.debug_point(dbg.LogLevel.ERROR, "Unable to load default buffers for gltf mesh. Path: \"%s\"", model_path)
         return nil, result
     }
     if result = cgltf.validate(data); result != .success {
-        log.errorf("%s: .gltf unable to validate imported data - %s", #procedure, result)
+        dbg.debug_point(dbg.LogLevel.ERROR, "Unable to validate imported data for gltf mesh. Path: \"%s\"", model_path)
         return nil, result
     }
     
@@ -128,7 +128,7 @@ extract_cgltf_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []Mesh, ok: bool) {
 
     //This is assuming all mesh attributes (aside from indices) have the same count (for each primitive/mesh output)
 
-    log.infof("mesh: \n%#v", mesh)
+    //log.infof("mesh: \n%#v", mesh)
 
     mesh_data := make([dynamic]Mesh, len(mesh.primitives))
     defer delete(mesh_data)
@@ -151,7 +151,7 @@ extract_cgltf_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []Mesh, ok: bool) {
             append(&mesh_ret.layout, attribute_info)
         }
 
-        log.infof("layout: %#v", mesh_ret.layout)
+       // log.infof("layout: %#v", mesh_ret.layout)
 
         // Get float stride - the number of floats needed for each vertex
         float_stride: u32 = 0; for mesh_attribute_info in mesh_ret.layout do float_stride += mesh_attribute_info.float_stride
@@ -164,12 +164,12 @@ extract_cgltf_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []Mesh, ok: bool) {
             //Todo: Consider other datatypes by matching component type of accessor against odin type (maybe just raise error when found)
 
             element_size := mesh_ret.layout[j].float_stride  // Number of floats in current element
-            log.infof("accessor: %#v", _accessor)
+            //log.infof("accessor: %#v", _accessor)
 
             //Validating mesh
             count := _accessor.count
             if element_count_throughout != 0 && count != element_count_throughout {
-                log.errorf("%s: Attributes/accessors of mesh primitive must contain the same count/number of elements", #procedure)
+                dbg.debug_point(dbg.LogLevel.ERROR, "Attributes/accessors of mesh primitive must contain the same count/number of elements")
                 return result, false
             } else if element_count_throughout == 0 {
                 // Initializes vertex data for entire mesh
@@ -185,7 +185,7 @@ extract_cgltf_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []Mesh, ok: bool) {
 
                 read_res: b32 = cgltf.accessor_read_float(_accessor, k, raw_vertex_data, uint(element_size))
                 if read_res == false {
-                    dbg.debug_point(dbg.LogInfo{ msg = "Error while reading float from accessor", level = .ERROR})
+                    dbg.debug_point(dbg.LogLevel.ERROR, "Error while reading float from accessor, received boolean false")
                     return
                 }
 
@@ -214,7 +214,7 @@ extract_index_data_from_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []IndexData,
             raw_index_data: [^]u32 = raw_data(indices.raw_data[k:k+1])
             read_res: b32 = cgltf.accessor_read_uint(_accessor, k, raw_index_data, 1)
             if read_res == false {
-                log.errorf("%s: Error while reading uint(index) from accessor, received boolean false", #procedure)
+                dbg.debug_point(dbg.LogLevel.ERROR, "Error while reading uint(index) from accessor, received boolean false")
                 return result, false
             }
 

@@ -94,7 +94,7 @@ destroy_scene :: proc(scene: ^Scene, allocator := context.allocator, loc := #cal
 scene_get_archetype :: proc(scene: ^Scene, archetype_label: string) -> (archetype: ^Archetype, ok: bool) {
     archetype_index, archetype_exists := scene.archetype_label_match[archetype_label]
     if !archetype_exists {
-    dbg.debug_point(dbg.LogInfo{ msg = "Attempted to retreive archetype from label which does not map to any archetype", level = .ERROR })
+    dbg.debug_point(dbg.LogLevel.ERROR, "Attempted to retreive archetype from label which does not map to any archetype")
         return
     }
 
@@ -122,11 +122,11 @@ archetype_get_component_data_from_column :: proc(archetype: ^Archetype, componen
 
 
 scene_add_archetype :: proc(scene: ^Scene, new_label: string, components_allocator: mem.Allocator, component_infos: ..ComponentInfo) -> (ret: ^Archetype, ok: bool) {
-    dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("New archetype in scene: %s", new_label), level = .INFO})
+    dbg.debug_point(dbg.LogLevel.INFO, "New archetype in scene: %s", new_label)
 
     duplicate_archetype := new_label in scene.archetype_label_match
     if duplicate_archetype {
-        dbg.debug_point(dbg.LogInfo{ msg = "Attempted to create archetype with a duplicate label", level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Attempted to create archetype with a duplicate label")
         return
     }
     
@@ -144,7 +144,7 @@ scene_add_archetype :: proc(scene: ^Scene, new_label: string, components_allocat
     for component_info, i in component_infos {
         duplicate_component := component_info.label in archetype.components_label_match
         if duplicate_component {
-            dbg.debug_point(dbg.LogInfo{ msg = "Attempted to create component with a duplicate label", level = .ERROR })
+            dbg.debug_point(dbg.LogLevel.ERROR, "Attempted to create component with a duplicate label")
             return
         }
 
@@ -182,17 +182,17 @@ scene_add_entities :: proc(scene: ^Scene, archetype_label: string, entity_compon
 archetype_add_entity_checks :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string) -> (ok: bool) {
     duplicate_entity_label := entity_label in archetype.entities
     if duplicate_entity_label {
-        dbg.debug_point(dbg.LogInfo{ msg = "Attempted to create entity with a duplicate label", level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Attempted to create entity with a duplicate label")
         return
     }
 
     if scene.n_Entities == SCENE_MAX_ENTITIES {
-        dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Max entities limit for scene reached: %d", SCENE_MAX_ENTITIES), level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Max entities limit for scene reached: %d", SCENE_MAX_ENTITIES)
         return
     }
     
     if archetype.n_Entities == ARCHETYPE_MAX_ENTITIES {
-        dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Max entities limit for archetype reached: %d", ARCHETYPE_MAX_ENTITIES), level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Max entities limit for archetype reached: %d", ARCHETYPE_MAX_ENTITIES)
         return
     }
 
@@ -204,7 +204,7 @@ archetype_add_entity_checks :: proc(scene: ^Scene, archetype: ^Archetype, entity
 archetype_add_entity_component_data :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, component_data: []byte) -> (ok: bool) {
     archetype_add_entity_checks(scene, archetype, entity_label) or_return
     if u32(len(component_data)) != archetype.component_info.total_size_per_entity {
-        dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Component data size mismatch when adding entity", ARCHETYPE_MAX_ENTITIES), level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Component data size mismatch when adding entity", ARCHETYPE_MAX_ENTITIES)
         return
     }
 
@@ -229,7 +229,7 @@ archetype_add_entity_component_data :: proc(scene: ^Scene, archetype: ^Archetype
 
 
 archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, component_data: ..ComponentDataUntyped) -> (ok: bool) {
-    dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Adding archetype entity: %s", entity_label), level = .INFO})
+    dbg.debug_point(dbg.LogLevel.INFO, "Adding archetype entity: %s", entity_label)
     archetype_add_entity_checks(scene, archetype, entity_label) or_return
 
     entity: Entity
@@ -243,7 +243,7 @@ archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label:
     for data in component_data {
         comp_index, component_exists := archetype.components_label_match[data.label]
         if !component_exists {
-            dbg.debug_point(dbg.LogInfo{ msg = "Component could not be found", level = .ERROR})
+            dbg.debug_point(dbg.LogLevel.ERROR, "Component could not be found")
             return
         }
         

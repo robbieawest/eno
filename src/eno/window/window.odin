@@ -24,7 +24,6 @@ WINDOW_HEIGHT: i32 = 720
 GLFW_ERROR_CALLBACK :: proc "c" (error: i32, description: cstring) {
     context = runtime.default_context()
     context.logger = log.create_console_logger()
-    fmt.print("\nglfw error\n")
     log.errorf("GLFW error raised : %d : %s", error, description)
 }
 
@@ -60,7 +59,7 @@ initialize_window: init_win_ = SDL_init_window
 @(private)
 SDL_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..i32) -> (ret_win: WindowTarget, ok: bool) {
     dbg.init_debug_stack()
-    dbg.debug_point( dbg.LogInfo{ msg = "INIT DEBUG STACK", level = .INFO} )
+    dbg.debug_point(dbg.LogLevel.INFO, "Initializing SDL window")
 
     window: ^SDL.Window
     c_window_tag := strings.clone_to_cstring(window_tag)
@@ -113,12 +112,12 @@ SDL_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..
 
 GLFW_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..i32) -> (ret_win: WindowTarget, ok: bool) {
     dbg.init_debug_stack()
-    dbg.debug_point( dbg.LogInfo{ msg = "INIT DEBUG STACK", level = .INFO} )
+    dbg.debug_point(dbg.LogLevel.INFO, "Initializing GLFW window")
 
     window_tag_cstr := strings.clone_to_cstring(window_tag)
     window: glfw.WindowHandle = glfw.CreateWindow(width, height, window_tag_cstr, nil, nil)
     if window == nil {
-        log.errorf("Failed to initialize GLFW window")
+        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to initialize GLFW window")
         return window, ok
     }
 
@@ -132,6 +131,11 @@ GLFW_init_window :: proc(width, height: i32, window_tag: string, extra_params: .
         glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR,4) 
         glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR,6)
         glfw.WindowHint(glfw.OPENGL_PROFILE,glfw.OPENGL_CORE_PROFILE)
+
+        if dbg.DEBUG_MODE == .DEBUG {
+            gl.Enable(gl.DEBUG_OUTPUT)
+            gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
+        }
         gl.DebugMessageCallback(dbg.GL_DEBUG_CALLBACK, nil)
     }
     
@@ -144,13 +148,13 @@ destroy_window: destroy_window_  = SDL_destroy_window
 
 @(private)
 SDL_destroy_window :: proc(target: WindowTarget) {
-    dbg.debug_point( dbg.LogInfo{ msg = "DESTROYING WINDOW", level = .INFO })
+    dbg.debug_point(dbg.LogLevel.INFO, "Destroying SDL window")
     SDL.DestroyWindow(target.(^SDL.Window))
 }
 
 @(private)
 GLFW_destroy_window :: proc(target: WindowTarget) {
-    dbg.debug_point( dbg.LogInfo{ msg = "DESTROYING WINDOW", level = .INFO })
+    dbg.debug_point(dbg.LogLevel.INFO, "Destroying GLFW window")
     glfw.DestroyWindow(target.(glfw.WindowHandle))
 }
 

@@ -116,9 +116,9 @@ express_mesh_vertices: express_mesh_vertices_ = gl_express_mesh_vertices
 
 @(private)
 gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: ^GPUComponent) -> (ok: bool) {
-    dbg.debug_point(dbg.LogInfo{ msg = "Expressing gl mesh vertices", level = .INFO})
+    dbg.debug_point(dbg.LogLevel.INFO, "Expressing gl mesh vertices")
     if len(mesh.vertex_data) == 0 {
-        dbg.debug_point(dbg.LogInfo{ msg = "No vertices given to express", level = .ERROR });
+        dbg.debug_point(dbg.LogLevel.ERROR, "No vertices given to express");
         return
     }
 
@@ -158,7 +158,7 @@ express_indices: express_indices_ = gl_express_indices
 
 @(private)
 gl_express_indices :: proc(index_data: ^model.IndexData, component: ^GPUComponent) -> (ok: bool){
-    dbg.debug_point(dbg.LogInfo{ msg = "Expressing gl mesh indices", level = .INFO})
+    dbg.debug_point(dbg.LogLevel.INFO, "Expressing gl mesh indices")
     gl_component := &component.(gl_GPUComponent)
 
     if gl_component.expressed_ind do return true
@@ -186,4 +186,4 @@ gl_draw_elements :: proc(draw_properties: ^DrawProperties) {
 }
 
 
-vulkan_not_supported :: proc(location := #caller_location) { dbg.debug_point(dbg.LogInfo{ msg = "Vulkan not supported", level = .ERROR }, location) }
+vulkan_not_supported :: proc(loc := #caller_location) { dbg.debug_point(dbg.LogLevel.ERROR, "Vulkan not supported", loc = loc) }

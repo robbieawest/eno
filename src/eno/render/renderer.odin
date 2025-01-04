@@ -2,7 +2,6 @@ package render
 
 import "../ecs"
 import "../gpu"
-import "../shader"
 import dbg "../debug"
 import win "../window"
 import "../model"
@@ -16,6 +15,7 @@ import "core:log"
 draw_indexed_entities :: proc{ draw_indexed_entities_noarch, draw_indexed_entities_arch }
 
 draw_indexed_entities_arch :: proc(archetype: ^ecs.Archetype, entity_labels: ..string) -> (ok: bool) {
+    dbg.debug_point()
     draw_properties_ret: []ecs.ComponentData(gpu.DrawProperties) = ecs.query_component_from_archetype(archetype, "draw_properties", gpu.DrawProperties) or_return
 
     for draw_properties_comp in draw_properties_ret {
@@ -28,11 +28,13 @@ draw_indexed_entities_arch :: proc(archetype: ^ecs.Archetype, entity_labels: ..s
 }
 
 draw_indexed_entities_noarch :: proc(scene: ^ecs.Scene, archetype_label: string, entity_labels: ..string) -> (ok: bool) {
+    dbg.debug_point()
     archetype: ^ecs.Archetype = ecs.scene_get_archetype(scene, archetype_label) or_return
     return draw_indexed_entities_arch(archetype, ..entity_labels)
 }
 
-/*
+
+/* All not used
 render_all_from_scene :: proc(game_scene: ^ecs.Scene) -> (ok: bool) {
     archetype_query := ecs.ArchetypeQuery{ entities = []string{}, components = []ecs.ComponentQuery{ { label = "draw_properties", type = gpu.DrawProperties }}}
     for &archetype in game_scene.archetypes {

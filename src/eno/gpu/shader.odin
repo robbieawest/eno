@@ -89,7 +89,7 @@ destroy_shader :: proc(shader: ^Shader) {
 add_layout :: proc(shader: ^Shader, layout: ..ShaderLayout) -> (ok: bool) {
     n, err := append_elems(&shader.layout, ..layout)
     if n != len(layout) || err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogInfo{ msg = "Failed to allocate shader layout", level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader layout")
         return
     }
 
@@ -100,7 +100,7 @@ add_layout :: proc(shader: ^Shader, layout: ..ShaderLayout) -> (ok: bool) {
 add_input :: proc(shader: ^Shader, input: ..ShaderInput) -> (ok: bool) {
     n, err := append_elems(&shader.input, ..input)
     if n != len(input) || err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogInfo{ msg = "Failed to allocate shader input", level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader input")
         return
     }
 
@@ -111,7 +111,7 @@ add_input :: proc(shader: ^Shader, input: ..ShaderInput) -> (ok: bool) {
 add_output :: proc(shader: ^Shader, output: ..ShaderOutput) -> (ok: bool) {
     n, err := append_elems(&shader.output, ..output)
     if n != len(output) || err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogInfo{ msg = "Failed to allocate shader output", level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader output")
         return
     }
 
@@ -122,7 +122,7 @@ add_output :: proc(shader: ^Shader, output: ..ShaderOutput) -> (ok: bool) {
 add_uniforms :: proc(shader: ^Shader, uniforms: ..ShaderUniform) -> (ok: bool) {
     n, err := append_elems(&shader.uniforms, ..uniforms)
     if n != len(uniforms) || err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogInfo{ msg = "Failed to allocate shader uniforms", level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader uniforms")
         return
     }
 
@@ -133,7 +133,7 @@ add_uniforms :: proc(shader: ^Shader, uniforms: ..ShaderUniform) -> (ok: bool) {
 add_structs :: proc(shader: ^Shader, structs: ..ShaderStruct) -> (ok: bool) {
     n, err := append_elems(&shader.structs, ..structs)
     if n != len(structs) || err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogInfo{ msg = "Failed to allocate shader structs", level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader structs")
         return
     }
 
@@ -144,7 +144,7 @@ add_structs :: proc(shader: ^Shader, structs: ..ShaderStruct) -> (ok: bool) {
 add_functions :: proc(shader: ^Shader, functions: ..ShaderFunction) -> (ok: bool) {
     n, err := append_elems(&shader.functions, ..functions)
     if n != len(functions) || err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogInfo{ msg = "Failed to allocate shader functions", level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader functions")
         return
     }
 
@@ -235,10 +235,10 @@ conv_gl_shader_type :: proc(type: ShaderType) -> gl.Shader_Type {  // Likely cou
     Todo: Control for versioning
 */
 build_shader_source :: proc(shader: Shader, type: ShaderType) -> (source: ShaderSource, ok: bool) {
-    dbg.debug_point(dbg.LogInfo{ msg = "BUILDING SHADER SOURCE", level = .INFO })
+    dbg.debug_point(dbg.LogLevel.INFO, "BUILDING SHADER SOURCE")
 
     builder, err := strings.builder_make(); if err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogInfo{ msg = "Allocator error while building shader source", level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Allocator error while building shader source")
         return source, ok
     }
     defer strings.builder_destroy(&builder)
@@ -349,14 +349,14 @@ extended_glsl_type_to_string :: proc(type: ExtendedGLSLType, caller_location := 
     if type_is_glsl {
         result, type_is_glsl = reflect.enum_name_from_value(glsl_type)
         if !type_is_glsl {
-            dbg.debug_point(dbg.LogInfo{ msg = "GLSL type is not valid", level = .ERROR })
+            dbg.debug_point(dbg.LogLevel.ERROR, "GLSL type is not valid")
             return "*INVALID TYPE*"
         }
 
         return result
     }
     else {
-        dbg.debug_point(dbg.LogInfo{ msg = "GLSL type given as nil", level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "GLSL type given as nil")
         return "*INVALID TYPE*"
     }
 
@@ -368,7 +368,7 @@ extended_glsl_type_to_string :: proc(type: ExtendedGLSLType, caller_location := 
 // shader gpu control - uniforms, expressing, etc.
 
 express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
-    dbg.debug_point(dbg.LogInfo{ msg = "Expressing Shader", level = .INFO })
+    dbg.debug_point(dbg.LogLevel.INFO, "Expressing Shader")
 
     if RENDER_API == .VULKAN {
         vulkan_not_supported()
@@ -385,7 +385,7 @@ express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
             dbg.debug_point()
             id, compile_ok := gl.compile_shader_from_source(shader_source.source, conv_gl_shader_type(shader_source.type))
             if !compile_ok {
-                dbg.debug_point(dbg.LogInfo{msg = fmt.aprintf("Could not compile shader source: %s", shader_source.source), level = .ERROR})
+                dbg.debug_point(dbg.LogLevel.ERROR, "Could not compile shader source: %s", shader_source.source)
                 return ok
             }
             shader_ids[i] = id
@@ -411,7 +411,7 @@ gl_shader_uniform_update_mat4 :: proc(draw_properties: ^DrawProperties, uniform_
     program: ^ShaderProgram = &gpu_comp.program
 
     if !program.expressed {
-        dbg.debug_point(dbg.LogInfo{ msg = "Shader not yet expressed", level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Shader not yet expressed")
         return ok
     }
     dbg.debug_point()
@@ -422,7 +422,7 @@ gl_shader_uniform_update_mat4 :: proc(draw_properties: ^DrawProperties, uniform_
     gl.UseProgram(u32(program_id))
     loc := gl.GetUniformLocation(u32(program_id), tag_cstr)
     if loc == -1 {
-        dbg.debug_point(dbg.LogInfo{ msg = "Shader uniform does not exist", level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Shader uniform does not exist")
         return ok
     }
     gl.UniformMatrix4fv(loc, 1, false, mat)
@@ -498,13 +498,13 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
             extension := filename[last_ellipse_location:]
 
             if slice.contains(ACCEPTED_SHADER_EXTENSIONS, extension) {
-                source, err := utils.read_file_source(filename); defer delete(source);
+                source, err := futils.read_file_source(filename); defer delete(source);
                 handle_file_read_error(filename, err) or_return
 
                 append(&shader_sources, _init_shader_source(source, extension, flags) or_return)
             }
             else {
-                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Shader extension not accepted: %s", extension), level = .ERROR })
+                dbg.debug_point(dbg.LogLevel.ERROR, "Shader extension not accepted: %s", extension)
             }
         }
         else {
@@ -512,32 +512,32 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
             file_found := false
             for extension in ACCEPTED_SHADER_EXTENSIONS {
                 full_path := utils.concat(filename, ".", extension); defer delete(full_path)
-                source, err := utils.read_file_source(full_path); defer delete(source)
+                source, err := futils.read_file_source(full_path); defer delete(source)
 
                 log.infof("source: %#v, err: %#v", source, err)
 
                 if err == .None {
-                    dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Successfully read file. File path: \"%s\"", full_path), level = .INFO })
+                    dbg.debug_point(dbg.LogLevel.INFO, "Successfully read file. File path: \"%s\"", full_path)
                     append(&shader_sources, _init_shader_source(source, extension, flags) or_return)
                     file_found = true
                 }
                 else if err == .FileReadError {
                     file_found = true
-                    dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Error occurred while reading the contents of file. Filename: \"%s\"", full_path), level = .ERROR })
+                    dbg.debug_point(dbg.LogLevel.ERROR, "Error occurred while reading the contents of file. Filename: \"%s\"", full_path)
                 }
             }
 
             if !file_found {
                 cwd := os.get_current_directory()
                 defer delete(cwd)
-                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("File could not be found from the current directory. File path: \"%s\", Current directory: \"%s\"", filename, cwd), level = .ERROR })
+                dbg.debug_point(dbg.LogLevel.ERROR, "File could not be found from the current directory. File path: \"%s\", Current directory: \"%s\"", filename, cwd)
             }
         }
 
     }
 
     if len(shader_sources) == 0 {
-        dbg.debug_point(dbg.LogInfo{ msg = "Failed to read any shader file sources", level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to read any shader file sources")
     }
 
     program = init_shader_program(shader_sources[:])
@@ -550,7 +550,7 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
 }
 
 @(private)
-handle_file_read_error :: proc(filepath: string, err: utils.FileReadError, loc := #caller_location) -> (ok: bool) {
+handle_file_read_error :: proc(filepath: string, err: futils.FileReadError, loc := #caller_location) -> (ok: bool) {
     ok = true
 
     message: string; level: dbg.LogLevel = .ERROR
@@ -565,7 +565,7 @@ handle_file_read_error :: proc(filepath: string, err: utils.FileReadError, loc :
         message = "Successfully read file"
         level = .INFO
     }
-    dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("%s. File path: \"%s\"", message, filepath), level = level}, loc)
+    dbg.debug_point(level, "%s. File path: \"%s\"", message, filepath, loc = loc)
 
     return
 }

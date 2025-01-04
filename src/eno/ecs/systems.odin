@@ -38,7 +38,7 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
     for entity_label in query.entities {
         entity, entity_found := archetype.entities[entity_label]
         if !entity_found {
-            dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Entity not found when querying: %s", entity_label), level = .ERROR })
+            dbg.debug_point(dbg.LogLevel.ERROR, "Entity not found when querying: %s", entity_label)
             return
         }
         append(&entities_to_query, &entity)
@@ -48,7 +48,7 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
     for component_query in query.components {
         comp_index, component_found := archetype.components_label_match[component_query.label]
         if !component_found {
-            dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Component not found when querying: %s", component_query.label), level = .ERROR })
+            dbg.debug_point(dbg.LogLevel.ERROR, "Component not found when querying: %s", component_query.label)
             return
         }
 
@@ -76,7 +76,7 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
 */
 query_component_from_archetype :: proc(archetype: ^Archetype, component_label: string, $T: typeid, entity_labels: ..string) -> (ret: []ComponentData(T), ok: bool) #optional_ok {
     if !(component_label in archetype.components_label_match) {
-        dbg.debug_point(dbg.LogInfo { msg = fmt.aprintf("Component does not exist: %s", component_label), level = .ERROR })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Component does not exist: %s", component_label)
         return
     }
 
@@ -95,10 +95,7 @@ query_component_from_archetype_unchecked :: proc(archetype: ^Archetype, componen
     component_info := archetype.component_info.component_infos[component_index]
 
     if T != component_info.type {
-        dbg.debug_point(dbg.LogInfo {
-            msg = fmt.aprintf("Type mismatch with component: %s. Expected type: %v, got: %v", component_label, component_info.type, typeid_of(T)),
-            level = .ERROR
-        })
+        dbg.debug_point(dbg.LogLevel.ERROR, "Type mismatch with component: %s. Expected type: %v, got: %v", component_label, component_info.type, typeid_of(T))
         return
     }
 
@@ -115,7 +112,7 @@ query_component_from_archetype_unchecked :: proc(archetype: ^Archetype, componen
         for entity_label in entity_labels {
             entity, entity_exists := archetype.entities[entity_label]
             if !entity_exists {
-                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Entity does not exist: %s", entity_label), level = .ERROR })
+                dbg.debug_point(dbg.LogLevel.ERROR, "Entity does not exist: %s", entity_label)
                 return
             }
 
@@ -152,7 +149,7 @@ act_on_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, action: A
         for entity_label in query.entities {
             entity, entity_found := archetype.entities[entity_label]
             if !entity_found {
-                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Entity not found when querying: %s", entity_label), level = .ERROR })
+                dbg.debug_point(dbg.LogLevel.ERROR, "Entity not found when querying: %s", entity_label)
                 return
             }
             append(&entities_to_query, &entity)
@@ -168,7 +165,7 @@ act_on_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, action: A
         for component_query in query.components {
             comp_index, component_found := archetype.components_label_match[component_query.label]
             if !component_found {
-                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Component not found when querying: %s", component_query.label), level = .ERROR })
+                dbg.debug_point(dbg.LogLevel.ERROR, "Component not found when querying: %s", component_query.label)
                 return
             }
 
@@ -185,7 +182,7 @@ act_on_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, action: A
     }
 
     if !ok {
-        dbg.debug_point(dbg.LogInfo{ msg = "An action was not able to be completed", level = .ERROR})
+        dbg.debug_point(dbg.LogLevel.ERROR, "An action was not able to be completed")
     }
 
     ok = true
@@ -219,7 +216,7 @@ act_on_archetype_multiple :: proc(archetype: ^Archetype, query: ArchetypeQuery, 
         for entity_label in query.entities {
             entity, entity_found := archetype.entities[entity_label]
             if !entity_found {
-                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Entity not found when querying: %s", entity_label), level = .ERROR })
+                dbg.debug_point(dbg.LogLevel.ERROR, "Entity not found when querying: %s", entity_label)
                 return
             }
             append(&entities_to_query, &entity)
@@ -239,7 +236,7 @@ act_on_archetype_multiple :: proc(archetype: ^Archetype, query: ArchetypeQuery, 
         for component_query, i in query.components {
             comp_index, component_found := archetype.components_label_match[component_query.label]
             if !component_found {
-                dbg.debug_point(dbg.LogInfo{ msg = fmt.aprintf("Component not found when querying: %s", component_query.label), level = .ERROR })
+                dbg.debug_point(dbg.LogLevel.ERROR, "Component not found when querying: %s", component_query.label)
                 return
             }
             
@@ -257,7 +254,7 @@ act_on_archetype_multiple :: proc(archetype: ^Archetype, query: ArchetypeQuery, 
 
     ok = multi_act_for_entities(archetype, entities_to_query, component_indices[:], action)
     if !ok {
-        dbg.debug_point(dbg.LogInfo{ msg = "The multi action was not able to be completed", level = .ERROR})
+        dbg.debug_point(dbg.LogLevel.ERROR, "The multi action was not able to be completed")
     }
 
     ok = true
