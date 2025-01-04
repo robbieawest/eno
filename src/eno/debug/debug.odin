@@ -13,6 +13,30 @@ import "core:reflect"
 import "base:runtime"
 
 
+DebugMode :: enum {
+    RELEASE, DEBUG
+}
+DEBUG_MODE: DebugMode = .DEBUG
+
+ENABLE_DEBUG :: proc() {
+    DEBUG_MODE = .DEBUG
+    debug_point_log = d_Debug_point_log
+    debug_point_no_log = d_Debug_point_no_log
+
+    gl.Enable(gl.DEBUG_OUTPUT)
+    gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
+}
+
+ENABLE_RELEASE :: proc() {
+    DEBUG_MODE = .RELEASE
+    debug_point_log = r_Debug_point_log
+    debug_point_no_log = r_Debug_point_no_log
+
+    gl.Disable(gl.DEBUG_OUTPUT)
+    gl.Disable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
+}
+
+
 // Options for debugging
 DebugFlags :: bit_field u32 {  // Extend if needed
     DISPLAY_INFO: bool                                  | 1,
@@ -208,12 +232,26 @@ destroy_debug_stack :: proc() {
 debug_point :: proc { debug_point_no_log, debug_point_log }
 
 @(private)
-debug_point_no_log :: proc(debug_flags := DEBUG_FLAGS, loc := #caller_location) {
+p_Debug_point_no_log :: #type proc(debug_flags := DEBUG_FLAGS, loc := #caller_location)
+debug_point_no_log: p_Debug_point_no_log = DEBUG_MODE == .RELEASE ? r_Debug_point_no_log : d_Debug_point_no_log
+
+r_Debug_point_no_log :: proc(debug_flags := DEBUG_FLAGS, loc := #caller_location) {
+    // Do nothing
+}
+
+d_Debug_point_no_log :: proc(debug_flags := DEBUG_FLAGS, loc := #caller_location) {
     if debug_flags.PUSH_LOGS_TO_DEBUG_STACK do push_to_debug_stack({ " ** Debug Marker ** ", .INFO}, loc = loc)
 }
 
 @(private)
-debug_point_log :: proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, debug_flags := DEBUG_FLAGS, loc := #caller_location) {
+p_Debug_point_log :: #type proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, debug_flags := DEBUG_FLAGS, loc := #caller_location)
+debug_point_log: p_Debug_point_log = DEBUG_MODE == .RELEASE ? r_Debug_point_log : d_Debug_point_log
+
+r_Debug_point_log :: proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, debug_flags := DEBUG_FLAGS, loc := #caller_location) {
+    // Do nothing
+}
+
+d_Debug_point_log :: proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, debug_flags := DEBUG_FLAGS, loc := #caller_location) {
     out_msg := len(fmt_args) == 0 ? fmt_msg : fmt.aprintf(fmt_msg, fmt_args)
 
     switch level {

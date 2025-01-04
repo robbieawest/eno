@@ -100,8 +100,11 @@ SDL_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..
         _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_FLAGS, i32(SDL.GLcontextFlag.DEBUG_FLAG))
         if _attr_ret != 0 do log.errorf("Could not set certain SDL parameters for OpenGL")
 
-        gl.Enable(gl.DEBUG_OUTPUT)
-        gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
+
+        if dbg.DEBUG_MODE == .DEBUG {
+            gl.Enable(gl.DEBUG_OUTPUT)
+            gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
+        }
         gl.DebugMessageCallback(dbg.GL_DEBUG_CALLBACK, nil)
     }
 
