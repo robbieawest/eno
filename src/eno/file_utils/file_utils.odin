@@ -56,7 +56,7 @@ read_file_source :: proc(filepath: string) -> (source: string, err: FileReadErro
 read_source_from_handle :: proc(file: os.Handle) -> (source: string, err: FileReadError) {
     err = FileReadError.None
 
-    bytes, os_read_err := os.read_entire_file_from_handle_or_err(file); defer delete(bytes)
+    bytes, os_read_err := os.read_entire_file_from_handle_or_err(file);
     if os_read_err != os.ERROR_NONE {
         err = FileReadError.FileReadError
         return

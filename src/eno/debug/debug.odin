@@ -252,7 +252,7 @@ r_Debug_point_log :: proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, deb
 }
 
 d_Debug_point_log :: proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, debug_flags := DEBUG_FLAGS, loc := #caller_location) {
-    out_msg := len(fmt_args) == 0 ? fmt_msg : fmt.aprintf(fmt_msg, fmt_args)
+    out_msg := len(fmt_args) == 0 ? fmt_msg : fmt.aprintf(fmt_msg, ..fmt_args)
 
     switch level {
     case .INFO:

@@ -479,7 +479,7 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
         shader_source.source = string(source)
         shader_source.type = extension_to_shader_type(extension)
         if flags.Parse {
-            shader_source.shader = parse_shader_source(source, flags) or_return
+            shader_source.shader = parse_shader_source(shader_source.source, flags) or_return
             shader_source.is_serialized = true
         }
 
@@ -492,7 +492,6 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
 
     for filename in filenames {
         last_ellipse_location := strings.last_index(filename, ".")
-        log.infof("filename: %s, last loc: %d", filename, last_ellipse_location)
         if last_ellipse_location != -1 && !strings.contains(filename[last_ellipse_location:], "/") {
             // Extension given
             extension := filename[last_ellipse_location:]
@@ -514,7 +513,6 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
                 full_path := utils.concat(filename, ".", extension); defer delete(full_path)
                 source, err := futils.read_file_source(full_path); defer delete(source)
 
-                log.infof("source: %#v, err: %#v", source, err)
 
                 if err == .None {
                     dbg.debug_point(dbg.LogLevel.INFO, "Successfully read file. File path: \"%s\"", full_path)
