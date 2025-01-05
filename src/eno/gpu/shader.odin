@@ -371,7 +371,7 @@ extended_glsl_type_to_string :: proc(type: ExtendedGLSLType, caller_location := 
 // shader gpu control - uniforms, expressing, etc.
 
 express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
-    dbg.debug_point(dbg.LogLevel.INFO, "Expressing Shader %#v", program)
+    dbg.debug_point(dbg.LogLevel.INFO, "Expressing shader")
 
     if RENDER_API == .VULKAN {
         vulkan_not_supported()
@@ -385,7 +385,7 @@ express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
         defer delete(shader_ids)
 
         for shader_source, i in program.sources {
-            dbg.debug_point()
+            dbg.debug_point(dbg.LogLevel.INFO, "Expressing source")
             log.infof("compiling source: %#s", shader_source.source)
             id, compile_ok := gl.compile_shader_from_source(shader_source.source, conv_gl_shader_type(shader_source.type))
             if !compile_ok {

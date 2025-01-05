@@ -4,6 +4,7 @@ import SDL "vendor:sdl2"
 
 import ecs "../ecs"
 import win "../window"
+import dbg "../debug"
 
 import "core:log"
 import "core:os"
@@ -74,6 +75,7 @@ init_game_default_scene :: proc(window: win.WindowTarget, every_frame: frame_loo
 destroy_game :: proc() {
     win.destroy_window(Game.window)
     ecs.destroy_scene(Game.scene)
+    dbg.destroy_debug_stack()
 }
 
 // Events

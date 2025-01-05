@@ -18,6 +18,7 @@ DebugMode :: enum {
 }
 DEBUG_MODE: DebugMode = .DEBUG
 
+// Creates debug stack if nil
 ENABLE_DEBUG :: proc() {
     DEBUG_MODE = .DEBUG
     debug_point_log = d_Debug_point_log
@@ -27,6 +28,7 @@ ENABLE_DEBUG :: proc() {
     gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
 }
 
+// Clears debug stack
 ENABLE_RELEASE :: proc() {
     DEBUG_MODE = .RELEASE
     debug_point_log = r_Debug_point_log
@@ -34,6 +36,7 @@ ENABLE_RELEASE :: proc() {
 
     gl.Disable(gl.DEBUG_OUTPUT)
     gl.Disable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
+    destroy_debug_stack()
 }
 
 
@@ -60,7 +63,7 @@ DebugFlags :: bit_field u32 {  // Extend if needed
 // ^ This enables error panicking
 DEBUG_FLAGS := DebugFlags{
     DISPLAY_INFO = true, DISPLAY_WARNING = true, DISPLAY_ERROR = true, DISPLAY_DEBUG_STACK_UNINITIALIZED = true,
-    DISPLAY_DEBUG_STACK = true, DEBUG_STACK_HEAD_SIZE = 3, DISPLAY_DEBUG_STACK_SMALLER_THAN_HEAD_SIZE = true,
+    DISPLAY_DEBUG_STACK = true, DEBUG_STACK_HEAD_SIZE = 6, DISPLAY_DEBUG_STACK_SMALLER_THAN_HEAD_SIZE = true,
     PUSH_LOGS_TO_DEBUG_STACK = true, PUSH_INFOS_TO_DEBUG_STACK = true, PUSH_WARNINGS_TO_DEBUG_STACK = true,
     PUSH_ERRORS_TO_DEBUG_STACK = true, PUSH_GL_LOG_TO_DEBUG_STACK = true
 }
@@ -94,10 +97,11 @@ GL_DEBUG_CALLBACK :: proc "c" (source: u32, type: u32, id: u32, severity: u32, l
         i: u8
         for i = 0; i < DEBUG_FLAGS.DEBUG_STACK_HEAD_SIZE && debug_stack_head != nil; i += 1 {
             debug_info, debug_stack_head = read_last_debug_point(debug_stack_head)
+            level, ok := reflect.enum_name_from_value(debug_info.log_info.level); if !ok do return
             fmt.sbprintfln(&builder,
                 "Debug point >> %s '%s' %s:%s:%d:%d",
 
-                reflect.enum_name_from_value(debug_info.log_info.level),
+                level,
                 debug_info.log_info.msg,
                 parse_debug_source_path(debug_info.loc.file_path),
                 debug_info.loc.procedure,
@@ -149,11 +153,28 @@ DebugInfo :: struct {
     log_info: LogInfo
 }
 
+/*
+// Debug info assumes LogInfo
+destroy_debug_info :: proc(debug_info: ^DebugInfo) {
+
+}
+*/
+
 
 StackItem :: struct {
     prev: ^StackItem,
     next: ^StackItem,
     data: DebugInfo
+}
+
+
+// Used inside of destroy stack call, destroys recursively
+@(private)
+r_Destroy_stack_item :: proc(stack_item: ^StackItem) {
+    if stack_item == nil do return
+    r_Destroy_stack_item(stack_item.prev)
+    delete(stack_item.data.log_info.msg)
+    free(stack_item)
 }
 
 
@@ -227,7 +248,11 @@ read_top_debug_stack_item :: proc(stack_item: ^StackItem) -> (debug_info: ^Debug
 }
 
 destroy_debug_stack :: proc() {
+    if DEBUG_STACK == nil do return
+
+    r_Destroy_stack_item(DEBUG_STACK.stack_head)
     free(DEBUG_STACK)
+    DEBUG_STACK = nil
 }
 
 
@@ -256,7 +281,7 @@ r_Debug_point_log :: proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, deb
 d_Debug_point_log :: proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, debug_flags := DEBUG_FLAGS, loc := #caller_location) {
     format_needed := len(fmt_args) == 0
     out_msg := format_needed ? strings.clone(fmt_msg) : fmt.aprintf(fmt_msg, ..fmt_args)  // clone prevents bad free
-    defer delete(out_msg)
+    defer if DEBUG_STACK == nil do delete(out_msg)
 
     switch level {
     case .INFO:
