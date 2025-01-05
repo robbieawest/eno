@@ -43,6 +43,14 @@ before_frame :: proc() {
     position: linalg.Vector3f32
     helmet_draw_properties: gpu.DrawProperties
     helmet_draw_properties.mesh, helmet_draw_properties.indices = helmet_mesh_and_indices()
+
+    gpu_component: ^gpu.gl_GPUComponent = &helmet_draw_properties.gpu_component.(gpu.gl_GPUComponent)
+    gpu_component.program, ok = gpu.read_shader_source({ Express = true }, "./resources/shaders/demo_shader")
+    if !ok {
+        log.errorf("Error while reading shader source, returning.")
+        return
+    }
+
     gpu.express_draw_properties(&helmet_draw_properties)
 
     ecs.archetype_add_entity(game.Game.scene, helmet_arch, "helmet_entity",

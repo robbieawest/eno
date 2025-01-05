@@ -84,7 +84,25 @@ DrawProperties :: struct {
 
 /* Main output returned via side effects */
 express_draw_properties :: proc(draw_properties: ^DrawProperties) -> (ok: bool) {
-    draw_properties.gpu_component, ok = express_mesh_with_indices(&draw_properties.mesh, &draw_properties.indices)
+    draw_properties.gpu_component = express_mesh_with_indices(&draw_properties.mesh, &draw_properties.indices) or_return
+    return express_shader_given_gpu_component(&draw_properties.gpu_component)
+}
+
+@(private)
+express_shader_given_gpu_component :: proc(gpu_comp: ^GPUComponent) -> (ok: bool){
+    gl_comp: ^gl_GPUComponent
+    switch &comp in gpu_comp {
+    case gl_GPUComponent:
+        gl_comp = &comp
+    case vl_GPUComponent:
+        vulkan_not_supported()
+        ok = false
+        return
+    }
+
+    if !gl_comp.program.expressed do return express_shader(&gl_comp.program)
+
+    ok = true
     return
 }
 
@@ -162,13 +180,14 @@ gl_express_indices :: proc(index_data: ^model.IndexData, component: ^GPUComponen
     gl_component := &component.(gl_GPUComponent)
 
     if gl_component.expressed_ind do return true
-    gl_component.expressed_ind = true
 
     gl.GenBuffers(1, &gl_component.ebo)
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl_component.ebo)
-    gl.BufferData(gl_component.ebo, len(index_data.raw_data) * size_of(u32), raw_data(index_data.raw_data), gl.STATIC_DRAW)
-    
-    return true
+    gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(index_data.raw_data) * size_of(u32), raw_data(index_data.raw_data), gl.STATIC_DRAW)
+
+    gl_component.expressed_ind = true
+    ok = true
+    return
 }
 
 //

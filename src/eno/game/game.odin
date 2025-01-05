@@ -30,7 +30,7 @@ EnoGame :: struct {
 }
 
 
-run_game :: proc(Game: ^EnoGame) {
+run_game :: proc() {
     Game.game_state = .RUNNING
     Game.before_frame()
     for Game.game_state == .RUNNING {

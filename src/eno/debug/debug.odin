@@ -60,7 +60,9 @@ DebugFlags :: bit_field u32 {  // Extend if needed
 // ^ This enables error panicking
 DEBUG_FLAGS := DebugFlags{
     DISPLAY_INFO = true, DISPLAY_WARNING = true, DISPLAY_ERROR = true, DISPLAY_DEBUG_STACK_UNINITIALIZED = true,
-    DISPLAY_DEBUG_STACK = true, DEBUG_STACK_HEAD_SIZE = 3, DISPLAY_DEBUG_STACK_SMALLER_THAN_HEAD_SIZE = true
+    DISPLAY_DEBUG_STACK = true, DEBUG_STACK_HEAD_SIZE = 3, DISPLAY_DEBUG_STACK_SMALLER_THAN_HEAD_SIZE = true,
+    PUSH_LOGS_TO_DEBUG_STACK = true, PUSH_INFOS_TO_DEBUG_STACK = true, PUSH_WARNINGS_TO_DEBUG_STACK = true,
+    PUSH_ERRORS_TO_DEBUG_STACK = true, PUSH_GL_LOG_TO_DEBUG_STACK = true
 }
 
 
@@ -252,7 +254,9 @@ r_Debug_point_log :: proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, deb
 }
 
 d_Debug_point_log :: proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, debug_flags := DEBUG_FLAGS, loc := #caller_location) {
-    out_msg := len(fmt_args) == 0 ? fmt_msg : fmt.aprintf(fmt_msg, ..fmt_args)
+    format_needed := len(fmt_args) == 0
+    out_msg := format_needed ? strings.clone(fmt_msg) : fmt.aprintf(fmt_msg, ..fmt_args)  // clone prevents bad free
+    defer delete(out_msg)
 
     switch level {
     case .INFO:

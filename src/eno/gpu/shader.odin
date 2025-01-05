@@ -176,8 +176,11 @@ ShaderSource :: struct {
     is_serialized: bool
 }
 
+// allocator options are to be decided later
+// not even sure if procedures like this should exist, per GB's reccomendation I need to look into memory handling strategies (such as arenas)
 destroy_shader_source :: proc(source: ^ShaderSource) {
     destroy_shader(&source.shader)
+    delete(source.source)
 }
 
 // todo This needs to be rethought I think
@@ -192,16 +195,16 @@ ShaderProgram :: struct {
     expressed: bool
 }
 
-init_shader_program :: proc(shader_sources: []ShaderSource) -> (program: ShaderProgram){
+// Reallocates sources as a clone
+init_shader_program :: proc(shader_sources: []ShaderSource) -> (program: ShaderProgram) {
     dbg.debug_point()
-    program.id = -1
-    program.sources = shader_sources
-    return program
+    return ShaderProgram{ id = -1, sources = shader_sources }
 }
 
 destroy_shader_program :: proc(program: ^ShaderProgram) {
     dbg.debug_point()
     for &source in program.sources do destroy_shader_source(&source)
+    delete(program.sources)
 }
 
 
@@ -368,7 +371,7 @@ extended_glsl_type_to_string :: proc(type: ExtendedGLSLType, caller_location := 
 // shader gpu control - uniforms, expressing, etc.
 
 express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
-    dbg.debug_point(dbg.LogLevel.INFO, "Expressing Shader")
+    dbg.debug_point(dbg.LogLevel.INFO, "Expressing Shader %#v", program)
 
     if RENDER_API == .VULKAN {
         vulkan_not_supported()
@@ -383,6 +386,7 @@ express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
 
         for shader_source, i in program.sources {
             dbg.debug_point()
+            log.infof("compiling source: %#s", shader_source.source)
             id, compile_ok := gl.compile_shader_from_source(shader_source.source, conv_gl_shader_type(shader_source.type))
             if !compile_ok {
                 dbg.debug_point(dbg.LogLevel.ERROR, "Could not compile shader source: %s", shader_source.source)
@@ -475,9 +479,9 @@ ShaderPath :: struct {
 }
 
 read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (program: ShaderProgram, ok: bool) {
+    // todo turn init_shader_source into an actual procedure with the same functionality
     _init_shader_source :: proc(source: string, extension: string, flags: ShaderReadFlags) -> (shader_source: ShaderSource, ok: bool) {
-        shader_source.source = string(source)
-        shader_source.type = extension_to_shader_type(extension)
+        shader_source = ShaderSource{ source = strings.clone(source), type = extension_to_shader_type(extension)}
         if flags.Parse {
             shader_source.shader = parse_shader_source(shader_source.source, flags) or_return
             shader_source.is_serialized = true
@@ -488,7 +492,6 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
     }
 
     shader_sources: [dynamic]ShaderSource
-    defer delete(shader_sources)
 
     for filename in filenames {
         last_ellipse_location := strings.last_index(filename, ".")
@@ -512,7 +515,6 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
             for extension in ACCEPTED_SHADER_EXTENSIONS {
                 full_path := utils.concat(filename, ".", extension); defer delete(full_path)
                 source, err := futils.read_file_source(full_path); defer delete(source)
-
 
                 if err == .None {
                     dbg.debug_point(dbg.LogLevel.INFO, "Successfully read file. File path: \"%s\"", full_path)
