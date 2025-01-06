@@ -52,12 +52,12 @@ WindowTarget :: union {
 
 
 @(private)
-init_win_ :: proc(width, height: i32, window_tag: string, extra_params: ..i32) -> (WindowTarget, bool)
+init_win_ :: proc(width, height: i32, window_tag: string, extra_params: ..i32) -> (WindowTarget)
 initialize_window: init_win_ = SDL_init_window
 
 
 @(private)
-SDL_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..i32) -> (ret_win: WindowTarget, ok: bool) {
+SDL_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..i32) -> (win_ret: WindowTarget) {
     dbg.init_debug_stack()
     dbg.debug_point(dbg.LogLevel.INFO, "Initializing SDL window")
 
@@ -67,8 +67,8 @@ SDL_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..
     render_api_winflags := gpu.RENDER_API == .OPENGL ? SDL.WINDOW_OPENGL : SDL.WINDOW_VULKAN
     if len(extra_params) != 0 {
         if len(extra_params) != 2 {
-            log.errorf("Not enough extra params given to SDL window initialization")
-            return ret_win, ok
+            dbg.debug_point(dbg.LogLevel.ERROR, "Not enough params given to initialize SDL window")
+            return
         }
 
         window = SDL.CreateWindow(c_window_tag, extra_params[0], extra_params[1], width, height, render_api_winflags)
@@ -77,8 +77,8 @@ SDL_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..
     }
 
 	if window == nil {
-        log.errorf("Could not initialize SDL window")
-		return window, ok
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not initialize SDL window")
+        return
 	}
 
     WINDOW_WIDTH = width
@@ -107,10 +107,11 @@ SDL_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..
         gl.DebugMessageCallback(dbg.GL_DEBUG_CALLBACK, nil)
     }
 
-    return window, true
+    win_ret = window
+    return
 }
 
-GLFW_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..i32) -> (ret_win: WindowTarget, ok: bool) {
+GLFW_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..i32) -> (win_ret: WindowTarget) {
     dbg.init_debug_stack()
     dbg.debug_point(dbg.LogLevel.INFO, "Initializing GLFW window")
 
@@ -118,7 +119,7 @@ GLFW_init_window :: proc(width, height: i32, window_tag: string, extra_params: .
     window: glfw.WindowHandle = glfw.CreateWindow(width, height, window_tag_cstr, nil, nil)
     if window == nil {
         dbg.debug_point(dbg.LogLevel.ERROR, "Failed to initialize GLFW window")
-        return window, ok
+        return
     }
 
     glfw.MakeContextCurrent(window)
@@ -138,9 +139,11 @@ GLFW_init_window :: proc(width, height: i32, window_tag: string, extra_params: .
         }
         gl.DebugMessageCallback(dbg.GL_DEBUG_CALLBACK, nil)
     }
-    
-    return window, true
+
+    win_ret = window
+    return
 }
+
 
 destroy_window_ :: proc(target: WindowTarget)
 destroy_window: destroy_window_  = SDL_destroy_window
