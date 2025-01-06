@@ -178,7 +178,7 @@ r_Destroy_stack_item :: proc(stack_item: ^StackItem) {
 }
 
 
-MAX_DEBUG_STACK :: 128
+MAX_DEBUG_STACK :: 16
 DebugStack :: struct {
     curr_items: u32,
     stack_tail: ^StackItem,
@@ -250,8 +250,8 @@ destroy_debug_stack :: proc() {
     if DEBUG_STACK == nil do return
 
     r_Destroy_stack_item(DEBUG_STACK.stack_head)
-    free(DEBUG_STACK)
-    DEBUG_STACK = nil
+    //free(DEBUG_STACK)
+    //DEBUG_STACK = nil
 }
 
 
@@ -293,4 +293,54 @@ d_Debug_point_log :: proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, deb
         if debug_flags.DISPLAY_ERROR do log.error(out_msg, location = loc)
         if debug_flags.PUSH_ERRORS_TO_DEBUG_STACK do push_to_debug_stack({ out_msg, level }, loc = loc)
     }
+}
+
+
+PrintDebugStackFlag :: enum {
+    OUT_EVERYTHING,
+    LOG_INFO_ONLY,
+    OUT_INFO,
+    OUT_WARN,
+    OUT_ERROR
+}; PrintDebugStackFlags :: bit_set[PrintDebugStackFlag]
+DEFAULT_PRINT_DEBUG_STACK_FLAGS := PrintDebugStackFlags{ .LOG_INFO_ONLY, .OUT_INFO, .OUT_WARN, .OUT_ERROR }
+
+log_debug_stack :: proc(flags := DEFAULT_PRINT_DEBUG_STACK_FLAGS, debug_stack := DEBUG_STACK) {
+    debug_stack_out := aprint_debug_stack(flags, debug_stack); defer delete(debug_stack_out)
+    log.infof("Debug stack: %#v", debug_stack_out)
+}
+
+print_debug_stack :: proc(flags := DEFAULT_PRINT_DEBUG_STACK_FLAGS, debug_stack := DEBUG_STACK) {
+    debug_stack_out := aprint_debug_stack(flags, debug_stack); defer delete(debug_stack_out)
+    fmt.printf("Debug stack: %#v", debug_stack_out)
+}
+
+aprint_debug_stack :: proc(flags := DEFAULT_PRINT_DEBUG_STACK_FLAGS, debug_stack := DEBUG_STACK) -> (ret: string) {
+    builder := strings.builder_make()
+
+    sbprint_stack_item(debug_stack.stack_head, &builder, flags)
+
+    ret = strings.to_string(builder)
+    return
+}
+
+sbprint_stack_item :: proc(stack_item: ^StackItem, builder: ^strings.Builder, flags := DEFAULT_PRINT_DEBUG_STACK_FLAGS) {
+    if stack_item == nil {
+        strings.write_string(builder, "End of debug stack")
+        return
+    }
+
+    if .OUT_EVERYTHING in flags {
+        fmt.sbprintf(builder, "%#v\n", stack_item)
+    }
+    else if .LOG_INFO_ONLY in flags {
+        debug_info := stack_item.data
+        switch debug_info.log_info.level {
+        case .INFO: if .OUT_INFO in flags do fmt.sbprintf(builder, "[%v] : %v : %v\n", debug_info.log_info.level, debug_info.loc, debug_info.log_info.msg)
+        case .WARN: if .OUT_WARN in flags do fmt.sbprintf(builder, "[%v] : %v : %v\n", debug_info.log_info.level, debug_info.loc, debug_info.log_info.msg)
+        case .ERROR: if .OUT_ERROR in flags do fmt.sbprintf(builder, "[%v] : %v : %v\n", debug_info.log_info.level, debug_info.loc, debug_info.log_info.msg)
+        }
+    }
+
+    sbprint_stack_item(stack_item.prev, builder, flags)
 }

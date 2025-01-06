@@ -75,6 +75,7 @@ init_game_default_scene :: proc(window: win.WindowTarget, every_frame: frame_loo
 destroy_game :: proc() {
     win.destroy_window(Game.window)
     ecs.destroy_scene(Game.scene)
+    dbg.log_debug_stack({ .OUT_EVERYTHING })
     dbg.destroy_debug_stack() // heap corruption
 
     log.info("here")
