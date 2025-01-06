@@ -84,12 +84,17 @@ DrawProperties :: struct {
 
 /* Main output returned via side effects */
 express_draw_properties :: proc(draw_properties: ^DrawProperties) -> (ok: bool) {
-    draw_properties.gpu_component = express_mesh_with_indices(&draw_properties.mesh, &draw_properties.indices) or_return
+    dbg.debug_point(dbg.LogLevel.INFO, "Expressing draw properties")
+
+    draw_properties.gpu_component = gl_express_mesh_with_indices(draw_properties) or_return
+    log.infof("gpu component after: %#v", draw_properties.gpu_component)
+
     return express_shader_given_gpu_component(&draw_properties.gpu_component)
 }
 
 @(private)
 express_shader_given_gpu_component :: proc(gpu_comp: ^GPUComponent) -> (ok: bool){
+    dbg.debug_point(dbg.LogLevel.INFO, "Expressing shader given gpu components")
     gl_comp: ^gl_GPUComponent
     switch &comp in gpu_comp {
     case gl_GPUComponent:
@@ -108,47 +113,42 @@ express_shader_given_gpu_component :: proc(gpu_comp: ^GPUComponent) -> (ok: bool
 
 
 // Procedures to express mesh structures on the GPU, a shader is assumed to already be attached
-express_mesh_with_indices :: proc(mesh: ^model.Mesh, index_data: ^model.IndexData) -> (gpu_component: GPUComponent, ok: bool) {
+gl_express_mesh_with_indices :: proc(draw_properties: ^DrawProperties) -> (gpu_component: gl_GPUComponent, ok: bool) {
+    if RENDER_API == .VULKAN {
+        vulkan_not_supported()
+        return
+    }
 
-    switch RENDER_API {
-    case .OPENGL:
-        gl_def_comp: gl_GPUComponent
-        gpu_component = gl_def_comp
-    case .VULKAN: vulkan_not_supported(); return gpu_component, ok
-    } 
+    gpu_component = draw_properties.gpu_component.(gl_GPUComponent)
 
-    ok = express_mesh_vertices(mesh, &gpu_component)
-    if !ok do return gpu_component, ok
+    gpu_component.vao, gpu_component.vbo = gl_express_mesh_vertices(&draw_properties.mesh) or_return
+    gpu_component.expressed_vert = true
 
-    ok = express_indices(index_data, &gpu_component)
-    if !ok do return gpu_component, ok 
+    gpu_component.ebo = gl_express_indices(&draw_properties.indices)
+    gpu_component.expressed_ind = true
 
-    return gpu_component, true
+    ok = true
+    return
 }
 
 
-//*Likely should use express_mesh_with_indices instead
-express_mesh_vertices_ :: #type proc(mesh: ^model.Mesh, component: ^GPUComponent) -> (ok: bool)
-express_mesh_vertices: express_mesh_vertices_ = gl_express_mesh_vertices
 
-
+/*
+    Assumes not already expressed
+*/
 @(private)
-gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: ^GPUComponent) -> (ok: bool) {
+gl_express_mesh_vertices :: proc(mesh: ^model.Mesh) -> (vao: u32, vbo: u32, ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Expressing gl mesh vertices")
     if len(mesh.vertex_data) == 0 {
         dbg.debug_point(dbg.LogLevel.ERROR, "No vertices given to express");
         return
     }
 
-    gl_component := &component.(gl_GPUComponent)
-    if gl_component.expressed_vert do return true
-    gl_component.expressed_vert = true
-
-    gl.GenVertexArrays(1, &gl_component.vao)
-    gl.GenBuffers(1, &gl_component.vbo)
+    gl.GenVertexArrays(1, &vao)
+    gl.GenBuffers(1, &vbo)
     
-    gl.BindVertexArray(gl_component.vao)
-    gl.BindBuffer(gl.ARRAY_BUFFER, gl_component.vbo)
+    gl.BindVertexArray(vao)
+    gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
 
     stride: u32 = 0; for attribute_layout in mesh.layout do stride += attribute_layout.byte_stride
 
@@ -166,27 +166,22 @@ gl_express_mesh_vertices :: proc(mesh: ^model.Mesh, component: ^GPUComponent) ->
         current_ind += 1
     }
 
-    return true
+    ok = true
+    return
 }
 
 
-//* Should use express_mesh_with_indices instead
-express_indices_ :: #type proc(index_data: ^model.IndexData, component: ^GPUComponent) -> (ok: bool)
-express_indices: express_indices_ = gl_express_indices
-
+/*
+    Assumes not already expressed
+*/
 @(private)
-gl_express_indices :: proc(index_data: ^model.IndexData, component: ^GPUComponent) -> (ok: bool){
+gl_express_indices :: proc(index_data: ^model.IndexData) -> (ebo: u32) {
     dbg.debug_point(dbg.LogLevel.INFO, "Expressing gl mesh indices")
-    gl_component := &component.(gl_GPUComponent)
 
-    if gl_component.expressed_ind do return true
-
-    gl.GenBuffers(1, &gl_component.ebo)
-    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl_component.ebo)
+    gl.GenBuffers(1, &ebo)
+    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
     gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(index_data.raw_data) * size_of(u32), raw_data(index_data.raw_data), gl.STATIC_DRAW)
 
-    gl_component.expressed_ind = true
-    ok = true
     return
 }
 

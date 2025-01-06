@@ -25,7 +25,6 @@ every_frame :: proc() {
 
 before_frame :: proc() {
 
-    // I'd like for these event and keycode values to be migrated to eno constants from SDL
     ok := game.map_sdl_events([]game.SDLEventPair {
         { SDL.EventType.QUIT, proc() { game.quit_game() }}
     }); if !ok do log.errorf("Could not map SDL event")
@@ -44,12 +43,13 @@ before_frame :: proc() {
     helmet_draw_properties: gpu.DrawProperties
     helmet_draw_properties.mesh, helmet_draw_properties.indices = helmet_mesh_and_indices()
 
-    gpu_component: ^gpu.gl_GPUComponent = &helmet_draw_properties.gpu_component.(gpu.gl_GPUComponent)
-    gpu_component.program, ok = gpu.read_shader_source({ Express = true }, "./resources/shaders/demo_shader")
+    helmet_gl_comp := helmet_draw_properties.gpu_component.(gpu.gl_GPUComponent)
+    helmet_gl_comp.program, ok = gpu.read_shader_source({ Express = true }, "./resources/shaders/demo_shader")
     if !ok {
         log.errorf("Error while reading shader source, returning.")
         return
     }
+    helmet_draw_properties.gpu_component = helmet_gl_comp
 
     gpu.express_draw_properties(&helmet_draw_properties)
 

@@ -215,7 +215,6 @@ push_to_debug_stack :: proc(log_info: LogInfo, stack := DEBUG_STACK, loc := #cal
     else if stack.stack_head != nil {
         stack.stack_head.next = new_stack_item
     }
-
     stack.stack_head = new_stack_item
     stack.curr_items += 1
 }
