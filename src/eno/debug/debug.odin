@@ -319,7 +319,7 @@ DEFAULT_PRINT_DEBUG_STACK_FLAGS := PrintDebugStackFlags{ .LOG_INFO_ONLY, .OUT_IN
 
 log_debug_stack :: proc(flags := DEFAULT_PRINT_DEBUG_STACK_FLAGS, debug_stack := DEBUG_STACK) {
     debug_stack_out := aprint_debug_stack(flags, debug_stack); defer delete(debug_stack_out)
-    log.infof("Debug stack: %#v", debug_stack_out)
+    log.infof("Debug stack: \n%#v", debug_stack_out)
 }
 
 print_debug_stack :: proc(flags := DEFAULT_PRINT_DEBUG_STACK_FLAGS, debug_stack := DEBUG_STACK) {

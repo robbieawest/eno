@@ -1,7 +1,7 @@
 package old 
 
-import "../memory"
-import "../model"
+import "../../memory"
+import "../../model"
 
 import "core:log"
 import "core:testing"

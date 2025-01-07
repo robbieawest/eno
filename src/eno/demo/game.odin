@@ -25,13 +25,13 @@ every_frame :: proc() {
 
 before_frame :: proc() {
 
-    ok := game.map_sdl_events([]game.SDLEventPair {
+    ok := game.map_sdl_events(
         { SDL.EventType.QUIT, proc() { game.quit_game() }}
-    }); if !ok do log.errorf("Could not map SDL event")
+    ); if !ok do log.errorf("Could not map SDL event")
 
-    ok = game.map_sdl_key_events([]game.SDLKeyActionPair {
+    ok = game.map_sdl_key_events(
         { SDL.Keycode.ESCAPE, proc() { game.quit_game() }}
-    }); if !ok do log.errorf("Could not map SDL key event")
+    ); if !ok do log.errorf("Could not map SDL key event")
 
 
     helmet_arch, _ := ecs.scene_add_archetype(game.Game.scene, "helmet_arch", context.allocator,
@@ -40,6 +40,9 @@ before_frame :: proc() {
     )
 
     position: linalg.Vector3f32
+    scale: linalg.Vector3f32 = { 1.0, 1.0, 1.0 }
+
+
     helmet_draw_properties: gpu.DrawProperties
     helmet_draw_properties.mesh, helmet_draw_properties.indices = helmet_mesh_and_indices()
 
@@ -55,7 +58,8 @@ before_frame :: proc() {
 
     ecs.archetype_add_entity(game.Game.scene, helmet_arch, "helmet_entity",
         ecs.make_component_data_untyped_s(&helmet_draw_properties, "draw_properties"),
-        ecs.make_component_data_untyped_s(&position, "position")
+        ecs.make_component_data_untyped_s(&position, "position"),
+        ecs.make_component_data_untyped_s(&scale, "scale")
     )
 
 

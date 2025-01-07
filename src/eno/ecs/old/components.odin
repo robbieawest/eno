@@ -1,7 +1,7 @@
 package old
 
-import "../model"
-import "../gpu"
+import "../../model"
+import "../../gpu"
 
 
 LabelledComponent :: struct {

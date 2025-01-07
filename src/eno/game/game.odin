@@ -75,7 +75,7 @@ init_game_default_scene :: proc(window: win.WindowTarget, every_frame: frame_loo
 destroy_game :: proc() {
     win.destroy_window(Game.window)
     ecs.destroy_scene(Game.scene)
-    dbg.log_debug_stack({ .OUT_EVERYTHING })
+    dbg.log_debug_stack()
     dbg.destroy_debug_stack()
 
     free_all(context.allocator)
@@ -117,7 +117,7 @@ SDLKeyActionPair :: struct {
 }
 
 
-map_sdl_events :: proc(event_pairs: []SDLEventPair) -> (ok: bool) {
+map_sdl_events :: proc(event_pairs: ..SDLEventPair) -> (ok: bool) {
     if win.CURRENT_WINDOWER != .SDL do return ok
     for event_pair in event_pairs do ok |= map_sdl_event(event_pair) // Error propogates through
     return true
@@ -131,7 +131,7 @@ map_sdl_event :: proc(event_pair: SDLEventPair) -> (ok: bool) {
 }
 
 
-map_sdl_key_events :: proc(key_pairs: []SDLKeyActionPair) -> (ok: bool) {
+map_sdl_key_events :: proc(key_pairs: ..SDLKeyActionPair) -> (ok: bool) {
     if win.CURRENT_WINDOWER != .SDL do return ok
     for key_pair in key_pairs do ok |= map_sdl_key_event(key_pair) // Error propogates through
     return true
