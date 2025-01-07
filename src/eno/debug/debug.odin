@@ -167,14 +167,17 @@ StackItem :: struct {
     data: DebugInfo
 }
 
+destroy_stack_item :: proc(stack_item: ^StackItem) {
+    if len(stack_item.data.log_info.msg) != 0 && stack_item.data.log_info.msg != DEBUG_MARKER do delete(stack_item.data.log_info.msg)
+    free(stack_item)
+}
 
 // Used inside of destroy stack call, destroys recursively
 @(private)
 r_Destroy_stack_item :: proc(stack_item: ^StackItem) {
     if stack_item == nil do return
+    destroy_stack_item(stack_item)
     r_Destroy_stack_item(stack_item.prev)
-    delete(stack_item.data.log_info.msg)
-    free(stack_item)
 }
 
 
@@ -185,7 +188,7 @@ DebugStack :: struct {
     stack_head: ^StackItem
 }
 
-// Debug stack is very literally a stack
+// Debug stack is very literally a stack with FIFO (first in first out).
 DEBUG_STACK: ^DebugStack = nil
 init_debug_stack :: proc() {
     DEBUG_STACK = new(DebugStack)
@@ -202,9 +205,16 @@ push_to_debug_stack :: proc(log_info: LogInfo, stack := DEBUG_STACK, loc := #cal
 
     if (stack.curr_items == MAX_DEBUG_STACK) {
         // Remove off of tail
+        if stack.stack_tail == nil || stack.stack_tail.next == nil {
+            log.error("Debug stack is invalid")
+            return
+        }
         temp_stack_tail := stack.stack_tail
         stack.stack_tail = stack.stack_tail.next
+        stack.stack_tail.prev = nil
         stack.curr_items -= 1
+
+        destroy_stack_item(temp_stack_tail)
     }
 
     new_stack_item: ^StackItem = new(StackItem)
@@ -250,8 +260,8 @@ destroy_debug_stack :: proc() {
     if DEBUG_STACK == nil do return
 
     r_Destroy_stack_item(DEBUG_STACK.stack_head)
-    //free(DEBUG_STACK)
-    //DEBUG_STACK = nil
+    free(DEBUG_STACK)
+    DEBUG_STACK = nil
 }
 
 
@@ -265,9 +275,11 @@ r_Debug_point_no_log :: proc(debug_flags := DEBUG_FLAGS, loc := #caller_location
     // Do nothing
 }
 
+DEBUG_MARKER := " ** Debug Marker ** "
 d_Debug_point_no_log :: proc(debug_flags := DEBUG_FLAGS, loc := #caller_location) {
-    if debug_flags.PUSH_LOGS_TO_DEBUG_STACK do push_to_debug_stack({ " ** Debug Marker ** ", .INFO}, loc = loc)
+    if debug_flags.PUSH_LOGS_TO_DEBUG_STACK do push_to_debug_stack({ DEBUG_MARKER, .INFO }, loc = loc)
 }
+
 
 @(private)
 p_Debug_point_log :: #type proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, debug_flags := DEBUG_FLAGS, loc := #caller_location)

@@ -76,9 +76,8 @@ destroy_game :: proc() {
     win.destroy_window(Game.window)
     ecs.destroy_scene(Game.scene)
     dbg.log_debug_stack({ .OUT_EVERYTHING })
-    dbg.destroy_debug_stack() // heap corruption
+    dbg.destroy_debug_stack()
 
-    log.info("here")
     free_all(context.allocator)
     free_all(context.temp_allocator)
     os.exit(0)
