@@ -5,6 +5,7 @@ import gl "vendor:OpenGL"
 import dbg "../debug"
 
 import "core:strings"
+import glm "core:math/linalg/glsl"
 
 // Defines procedures for working with uniforms
 
@@ -84,3 +85,45 @@ register_uniform :: proc(program: ^ShaderProgram, label: string) -> (ok: bool) {
 cache_uniform :: proc(program: ^ShaderProgram, label: string, location: UniformLocation) {
     program.uniform_cache[label] = location
 }
+
+
+
+// ** Setting uniform values **
+
+//
+set_uniform :: proc{
+    gl.Uniform1f, gl.Uniform2f, gl.Uniform3f, gl.Uniform4f,
+    gl.Uniform1i, gl.Uniform2i, gl.Uniform3i, gl.Uniform4i,
+    gl.Uniform1ui, gl.Uniform2ui, gl.Uniform3ui, gl.Uniform4ui,
+    set_vector_uniform, set_vector_uniform_given_location,
+    set_matrix_uniform, set_matrix_uniform_given_location
+}
+
+
+UniformVectorProc :: struct($backing_type: typeid) {
+   procedure: proc(location: i32, count: i32, vector: [^]backing_type)
+}
+
+set_vector_uniform :: proc(program: ^ShaderProgram, label: string, vector: [$N]$T, gl_proc: UniformVectorProc(T)) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    set_vector_uniform_given_location(location, vector, gl_proc)
+}
+
+set_vector_uniform_given_location :: proc(location: UniformLocation, vector: [$N]$T, gl_proc: UniformVectorProc(T)) {
+    gl_proc(location, N, raw_data(vector))
+}
+
+
+UniformMatrixProc :: struct($backing_type: typeid) {
+    procedure: proc(location: i32, count: i32, transpose: bool, mat: [^]backing_type)
+}
+set_matrix_uniform :: proc(program: ^ShaderProgram, label: string, transpose: bool, mat: [$N]$T, gl_proc: UniformMatrixProc(T)) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    set_matrix_uniform_given_location(location, transpose, mat, gl_proc)
+}
+
+set_matrix_uniform_given_location :: proc(location: UniformLocation, transpose: bool, mat: [$N]$T, gl_proc: UniformMatrixProc(T)) {
+    gl_proc(location, N, transpose, raw_data(vector))
+}
+
+//
