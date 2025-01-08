@@ -1,6 +1,7 @@
 package ecs
 
 import dbg "../debug"
+import cam "camera"
 
 import "core:mem"
 import "core:fmt"
@@ -55,15 +56,15 @@ Scene :: struct {
     n_Archetypes: u32,
     archetypes: [dynamic]Archetype,
     archetype_label_match: map[string]u32,  // Maps string label to index in archetypes
-    on_heap: bool,
+    allocated: bool,
+    cameras: [dynamic]cam.Camera,
+    viewpoint: ^cam.Camera
 }
 
-
-// Heap allocates scene (archetype data is not heap allocated)
-// Scene should be stack allocated if possible (archetype data is allocated not on stack)
+// Scene should be stack allocated if possible
 init_scene :: proc() -> (scene: ^Scene) {
     scene = new(Scene)
-    scene.on_heap = true
+    scene.allocated = true
     //scene.archetype_label_match = make(map[string]u32, 0)
     return
 }
@@ -83,11 +84,12 @@ destroy_archetype :: proc(archetype: ^Archetype, allocator := context.allocator,
 // Does not free top level scene
 destroy_scene :: proc(scene: ^Scene, allocator := context.allocator, loc := #caller_location) {
     delete(scene.archetype_label_match, loc)
+    delete(scene.cameras)
 
     for &archetype in scene.archetypes do destroy_archetype(&archetype, allocator, loc)
     delete(scene.archetypes, loc)
 
-    if scene.on_heap do free(scene, allocator, loc)
+    if scene.allocated do free(scene, allocator, loc)
 }
 
 
@@ -250,6 +252,40 @@ archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label:
         serialized_component := component_serialize(data)
         append_elems(&archetype.components[comp_index], ..serialized_component.data)
     }
+
+    ok = true
+    return
+}
+
+
+scene_add_camera :: proc(scene: ^Scene, camera: cam.Camera) {
+    append(&scene.cameras, camera)
+    if len(scene.cameras) == 1 do scene.viewpoint = &scene.cameras[0]
+}
+
+
+scene_remove_camera :: proc(scene: ^Scene, camera_index: int) -> (ok: bool) {
+    if camera_index < 0 || camera_index >= len(scene.cameras) {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Camera index out of range")
+        return
+    }
+    if scene.viewpoint == &scene.cameras[camera_index] {
+        // Replace viewpoint
+
+        i: int
+        for i = 0; i < len(scene.cameras); i += 1 {
+            if i != camera_index {
+                scene.viewpoint = &scene.cameras[i]
+                break
+            }
+        }
+        if i == len(scene.cameras) {
+            dbg.debug_point(dbg.LogLevel.ERROR, "No camera to replace as scene viewpoint")
+            return
+        }
+    }
+
+    // todo Remove camera at index
 
     ok = true
     return
