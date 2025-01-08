@@ -104,12 +104,21 @@ UniformVectorProc :: struct($backing_type: typeid) {
    procedure: proc(location: i32, count: i32, vector: [^]backing_type)
 }
 
-set_vector_uniform :: proc(program: ^ShaderProgram, label: string, vector: [$N]$T, gl_proc: UniformVectorProc(T)) {
+set_vector_uniform :: proc(
+    program: ^ShaderProgram,
+    label: string,
+    vector: [$N]$T,
+    gl_proc: UniformVectorProc(T)
+) {
     location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
     set_vector_uniform_given_location(location, vector, gl_proc)
 }
 
-set_vector_uniform_given_location :: proc(location: UniformLocation, vector: [$N]$T, gl_proc: UniformVectorProc(T)) {
+set_vector_uniform_given_location :: proc(
+    location: UniformLocation,
+    vector: [$N]$T,
+    gl_proc: UniformVectorProc(T)
+) {
     gl_proc(location, N, raw_data(vector))
 }
 
@@ -117,12 +126,23 @@ set_vector_uniform_given_location :: proc(location: UniformLocation, vector: [$N
 UniformMatrixProc :: struct($backing_type: typeid) {
     procedure: proc(location: i32, count: i32, transpose: bool, mat: [^]backing_type)
 }
-set_matrix_uniform :: proc(program: ^ShaderProgram, label: string, transpose: bool, mat: [$N]$T, gl_proc: UniformMatrixProc(T)) {
+
+set_matrix_uniform :: proc(
+    program: ^ShaderProgram,
+    label: string, transpose: bool,
+    mat: [$N]$T,
+    gl_proc: UniformMatrixProc(T)
+) {
     location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
     set_matrix_uniform_given_location(location, transpose, mat, gl_proc)
 }
 
-set_matrix_uniform_given_location :: proc(location: UniformLocation, transpose: bool, mat: [$N]$T, gl_proc: UniformMatrixProc(T)) {
+set_matrix_uniform_given_location :: proc(
+    location: UniformLocation,
+    transpose: bool,
+    mat: [$N]$T,
+    gl_proc: UniformMatrixProc(T)
+) {
     gl_proc(location, N, transpose, raw_data(vector))
 }
 
