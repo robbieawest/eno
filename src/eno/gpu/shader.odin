@@ -192,6 +192,7 @@ ShaderIdentifier :: union {
 ShaderProgram :: struct {
     id: ShaderIdentifier,
     sources: []ShaderSource,
+    uniform_cache: ShaderUniformCache,
     expressed: bool
 }
 
@@ -403,38 +404,6 @@ express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
     }
     return true
 }
-
-
-// Updating shader uniforms
-
-shader_uniform_update_mat4_ :: #type proc(draw_properties: ^DrawProperties, uniform_tag: string, mat: [^]f32) -> (ok: bool)
-shader_uniform_update_mat4: shader_uniform_update_mat4_ = gl_shader_uniform_update_mat4
-
-gl_shader_uniform_update_mat4 :: proc(draw_properties: ^DrawProperties, uniform_tag: string, mat: [^]f32) -> (ok: bool){
-    gpu_comp := &draw_properties.gpu_component.(gl_GPUComponent)
-    program: ^ShaderProgram = &gpu_comp.program
-
-    if !program.expressed {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Shader not yet expressed")
-        return ok
-    }
-    dbg.debug_point()
-
-    tag_cstr := strings.clone_to_cstring(uniform_tag)
-    program_id := program.id.(i32)
-
-    gl.UseProgram(u32(program_id))
-    loc := gl.GetUniformLocation(u32(program_id), tag_cstr)
-    if loc == -1 {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Shader uniform does not exist")
-        return ok
-    }
-    gl.UniformMatrix4fv(loc, 1, false, mat)
-
-    return true
-}
-
-//
 
 
 /*
