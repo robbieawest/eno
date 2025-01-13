@@ -45,14 +45,16 @@ before_frame :: proc() {
 
     helmet_draw_properties: gpu.DrawProperties
     helmet_draw_properties.mesh, helmet_draw_properties.indices = helmet_mesh_and_indices()
+    ok = create_shader_program(&helmet_draw_properties); if !ok do return
 
-    helmet_gl_comp := helmet_draw_properties.gpu_component.(gpu.gl_GPUComponent)
+    /*
     helmet_gl_comp.program, ok = gpu.read_shader_source({ Express = true }, "./resources/shaders/demo_shader")
     if !ok {
         log.errorf("Error while reading shader source, returning.")
         return
     }
     helmet_draw_properties.gpu_component = helmet_gl_comp
+    */
 
     gpu.express_draw_properties(&helmet_draw_properties)
 
@@ -94,4 +96,51 @@ read_meshes_and_indices_from_gltf :: proc(model_name: string) -> (meshes: []mode
     }
 
     return meshes, indices
+}
+
+
+@(private)
+create_shader_program :: proc(properties: ^gpu.DrawProperties) -> (ok: bool) {
+    sources := make([dynamic]gpu.ShaderSource, 0)
+    gl_comp := properties.gpu_component.(gpu.gl_GPUComponent)
+
+    vertex_shader: gpu.Shader
+    gpu.shader_input_from_mesh(&vertex_shader, properties.mesh) or_return
+
+    gpu.add_uniforms(&vertex_shader, { .mat4, "m_Model" })
+    gpu.add_uniforms(&vertex_shader, { .mat4, "m_View" })
+    gpu.add_uniforms(&vertex_shader, { .mat4, "m_Perspective" })
+    gpu.register_uniform(&gl_comp.program, "m_Model")
+    gpu.register_uniform(&gl_comp.program, "m_View")
+    gpu.register_uniform(&gl_comp.program, "m_Perspective")
+
+    gpu.add_functions(&vertex_shader, gpu.init_shader_function(
+        .void,
+        "main",
+        "gl_Position = m_Model * m_View * m_Perspective;",
+        false
+    ))
+
+    append(&sources, gpu.build_shader_source(vertex_shader, .VERTEX) or_return)
+    log.infof("Built source: %#v", sources[0].source)
+
+
+    fragment_shader: gpu.Shader
+    gpu.add_output(&fragment_shader, { .vec4, "Colour" })
+    gpu.add_functions(&fragment_shader, gpu.init_shader_function(
+        .void,
+        "main",
+        "Colour = vec4(1.0, 0.0, 0.0, 1.0)",
+        false
+    ))
+
+    append(&sources, gpu.build_shader_source(vertex_shader, .FRAGMENT) or_return)
+    log.infof("Built source: %#v", sources[1].source)
+
+    gl_comp.program.sources = sources
+    gpu.express_shader(&gl_comp.program)
+
+    properties.gpu_component = gl_comp
+    ok = true
+    return
 }

@@ -63,6 +63,10 @@ ShaderFunction :: struct {
     is_typed_source: bool,
 }; ShaderFunctionArgument :: glsl_type_name_pair
 
+init_shader_function :: proc(ret_type: ExtendedGLSLType, label: string, source: string, is_typed_source: bool, arguments: ..ShaderFunctionArgument) -> (function: ShaderFunction) {
+    return { ret_type, arguments, label, source, is_typed_source }
+}
+
 
 Shader :: struct {
     layout: [dynamic]ShaderLayout,
@@ -191,7 +195,7 @@ ShaderIdentifier :: union {
 
 ShaderProgram :: struct {
     id: ShaderIdentifier,
-    sources: []ShaderSource,
+    sources: [dynamic]ShaderSource,
     uniform_cache: ShaderUniformCache,
     expressed: bool
 }
@@ -199,7 +203,9 @@ ShaderProgram :: struct {
 // Reallocates sources as a clone
 init_shader_program :: proc(shader_sources: []ShaderSource) -> (program: ShaderProgram) {
     dbg.debug_point()
-    return ShaderProgram{ id = -1, sources = shader_sources }
+    program = ShaderProgram{ id = -1 }
+    append_elems(&program.sources, ..shader_sources)
+    return
 }
 
 destroy_shader_program :: proc(program: ^ShaderProgram) {
@@ -239,7 +245,7 @@ conv_gl_shader_type :: proc(type: ShaderType) -> gl.Shader_Type {  // Likely cou
     Todo: Control for versioning
 */
 build_shader_source :: proc(shader: Shader, type: ShaderType) -> (source: ShaderSource, ok: bool) {
-    dbg.debug_point(dbg.LogLevel.INFO, "BUILDING SHADER SOURCE")
+    dbg.debug_point(dbg.LogLevel.INFO, "Building Shader Source")
 
     builder, err := strings.builder_make(); if err != mem.Allocator_Error.None {
         dbg.debug_point(dbg.LogLevel.ERROR, "Allocator error while building shader source")
@@ -680,3 +686,12 @@ handle_shader_read_error :: proc(filepath: string, err: utils.FileError, loc := 
     return
 }
 */
+
+
+// Working with draw properties
+
+draw_properties_add_source :: proc(properties: ^DrawProperties, source: ShaderSource) {
+    gl_comp := properties.gpu_component.(gl_GPUComponent)
+    append(&gl_comp.program.sources, source)
+    properties.gpu_component = gl_comp
+}
