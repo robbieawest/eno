@@ -1,11 +1,7 @@
 package model
 
-import "vendor:cgltf"
-
 import "core:testing"
 import "core:log"
-import "core:slice"
-import "core:reflect"
 
 /*
 VertexLayout :: struct {
@@ -19,8 +15,10 @@ VertexLayout :: #soa [dynamic]MeshAttributeInfo
 MeshAttributeInfo :: struct {
     type: MeshAttributeType,  // Describes the type of the attribute (position, normal etc)
     element_type: MeshElementType,  // Describes the direct datatype of each element (vec2, vec3 etc)
+    data_type: MeshComponentType,
     byte_stride: u32,  // Describes attribute length in bytes
     float_stride: u32,  // Describes attribute length in number of floats (f32) (byte_stride / 8)
+    name: string
 }
 
 
@@ -45,6 +43,16 @@ MeshAttributeType :: enum {
     joints,
     weights,
     custom,
+}
+
+MeshComponentType :: enum {
+    invalid,
+    i8,
+    u8,
+    i16,
+    u16,
+    u32,
+    f32
 }
 
 

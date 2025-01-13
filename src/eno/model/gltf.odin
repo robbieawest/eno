@@ -8,8 +8,6 @@ import dbg "../debug"
 import "core:log"
 import "core:testing"
 import "core:strings"
-import "core:mem"
-import "core:slice"
 import "core:fmt"
 
 DEFAULT_OPTIONS: cgltf.options
@@ -125,49 +123,43 @@ extract_gltf_mesh :: proc(mesh: ^cgltf.mesh, vertex_layouts: []VertexLayout) -> 
     Gives an eno mesh for each primitive in the cgltf "mesh"
 */
 extract_cgltf_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []Mesh, ok: bool) {
-
     //This is assuming all mesh attributes (aside from indices) have the same count (for each primitive/mesh output)
-
-    //log.infof("mesh: \n%#v", mesh)
 
     mesh_data := make([dynamic]Mesh, len(mesh.primitives))
     defer delete(mesh_data)
 
 
-    // todo maybe remove _ prefix from var names
-    for _primitive, i in mesh.primitives {
+    for primitive, i in mesh.primitives {
         mesh_ret := &mesh_data[i]
 
         // Construct layout
-        for _attribute in _primitive.attributes {
-            _accessor := _attribute.data
+        for attribute in primitive.attributes {
+            accessor := attribute.data
 
             attribute_info := MeshAttributeInfo{
-                cast(MeshAttributeType)int(_attribute.type),
-                cast(MeshElementType)int(_accessor.type),
-                u32(_accessor.stride),
-                u32(_accessor.stride >> 2)
+                cast(MeshAttributeType)int(attribute.type),
+                cast(MeshElementType)int(accessor.type),
+                convert_component_type(accessor.component_type),
+                u32(accessor.stride),
+                u32(accessor.stride >> 2),
+                string(accessor.name)
             }
             append(&mesh_ret.layout, attribute_info)
         }
 
-       // log.infof("layout: %#v", mesh_ret.layout)
 
         // Get float stride - the number of floats needed for each vertex
         float_stride: u32 = 0; for mesh_attribute_info in mesh_ret.layout do float_stride += mesh_attribute_info.float_stride
 
         element_count_throughout: uint = 0
         element_offset: u32 = 0
-        for _attribute, j in _primitive.attributes {
-            _accessor := _attribute.data
-
-            //Todo: Consider other datatypes by matching component type of accessor against odin type (maybe just raise error when found)
+        for attribute, j in primitive.attributes {
+            accessor := attribute.data
 
             element_size := mesh_ret.layout[j].float_stride  // Number of floats in current element
-            //log.infof("accessor: %#v", _accessor)
 
             //Validating mesh
-            count := _accessor.count
+            count := accessor.count
             if element_count_throughout != 0 && count != element_count_throughout {
                 dbg.debug_point(dbg.LogLevel.ERROR, "Attributes/accessors of mesh primitive must contain the same count/number of elements")
                 return result, false
@@ -183,7 +175,7 @@ extract_cgltf_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []Mesh, ok: bool) {
             for k in 0..<count {
                 raw_vertex_data : [^]f32 = raw_data(mesh_ret.vertex_data[vertex_offset + element_offset:vertex_offset + next_offset])
 
-                read_res: b32 = cgltf.accessor_read_float(_accessor, k, raw_vertex_data, uint(element_size))
+                read_res: b32 = cgltf.accessor_read_float(accessor, k, raw_vertex_data, uint(element_size))
                 if read_res == false {
                     dbg.debug_point(dbg.LogLevel.ERROR, "Error while reading float from accessor, received boolean false")
                     return
@@ -200,6 +192,7 @@ extract_cgltf_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []Mesh, ok: bool) {
     result = mesh_data[:]
     return
 }
+
 
 extract_index_data_from_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []IndexData, ok: bool) {
     index_data := make([dynamic]IndexData, len(mesh.primitives))
@@ -225,6 +218,31 @@ extract_index_data_from_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []IndexData,
 
     return index_data[:], true
 }
+
+
+@(private)
+cgltf_component_type_to_typeid :: proc(type: cgltf.component_type) -> (ret: typeid, ok: bool) {
+    switch type {
+    case .invalid:
+        dbg.debug_point(dbg.LogLevel.ERROR, "Component type is invalid")
+        return
+    case .r_8: ret = i8
+    case .r_8u: ret = u8
+    case .r_16: ret = i16
+    case .r_16u: ret = u16
+    case .r_32u: ret = u32
+    case .r_32f: ret = f32
+    }
+
+    ok = true
+    return
+}
+
+@(private)
+convert_component_type :: proc(type: cgltf.component_type) -> (ret: MeshComponentType) {
+    return cast(MeshComponentType)int(type)
+}
+
 
 
 @(test)
