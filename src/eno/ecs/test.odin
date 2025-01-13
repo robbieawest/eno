@@ -1,11 +1,9 @@
 package ecs
 
-import "../gpu"
 import dbg "../debug"
 
 import "core:testing"
 import "core:log"
-import "core:fmt"
 
 
 TestPositionComponent :: struct {
@@ -87,21 +85,6 @@ serialize_many_test :: proc(t: ^testing.T) {
         testing.expect_value(t, expected[i], deserialize_many_ret[i].data^)
     }
 }
-
-/*
-@(test)
-act_on_archetype_test :: proc(t: ^testing.T) {
-
-    scene := init_scene()
-    scene_add_archetype(scene, "test_archetype", Position3DInfo, DrawPropertiesInfo)
-
-    draw_properties: gpu.DrawProperties
-    position: Position3D
-    new_entity_match := map[string]Component { "new_entity"}
-    //scene_add_entities(scene, "test_archetype", )
-}
-*/
-
 
 
 @(test)

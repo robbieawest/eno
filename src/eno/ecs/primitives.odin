@@ -1,5 +1,7 @@
 package ecs
 
+/*
+
 import "../gpu"
 
 import "core:math/linalg"
@@ -27,3 +29,7 @@ DrawPropertiesInfo := ComponentInfo {
     label = "draw_properties",
     type = gpu.DrawProperties
 }
+
+
+    Not sure about all this
+*/

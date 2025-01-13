@@ -2,8 +2,6 @@ package ecs
 
 import dbg "../debug"
 
-import "core:fmt"
-
 
 ComponentQuery :: struct {
     label: string,

@@ -4,7 +4,6 @@ import dbg "../debug"
 import cam "camera"
 
 import "core:mem"
-import "core:fmt"
 import "core:slice"
 
 // Todo: look into component/entity deletion and custom allocators

@@ -1,13 +1,10 @@
 package ecs
 
 import dbg "../debug"
-import "../model"
-import "../gpu"
 
 import "core:mem"
 import "core:reflect"
-import "core:log"
-import "base:intrinsics"
+
 
 
 /*
