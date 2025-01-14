@@ -245,13 +245,12 @@ conv_gl_shader_type :: proc(type: ShaderType) -> gl.Shader_Type {  // Likely cou
     Todo: Control for versioning
 */
 build_shader_source :: proc(shader: Shader, type: ShaderType) -> (source: ShaderSource, ok: bool) {
-    dbg.debug_point(dbg.LogLevel.INFO, "Building Shader Source")
+    dbg.debug_point(dbg.LogLevel.INFO, "Building Shader Source, shader: %#v", shader)
 
     builder, err := strings.builder_make(); if err != mem.Allocator_Error.None {
         dbg.debug_point(dbg.LogLevel.ERROR, "Allocator error while building shader source")
         return source, ok
     }
-    defer strings.builder_destroy(&builder)
 
 
     strings.write_string(&builder, "#version 430 core\n")
@@ -277,6 +276,7 @@ build_shader_source :: proc(shader: Shader, type: ShaderType) -> (source: Shader
             fmt.sbprintfln(&builder, "\t%s %s;", extended_glsl_type_to_string(field.type), field.name)
         }
         fmt.sbprintfln(&builder, "}};")
+        strings.write_string(&builder, "\n")
     }
 
     for function in shader.functions {
@@ -290,7 +290,6 @@ build_shader_source :: proc(shader: Shader, type: ShaderType) -> (source: Shader
             }
             fmt.sbprintf(&builder, ") {{\n%s\n}}", function.source)
         }
-        strings.write_string(&builder, "\n")
     }
 
 
@@ -694,4 +693,19 @@ draw_properties_add_source :: proc(properties: ^DrawProperties, source: ShaderSo
     gl_comp := properties.gpu_component.(gl_GPUComponent)
     append(&gl_comp.program.sources, source)
     properties.gpu_component = gl_comp
+}
+
+
+// General shader utils
+
+attach_program :: proc(program: ShaderProgram, loc := #caller_location) {
+    id, idi32 := program.id.(i32); if !idi32 {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Shader id not valid", loc = loc)
+        return
+    }
+    if id < 0 {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Shader not expressed", loc = loc)
+        return
+    }
+    gl.UseProgram(u32(id))
 }

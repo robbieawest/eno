@@ -10,16 +10,17 @@ import dbg "../debug"
     Overwrites any shader layout already existing
 
 */
-shader_input_from_mesh :: proc(shader: ^Shader, mesh: model.Mesh) -> (ok: bool) {
-    return shader_input_from_mesh_layout(shader, mesh.layout)
+shader_layout_from_mesh :: proc(shader: ^Shader, mesh: model.Mesh) -> (ok: bool) {
+    return shader_layout_from_mesh_layout(shader, mesh.layout)
 }
 
-shader_input_from_mesh_layout :: proc(shader: ^Shader, layout: model.VertexLayout) -> (ok: bool) {
+shader_layout_from_mesh_layout :: proc(shader: ^Shader, layout: model.VertexLayout) -> (ok: bool) {
     n_Attributes := len(layout)
     new_layout := make([dynamic]ShaderLayout, n_Attributes)
 
     for i: uint = 0; i < uint(n_Attributes); i += 1 {
         glsl_type: GLSLDataType
+        dbg.debug_point(dbg.LogLevel.INFO, "attribute: %#v", layout[i])
 
         switch layout[i].element_type {
         case .invalid:
@@ -34,7 +35,7 @@ shader_input_from_mesh_layout :: proc(shader: ^Shader, layout: model.VertexLayou
         case .mat4: glsl_type = .mat4
         }
 
-        append(&new_layout, ShaderLayout{ i, glsl_type, layout[i].name })
+        new_layout[i] = ShaderLayout{ i, glsl_type, layout[i].name }
     }
 
     shader.layout = new_layout

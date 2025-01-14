@@ -105,14 +105,11 @@ create_shader_program :: proc(properties: ^gpu.DrawProperties) -> (ok: bool) {
     gl_comp := properties.gpu_component.(gpu.gl_GPUComponent)
 
     vertex_shader: gpu.Shader
-    gpu.shader_input_from_mesh(&vertex_shader, properties.mesh) or_return
+    gpu.shader_layout_from_mesh(&vertex_shader, properties.mesh) or_return
 
     gpu.add_uniforms(&vertex_shader, { .mat4, "m_Model" })
     gpu.add_uniforms(&vertex_shader, { .mat4, "m_View" })
     gpu.add_uniforms(&vertex_shader, { .mat4, "m_Perspective" })
-    gpu.register_uniform(&gl_comp.program, "m_Model")
-    gpu.register_uniform(&gl_comp.program, "m_View")
-    gpu.register_uniform(&gl_comp.program, "m_Perspective")
 
     gpu.add_functions(&vertex_shader, gpu.init_shader_function(
         .void,
@@ -139,6 +136,11 @@ create_shader_program :: proc(properties: ^gpu.DrawProperties) -> (ok: bool) {
 
     gl_comp.program.sources = sources
     gpu.express_shader(&gl_comp.program)
+
+    gpu.attach_program(gl_comp.program)
+    gpu.register_uniform(&gl_comp.program, "m_Model")
+    gpu.register_uniform(&gl_comp.program, "m_View")
+    gpu.register_uniform(&gl_comp.program, "m_Perspective")
 
     properties.gpu_component = gl_comp
     ok = true
