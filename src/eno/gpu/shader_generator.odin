@@ -3,6 +3,8 @@ package gpu
 import "../model"
 import dbg "../debug"
 
+import "core:reflect"
+
 // Defines procedures for building shaders from multiple blocks of input/output
 // Be careful when using these procedures if reading a shader from a file and not parsing that shader
 
@@ -35,7 +37,15 @@ shader_layout_from_mesh_layout :: proc(shader: ^Shader, layout: model.VertexLayo
         case .mat4: glsl_type = .mat4
         }
 
-        new_layout[i] = ShaderLayout{ i, glsl_type, layout[i].name }
+        name := layout[i].name
+        if len(name) == 0 {
+            name, ok = reflect.enum_name_from_value(layout[i].type)
+            if !ok {
+                dbg.debug_point(dbg.LogLevel.ERROR, "Could not get layout name")
+                return
+            }
+        }
+        new_layout[i] = ShaderLayout{ i, glsl_type, name }
     }
 
     shader.layout = new_layout
