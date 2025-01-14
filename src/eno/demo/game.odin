@@ -103,6 +103,7 @@ read_meshes_and_indices_from_gltf :: proc(model_name: string) -> (meshes: []mode
 create_shader_program :: proc(properties: ^gpu.DrawProperties) -> (ok: bool) {
     sources := make([dynamic]gpu.ShaderSource, 0)
     gl_comp := properties.gpu_component.(gpu.gl_GPUComponent)
+    gl_comp.program = gpu.init_shader_program()
 
     vertex_shader: gpu.Shader
     gpu.shader_layout_from_mesh(&vertex_shader, properties.mesh) or_return
@@ -114,7 +115,9 @@ create_shader_program :: proc(properties: ^gpu.DrawProperties) -> (ok: bool) {
     gpu.add_functions(&vertex_shader, gpu.init_shader_function(
         .void,
         "main",
-        "gl_Position = m_Model * m_View * m_Perspective;",
+        `   mat4 mvp = m_Model * m_View * m_Perspective;
+            gl_Position = mvp * vec4(position, 1.0);
+        `,
         false
     ))
 
@@ -127,11 +130,11 @@ create_shader_program :: proc(properties: ^gpu.DrawProperties) -> (ok: bool) {
     gpu.add_functions(&fragment_shader, gpu.init_shader_function(
         .void,
         "main",
-        "Colour = vec4(1.0, 0.0, 0.0, 1.0)",
+        "   Colour = vec4(1.0, 0.0, 0.0, 1.0);",
         false
     ))
 
-    append(&sources, gpu.build_shader_source(vertex_shader, .FRAGMENT) or_return)
+    append(&sources, gpu.build_shader_source(fragment_shader, .FRAGMENT) or_return)
     log.infof("Built source: %#v", sources[1].source)
 
     gl_comp.program.sources = sources

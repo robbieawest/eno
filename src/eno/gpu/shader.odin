@@ -200,13 +200,24 @@ ShaderProgram :: struct {
     expressed: bool
 }
 
-// Reallocates sources as a clone
-init_shader_program :: proc(shader_sources: []ShaderSource) -> (program: ShaderProgram) {
+
+init_shader_program :: proc{ init_shader_program_sources, init_shader_program_no_sources }
+
+@(private)
+init_shader_program_sources :: proc(shader_sources: []ShaderSource) -> (program: ShaderProgram) {
     dbg.debug_point()
     program = ShaderProgram{ id = -1 }
     append_elems(&program.sources, ..shader_sources)
     return
 }
+
+@(private)
+init_shader_program_no_sources :: proc() -> (program: ShaderProgram) {
+    dbg.debug_point()
+    program = ShaderProgram{ id = -1 }
+    return
+}
+
 
 destroy_shader_program :: proc(program: ^ShaderProgram) {
     dbg.debug_point()
@@ -245,7 +256,7 @@ conv_gl_shader_type :: proc(type: ShaderType) -> gl.Shader_Type {  // Likely cou
     Todo: Control for versioning
 */
 build_shader_source :: proc(shader: Shader, type: ShaderType) -> (source: ShaderSource, ok: bool) {
-    dbg.debug_point(dbg.LogLevel.INFO, "Building Shader Source, shader: %#v", shader)
+    dbg.debug_point(dbg.LogLevel.INFO, "Building Shader Source")
 
     builder, err := strings.builder_make(); if err != mem.Allocator_Error.None {
         dbg.debug_point(dbg.LogLevel.ERROR, "Allocator error while building shader source")

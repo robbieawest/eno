@@ -22,7 +22,6 @@ shader_layout_from_mesh_layout :: proc(shader: ^Shader, layout: model.VertexLayo
 
     for i: uint = 0; i < uint(n_Attributes); i += 1 {
         glsl_type: GLSLDataType
-        dbg.debug_point(dbg.LogLevel.INFO, "attribute: %#v", layout[i])
 
         switch layout[i].element_type {
         case .invalid:
