@@ -146,6 +146,8 @@ create_shader_program :: proc(properties: ^gpu.DrawProperties) -> (ok: bool) {
     gpu.register_uniform(&gl_comp.program, "m_View")
     gpu.register_uniform(&gl_comp.program, "m_Perspective")
 
+    gpu._set_uniform()
+
     properties.gpu_component = gl_comp
     ok = true
     return

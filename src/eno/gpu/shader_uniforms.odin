@@ -5,6 +5,7 @@ import gl "vendor:OpenGL"
 import dbg "../debug"
 
 import "core:strings"
+import "core:reflect"
 import glm "core:math/linalg/glsl"
 
 // Defines procedures for working with uniforms
@@ -87,17 +88,96 @@ cache_uniform :: proc(program: ^ShaderProgram, label: string, location: UniformL
 }
 
 
-
 // ** Setting uniform values **
 
-//
 set_uniform :: proc{
-    gl.Uniform1f, gl.Uniform2f, gl.Uniform3f, gl.Uniform4f,
-    gl.Uniform1i, gl.Uniform2i, gl.Uniform3i, gl.Uniform4i,
-    gl.Uniform1ui, gl.Uniform2ui, gl.Uniform3ui, gl.Uniform4ui,
+    Uniform1f, Uniform2f, Uniform3f, Uniform4f,
+    Uniform1i, Uniform2i, Uniform3i, Uniform4i,
+    Uniform1ui, Uniform2ui, Uniform3ui, Uniform4ui,
     set_vector_uniform, set_vector_uniform_given_location,
     set_matrix_uniform, set_matrix_uniform_given_location
 }
+
+Uniform1f :: proc(program: ^ShaderProgram, label: string, v0: f32) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    gl.Uniform1f(location, v0)
+}
+
+Uniform1d :: proc(program: ^ShaderProgram, label: string, v0: f64) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    gl.Uniform1d(location, v0)
+}
+
+Uniform1i :: proc(program: ^ShaderProgram, label: string, v0: i32) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    gl.Uniform1i(location, v0)
+}
+
+Uniform1ui :: proc(program: ^ShaderProgram, label: string, v0: u32) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    gl.Uniform1ui(location, v0)
+}
+
+Uniform2f :: proc(program: ^ShaderProgram, label: string, v0: f32, v1: f32) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    gl.Uniform2f(location, v0, v1)
+}
+
+Uniform2d :: proc(program: ^ShaderProgram, label: string, v0: f64, v1: f64) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    gl.Uniform2d(location, v0, v1)
+}
+
+Uniform2i :: proc(program: ^ShaderProgram, label: string, v0: i32, v1: i32) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    gl.Uniform2i(location, v0, v1)
+}
+
+Uniform2ui :: proc(program: ^ShaderProgram, label: string, v0: u32, v1: u32) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    gl.Uniform2ui(location, v0, v1)
+}
+
+Uniform3f :: proc(program: ^ShaderProgram, label: string, v0: f32, v1: f32, v2: f32) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    gl.Uniform3f(location, v0, v1, v2)
+}
+
+Uniform3d :: proc(program: ^ShaderProgram, label: string, v0: f64, v1: f64, v2: f64) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    gl.Uniform3d(location, v0, v1, v2)
+}
+
+Uniform3i :: proc(program: ^ShaderProgram, label: string, v0: i32, v1: i32, v2: i32) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    gl.Uniform3i(location, v0, v1, v2)
+}
+
+Uniform3ui :: proc(program: ^ShaderProgram, label: string, v0: u32, v1: u32, v2: u32) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    gl.Uniform3ui(location, v0, v1, v2)
+}
+
+Uniform4f :: proc(program: ^ShaderProgram, label: string, v0: f32, v1: f32, v2: f32, v3: f32) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    gl.Uniform4f(location, v0, v1, v2, v3)
+}
+
+Uniform4d :: proc(program: ^ShaderProgram, label: string, v0: f64, v1: f64, v2: f64, v3: f64) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    gl.Uniform4d(location, v0, v1, v2, v3)
+}
+
+Uniform4i :: proc(program: ^ShaderProgram, label: string, v0: i32, v1: i32, v2: i32, v3: i32) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    gl.Uniform4i(location, v0, v1, v2, v3)
+}
+
+Uniform4ui :: proc(program: ^ShaderProgram, label: string, v0: u32, v1: u32, v2: u32, v3: u32) {
+    location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
+    gl.Uniform4ui(location, v0, v1, v2, v3)
+}
+
 
 
 UniformVectorProc :: struct($backing_type: typeid) {
