@@ -8,6 +8,7 @@ import gpu "../gpu"
 import dbg "../debug"
 
 import "core:log"
+import "core:c"
 import "core:strings"
 import "base:runtime"
 import "core:fmt"
@@ -196,4 +197,51 @@ parse_sdl_window_target :: proc(window_target: WindowTarget) -> (result: ^SDL.Wi
         return result, ok
     }
     return result, true
+}
+
+
+WindowResolution :: struct {
+    w: u32, h: u32
+}
+
+get_window_resolution :: proc(window_target: WindowTarget) -> (res: WindowResolution, ok: bool) #optional_ok {
+    sdl_win: ^SDL.Window
+    sdl_win, ok = window_target.(^SDL.Window); if !ok {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Not supported")
+        return
+    }
+
+    win_flags: SDL.WindowFlags = transmute(SDL.WindowFlags) SDL.GetWindowFlags(sdl_win)
+    if .FULLSCREEN in win_flags {
+        x, y: c.int
+        sdl_err := SDL.GetRendererOutputSize(SDL.GetRenderer(sdl_win), &x, &y)
+        if sdl_err != 0 {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Failed to get fullscreen resolution, SDL error code: %d", sdl_err)
+            return
+        }
+        res = WindowResolution { u32(x), u32(y) }
+    }
+    else {
+        display_mode: SDL.DisplayMode
+        sdl_err := SDL.GetDesktopDisplayMode(0, &display_mode)
+        if sdl_err != 0 {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Failed to get window resolution, SDL error code: %d", sdl_err)
+            return
+        }
+
+        res = WindowResolution { u32(display_mode.w), u32(display_mode.h) }
+    }
+
+    ok = true
+    return
+}
+
+
+get_aspect_ratio :: proc(window_target: WindowTarget) -> (ratio: f32, ok: bool) #optional_ok {
+    res: WindowResolution; res, ok = get_window_resolution(window_target); if !ok do return
+    return get_aspect_ratio_from_resolution(res), true;
+}
+
+get_aspect_ratio_from_resolution :: proc(res: WindowResolution) -> (ratio: f32) {
+    return f32(res.w) / f32(res.h)
 }

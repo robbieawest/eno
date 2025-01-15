@@ -1,10 +1,10 @@
 package ecs
 
 import dbg "../debug"
-import cam "camera"
 
 import "core:mem"
 import "core:slice"
+import glm "core:math/linalg/glsl"
 
 // Todo: look into component/entity deletion and custom allocators
 // Relate it to every type defined in eno
@@ -56,8 +56,8 @@ Scene :: struct {
     archetypes: [dynamic]Archetype,
     archetype_label_match: map[string]u32,  // Maps string label to index in archetypes
     allocated: bool,
-    cameras: [dynamic]cam.Camera,
-    viewpoint: ^cam.Camera
+    cameras: [dynamic]Camera,
+    viewpoint: ^Camera
 }
 
 // Scene should be stack allocated if possible
@@ -257,7 +257,19 @@ archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label:
 }
 
 
-scene_add_camera :: proc(scene: ^Scene, camera: cam.Camera) {
+Camera :: struct {
+    position: glm.vec3,
+    towards: glm.vec3,
+    up: glm.vec3,
+    look_at: glm.mat4,
+    field_of_view: f32,
+    aspect_ratio: f32,
+    near_plane: f32,
+    far_plane: f32
+}
+
+
+scene_add_camera :: proc(scene: ^Scene, camera: Camera) {
     append(&scene.cameras, camera)
     if len(scene.cameras) == 1 do scene.viewpoint = &scene.cameras[0]
 }
@@ -269,7 +281,7 @@ scene_remove_camera :: proc(scene: ^Scene, camera_index: int) -> (ok: bool) {
         return
     }
     if scene.viewpoint == &scene.cameras[camera_index] {
-        // Replace viewpoint
+    // Replace viewpoint
 
         i: int
         for i = 0; i < len(scene.cameras); i += 1 {

@@ -5,6 +5,7 @@ import "../gpu"
 import dbg "../debug"
 import win "../window"
 import "../model"
+import "../game"
 
 import glm "core:math/linalg/glsl"
 import "core:fmt"

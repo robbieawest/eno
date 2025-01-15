@@ -15,7 +15,7 @@ import "core:log"
 import "core:math/linalg"
 
 // Implement your before_frame and every_frame procedures in a file like this
-// APIs for gltf interop and ecs are dogwater right now
+// APIs for ecs are dogwater right now
 
 every_frame :: proc() {
     render.draw_indexed_entities(game.Game.scene, "helmet_arch", "helmet_entity")
@@ -65,6 +65,8 @@ before_frame :: proc() {
         ecs.make_component_data_untyped_s(&scale, "scale")
     )
 
+
+    // Camera
 
 }
 
@@ -145,8 +147,6 @@ create_shader_program :: proc(properties: ^gpu.DrawProperties) -> (ok: bool) {
     gpu.register_uniform(&gl_comp.program, "m_Model")
     gpu.register_uniform(&gl_comp.program, "m_View")
     gpu.register_uniform(&gl_comp.program, "m_Perspective")
-
-    gpu._set_uniform()
 
     properties.gpu_component = gl_comp
     ok = true
