@@ -36,7 +36,8 @@ before_frame :: proc() {
 
     helmet_arch, _ := ecs.scene_add_archetype(game.Game.scene, "helmet_arch", context.allocator,
         ecs.make_component_info(gpu.DrawProperties, "draw_properties"),
-        ecs.make_component_info(linalg.Vector3f32, "position")
+        ecs.make_component_info(linalg.Vector3f32, "position"),
+        ecs.make_component_info(linalg.Vector3f32, "scale")
     )
 
     position: linalg.Vector3f32

@@ -126,8 +126,6 @@ extract_cgltf_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []Mesh, ok: bool) {
     //This is assuming all mesh attributes (aside from indices) have the same count (for each primitive/mesh output)
 
     mesh_data := make([dynamic]Mesh, len(mesh.primitives))
-    defer delete(mesh_data)
-
 
     for primitive, i in mesh.primitives {
         mesh_ret := &mesh_data[i]
