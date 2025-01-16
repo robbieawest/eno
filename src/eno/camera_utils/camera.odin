@@ -46,18 +46,20 @@ camera_look_at_updated_position :: proc(
     position: glm.vec3,
     towards: glm.vec3,
     up: glm.vec3
-) {
+) -> (look_at: glm.mat4) {
     camera.position = position; camera.towards = towards; camera.up = up
-    camera_look_at_position(camera)
+    return camera_look_at_position(camera)
 }
 
-camera_look_at_position :: proc(camera: ^ecs.Camera) {
+camera_look_at_position :: proc(camera: ^ecs.Camera) -> (look_at: glm.mat4) {
     camera.look_at = glm.mat4LookAt(camera.towards, camera.position, camera.up)
+    return camera.look_at
 }
 
 
 get_perspective :: proc{ get_camera_updated_perspective, get_camera_perspective }
 
+@(private)
 get_camera_updated_perspective :: proc(
     camera: ^ecs.Camera,
     field_of_view: f32,
@@ -69,6 +71,12 @@ get_camera_updated_perspective :: proc(
     return get_camera_perspective(camera)
 }
 
+@(private)
 get_camera_perspective :: proc(camera: ^ecs.Camera) -> glm.mat4 {
     return glm.mat4Perspective(camera.field_of_view, camera.aspect_ratio, camera.near_plane, camera.far_plane)
+}
+
+
+scene_perspective :: proc(scene: ^ecs.Scene) -> (perspective: glm.mat4) {
+    return get_perspective(scene.viewpoint)
 }

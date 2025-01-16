@@ -10,9 +10,11 @@ import "../ecs"
 import "../model"
 import "../gpu"
 import "../render"
+import cutils "../camera_utils"
 
 import "core:log"
 import "core:math/linalg"
+import glm "core:math/linalg/glsl"
 
 // Implement your before_frame and every_frame procedures in a file like this
 // APIs for ecs are dogwater right now
@@ -67,9 +69,44 @@ before_frame :: proc() {
 
 
     // Camera
-
+    ecs.scene_add_camera(game.Game.scene, cutils.default_camera(glm.vec3{ 0.0, 0.0, -5.0 }))  // Will set the scene viewpoint
+    ok = set_uniforms(&helmet_draw_properties); if !ok do return
 }
 
+
+set_uniforms :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool) {  // Todo update setting uniforms
+    gl_comp := draw_properties.gpu_component.(gpu.gl_GPUComponent)
+    program := &gl_comp.program
+
+    // Get scale and position
+    archetype := ecs.scene_get_archetype(game.Game.scene, "helmet_arch") or_return
+    position_res: []ecs.ComponentData(glm.vec3) = ecs.query_component_from_archetype(archetype, "position", glm.vec3, "helmet_entity") or_return
+    assert(len(position_res) == 1)
+
+    scale_res: []ecs.ComponentData(glm.vec3) = ecs.query_component_from_archetype(archetype, "scale", glm.vec3, "helmet_entity") or_return
+    assert(len(scale_res) == 1)
+
+    position: ^glm.vec3 = position_res[0].data
+    scale: ^glm.vec3 = scale_res[0].data
+
+    model := glm.mat4Scale(scale^) * glm.mat4Translate(position^)
+   // proce: gpu.UniformMatrixProc(f32) = gl.UniformMatrix4fv
+   // gpu.set_matrix_uniform(program, "m_Model", false, model, proce)
+    model_loc := gpu.get_uniform_location(program, "m_Model") or_return
+    gl.UniformMatrix4fv(model_loc, 1, false, &model[0, 0])
+
+    view := cutils.camera_look_at(game.Game.scene.viewpoint)
+    view_loc := gpu.get_uniform_location(program, "m_View") or_return
+    gl.UniformMatrix4fv(view_loc, 1, false, &view[0, 0])
+
+    perspective := cutils.get_perspective(game.Game.scene.viewpoint)
+    persp_loc := gpu.get_uniform_location(program, "m_Perspective") or_return
+    gl.UniformMatrix4fv(persp_loc, 1, false, &perspective[0, 0])
+
+    draw_properties.gpu_component = gl_comp
+    ok = true
+    return
+}
 
 
 @(private)
