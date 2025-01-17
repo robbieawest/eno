@@ -5,6 +5,7 @@ import SDL "vendor:sdl2"
 import ecs "../ecs"
 import win "../window"
 import dbg "../debug"
+import "../gpu"
 
 import "core:log"
 import "core:os"
@@ -36,6 +37,7 @@ run_game :: proc() {
     Game.before_frame()
     for Game.game_state == .RUNNING {
         poll_sdl_events()
+        gpu.frame_setup()
         Game.every_frame()
     }
 }

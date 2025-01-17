@@ -19,6 +19,7 @@ import glm "core:math/linalg/glsl"
 // Implement your before_frame and every_frame procedures in a file like this
 // APIs for ecs are dogwater right now
 
+// Certain operations are done around this every frame, look inside game pacakge
 every_frame :: proc() {
     render.draw_indexed_entities(game.Game.scene, "helmet_arch", "helmet_entity")
     ok := win.swap_window_bufs(game.Game.window); if !ok do log.errorf("could not swap bufs")
