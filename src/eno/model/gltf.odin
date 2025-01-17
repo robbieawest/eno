@@ -194,7 +194,6 @@ extract_cgltf_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []Mesh, ok: bool) {
 
 extract_index_data_from_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []IndexData, ok: bool) {
     index_data := make([dynamic]IndexData, len(mesh.primitives))
-    defer delete(index_data)
 
     for _primitive, i in mesh.primitives {
         _accessor := _primitive.indices

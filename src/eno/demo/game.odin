@@ -43,11 +43,11 @@ before_frame :: proc() {
     )
 
     position: linalg.Vector3f32
-    scale: linalg.Vector3f32 = { 1.0, 1.0, 1.0 }
+    scale: linalg.Vector3f32 = { 100.0, 100.0, 100.0 }
 
 
     helmet_draw_properties: gpu.DrawProperties
-    helmet_draw_properties.mesh, helmet_draw_properties.indices = helmet_mesh_and_indices()
+    helmet_draw_properties.mesh, helmet_draw_properties.indices = helmet_mesh_and_indices_direct()
     ok = create_shader_program(&helmet_draw_properties); if !ok do return
 
     /*
@@ -89,25 +89,56 @@ set_uniforms :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool) {  // T
     position: ^glm.vec3 = position_res[0].data
     scale: ^glm.vec3 = scale_res[0].data
 
-    model := glm.mat4Scale(scale^) * glm.mat4Translate(position^)
-   // proce: gpu.UniformMatrixProc(f32) = gl.UniformMatrix4fv
-   // gpu.set_matrix_uniform(program, "m_Model", false, model, proce)
+    // proce: gpu.UniformMatrixProc(f32) = gl.UniformMatrix4fv  check
+    // gpu.set_matrix_uniform(program, "m_Model", false, model, proce)
+
+    model := glm.identity(matrix[4, 4]f32)
+    model = glm.mat4Scale(scale^)
+    model = glm.mat4Translate(position^)
+    log.infof("model: %#v", model)
     model_loc := gpu.get_uniform_location(program, "m_Model") or_return
     gl.UniformMatrix4fv(model_loc, 1, false, &model[0, 0])
 
-    view := cutils.camera_look_at(game.Game.scene.viewpoint)
+  //  view := cutils.camera_look_at(game.Game.scene.viewpoint)
+    view := glm.identity(matrix[4, 4]f32)
     view_loc := gpu.get_uniform_location(program, "m_View") or_return
     gl.UniformMatrix4fv(view_loc, 1, false, &view[0, 0])
 
     perspective := cutils.get_perspective(game.Game.scene.viewpoint)
-    persp_loc := gpu.get_uniform_location(program, "m_Perspective") or_return
-    gl.UniformMatrix4fv(persp_loc, 1, false, &perspective[0, 0])
+    proj_loc := gpu.get_uniform_location(program, "m_Projection") or_return
+    gl.UniformMatrix4fv(proj_loc, 1, false, &perspective[0, 0])
 
     draw_properties.gpu_component = gl_comp
     ok = true
     return
 }
 
+
+@(private)
+helmet_mesh_and_indices_direct :: proc() -> (mesh: model.Mesh, indices: model.IndexData) {
+    vertex_data: [dynamic]f32 = {
+        0.5, 0.5, 0.0,   1.0, 0.0, 0.0,  //tr
+        0.5, -0.5, 0.0,  0.0, 1.0, 0.0,  //br
+        -0.5, -0.5, 0.0, 0.0, 0.0, 1.0,  //bl
+        -0.5, 0.5, 0.0,  1.0, 1.0, 0.0  //tl
+    }
+
+    layout: model.VertexLayout
+    append_soa(&layout,
+        model.MeshAttributeInfo{ .position, .vec3, .f32, 12, 3, "position" },
+        model.MeshAttributeInfo{ .color, .vec3, .f32, 12, 3, "colour" }
+    )
+
+    mesh = model.Mesh{ vertex_data, layout }
+
+    index_data: [dynamic]u32 = {
+        1, 2, 3,
+        0, 1, 3
+    }
+
+    indices = { index_data }
+    return
+}
 
 @(private)
 helmet_mesh_and_indices :: proc() -> (mesh: model.Mesh, indices: model.IndexData) {
@@ -150,13 +181,17 @@ create_shader_program :: proc(properties: ^gpu.DrawProperties) -> (ok: bool) {
 
     gpu.add_uniforms(&vertex_shader, { .mat4, "m_Model" })
     gpu.add_uniforms(&vertex_shader, { .mat4, "m_View" })
-    gpu.add_uniforms(&vertex_shader, { .mat4, "m_Perspective" })
+    gpu.add_uniforms(&vertex_shader, { .mat4, "m_Projection" })
+
+    gpu.add_output(&vertex_shader, { .vec3, "fragColour" })
 
     gpu.add_functions(&vertex_shader, gpu.init_shader_function(
         .void,
         "main",
-        `   mat4 mvp = m_Model * m_View * m_Perspective;
-            gl_Position = mvp * vec4(position, 1.0);
+        `
+          //  mat4 mvp = m_Projection * m_View * m_Model;
+            gl_Position = vec4(position, 1.0);
+            fragColour = colour;
         `,
         false
     ))
@@ -167,10 +202,11 @@ create_shader_program :: proc(properties: ^gpu.DrawProperties) -> (ok: bool) {
 
     fragment_shader: gpu.Shader
     gpu.add_output(&fragment_shader, { .vec4, "Colour" })
+    gpu.add_input(&fragment_shader, { .vec3, "fragColour" })
     gpu.add_functions(&fragment_shader, gpu.init_shader_function(
         .void,
         "main",
-        "   Colour = vec4(1.0, 0.0, 0.0, 1.0);",
+        "   Colour = vec4(fragColour, 1.0);",
         false
     ))
 
@@ -183,7 +219,7 @@ create_shader_program :: proc(properties: ^gpu.DrawProperties) -> (ok: bool) {
     gpu.attach_program(gl_comp.program)
     gpu.register_uniform(&gl_comp.program, "m_Model")
     gpu.register_uniform(&gl_comp.program, "m_View")
-    gpu.register_uniform(&gl_comp.program, "m_Perspective")
+    gpu.register_uniform(&gl_comp.program, "m_Projection")
 
     properties.gpu_component = gl_comp
     ok = true
