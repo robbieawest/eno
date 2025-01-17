@@ -47,7 +47,7 @@ before_frame :: proc() {
 
 
     helmet_draw_properties: gpu.DrawProperties
-    helmet_draw_properties.mesh, helmet_draw_properties.indices = helmet_mesh_and_indices_direct()
+    helmet_draw_properties.mesh, helmet_draw_properties.indices = helmet_mesh_and_indices()
     ok = create_shader_program(&helmet_draw_properties); if !ok do return
 
     /*
@@ -69,7 +69,7 @@ before_frame :: proc() {
 
 
     // Camera
-    ecs.scene_add_camera(game.Game.scene, cutils.default_camera(glm.vec3{ 0.0, 0.0, 0.0 }))  // Will set the scene viewpoint
+    ecs.scene_add_camera(game.Game.scene, cutils.default_camera(glm.vec3{ 0.5, 0.0, -0.5 }))  // Will set the scene viewpoint
     ok = set_uniforms(&helmet_draw_properties); if !ok do return
 }
 
@@ -100,7 +100,7 @@ set_uniforms :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool) {  // T
 
     log.infof("scale: %v", scale_res)
     model := glm.mat4Scale(scale^)
-    model *= glm.mat4Rotate({ 1, 1, 1}, 1.0)
+   // model *= glm.mat4Rotate({ 1, 1, 1}, 1.0)
     model *= glm.mat4Translate(position^)
     log.infof("model: %#v", model)
 
@@ -201,7 +201,7 @@ create_shader_program :: proc(properties: ^gpu.DrawProperties) -> (ok: bool) {
         `
             mat4 mvp = m_Projection * m_View * m_Model;
             gl_Position = mvp * vec4(position, 1.0);
-            fragColour = colour;
+            fragColour = position;
         `,
         false
     ))

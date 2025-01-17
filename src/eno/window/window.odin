@@ -106,6 +106,8 @@ SDL_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..
             gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
         }
         gl.DebugMessageCallback(dbg.GL_DEBUG_CALLBACK, nil)
+        gl.Enable(gl.DEPTH_TEST)
+        gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
     }
 
     win_ret = window

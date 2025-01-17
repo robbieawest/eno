@@ -5,12 +5,8 @@ import gl "vendor:OpenGL"
 import "../model"
 import dbg "../debug"
 
-import "core:testing"
 import "core:log"
-import "core:strings"
-import "core:fmt"
-import "base:runtime"
-import glm "core:math/linalg/glsl"
+
 
 
 GraphicsAPI :: enum { OPENGL, VULKAN } //Making it easy for the future - Is it really? Not doing vulkan any time soon no need to keep doing this
