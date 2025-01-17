@@ -18,7 +18,7 @@ default_camera_without_position :: proc() -> (camera: ecs.Camera) {
         position = { 0.0, 0.0, 0.0 },
         towards = { 0.0, 0.0, -1.0 },
         up = {0.0, 1.0, 0.0 },
-        field_of_view = glm.radians_f32(90),
+        field_of_view = 45,
         aspect_ratio = win.get_aspect_ratio(game.Game.window),
         near_plane = 0.1,
         far_plane = 100.0
@@ -31,7 +31,7 @@ default_camera_with_position :: proc(position: glm.vec3) -> (camera: ecs.Camera)
         position = position,
         towards = { 0.0, 0.0, -1.0 },
         up = {0.0, 1.0, 0.0 },
-        field_of_view = glm.radians_f32(90),
+        field_of_view = 45,
         aspect_ratio = win.get_aspect_ratio(game.Game.window),
         near_plane = 0.1,
         far_plane = 100.0
@@ -53,7 +53,7 @@ camera_look_at_updated_position :: proc(
 }
 
 camera_look_at_position :: proc(camera: ^ecs.Camera) -> (look_at: glm.mat4) {
-    camera.look_at = glm.mat4LookAt(camera.towards, glm.normalize(camera.position - camera.towards), camera.up)
+    camera.look_at = glm.mat4LookAt(camera.towards, camera.position, camera.up)
     return camera.look_at
 }
 

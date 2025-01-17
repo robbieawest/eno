@@ -42,8 +42,8 @@ before_frame :: proc() {
         ecs.make_component_info(linalg.Vector3f32, "scale")
     )
 
-    position: linalg.Vector3f32
-    scale: linalg.Vector3f32 = { 100.0, 100.0, 100.0 }
+    position: linalg.Vector3f32 = { 0.0, 0.0, 0.0 }
+    scale: linalg.Vector3f32 = { 0.5, 0.5, 0.5 }
 
 
     helmet_draw_properties: gpu.DrawProperties
@@ -69,7 +69,7 @@ before_frame :: proc() {
 
 
     // Camera
-    ecs.scene_add_camera(game.Game.scene, cutils.default_camera(glm.vec3{ 0.0, 0.0, -5.0 }))  // Will set the scene viewpoint
+    ecs.scene_add_camera(game.Game.scene, cutils.default_camera(glm.vec3{ 0.0, 0.0, 0.0 }))  // Will set the scene viewpoint
     ok = set_uniforms(&helmet_draw_properties); if !ok do return
 }
 
@@ -91,20 +91,30 @@ set_uniforms :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool) {  // T
 
     // proce: gpu.UniformMatrixProc(f32) = gl.UniformMatrix4fv  check
     // gpu.set_matrix_uniform(program, "m_Model", false, model, proce)
+    // matrix indexing and array short with `.x`
 
-    model := glm.identity(matrix[4, 4]f32)
-    model = glm.mat4Scale(scale^)
-    model = glm.mat4Translate(position^)
+
+    // native swizzling support for arrays
+
+
+
+    log.infof("scale: %v", scale_res)
+    model := glm.mat4Scale(scale^)
+    model *= glm.mat4Rotate({ 1, 1, 1}, 1.0)
+    model *= glm.mat4Translate(position^)
     log.infof("model: %#v", model)
+
     model_loc := gpu.get_uniform_location(program, "m_Model") or_return
     gl.UniformMatrix4fv(model_loc, 1, false, &model[0, 0])
 
-  //  view := cutils.camera_look_at(game.Game.scene.viewpoint)
-    view := glm.identity(matrix[4, 4]f32)
+    view := cutils.camera_look_at(game.Game.scene.viewpoint)
+    //                         dir       campos      world up
+    //view := glm.mat4LookAt({0, 0, -1}, {0, 0, 0}, {0, 1, 0})
     view_loc := gpu.get_uniform_location(program, "m_View") or_return
     gl.UniformMatrix4fv(view_loc, 1, false, &view[0, 0])
 
     perspective := cutils.get_perspective(game.Game.scene.viewpoint)
+    log.infof("perspective: %#v", perspective)
     proj_loc := gpu.get_uniform_location(program, "m_Projection") or_return
     gl.UniformMatrix4fv(proj_loc, 1, false, &perspective[0, 0])
 
@@ -189,8 +199,8 @@ create_shader_program :: proc(properties: ^gpu.DrawProperties) -> (ok: bool) {
         .void,
         "main",
         `
-          //  mat4 mvp = m_Projection * m_View * m_Model;
-            gl_Position = vec4(position, 1.0);
+            mat4 mvp = m_Projection * m_View * m_Model;
+            gl_Position = mvp * vec4(position, 1.0);
             fragColour = colour;
         `,
         false

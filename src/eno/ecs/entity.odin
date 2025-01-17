@@ -247,8 +247,11 @@ archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label:
             dbg.debug_point(dbg.LogLevel.ERROR, "Component could not be found")
             return
         }
-        
-        serialized_component := component_serialize(data)
+
+        dbg.debug_point(dbg.LogLevel.INFO, "Data before serialize: %#v", data)
+        serialized_component := component_serialize_new(data)
+        dbg.debug_point(dbg.LogLevel.INFO, "Data after serialize: %#v", serialized_component)
+
         append_elems(&archetype.components[comp_index], ..serialized_component.data)
     }
 

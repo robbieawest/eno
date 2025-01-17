@@ -94,8 +94,18 @@ components_destroy :: proc(components_data: $T) where
 
 // Serializing component data
 // Reflection could be slow here, it ultimately depends on how type_info_of is defined
+// Todo this should be able to be done without reflection
 
-// ToDo: Give allocator option
+
+component_serialize_new :: proc(component_data: ComponentDataUntyped, allocator := context.allocator) -> (ret: Component) {
+    size := type_info_of(component_data.type).size
+    ret.data = make([]byte, size)
+    ret.label = component_data.label
+    ret.type = component_data.type
+
+    mem.copy(&ret.data[0], component_data.data, size)
+    return
+}
 
 component_serialize :: proc { component_serialize_untyped, component_serialize_typed }
 
