@@ -4,7 +4,7 @@ import SDL "vendor:sdl2"
 
 import cam "../camera"
 import dbg "../debug"
-import qutils "../utils."
+import qutils "../utils/queue_utils"
 
 import "core:container/queue"
 import "../utils/queue_utils"
@@ -53,8 +53,10 @@ save_current_events :: proc(controller: ^Controller) -> (ok: bool) {
         }
     }
 
-    for event in controller.current_events {
-        queue.p
+    push_front_err := qutils.push_front_elems(&controller.past_events, ..controller.current_events[:])
+    if push_front_err != .None {
+        queue_utils.handle_queue_error(push_front_err)
+        return
     }
 
     ok = true
