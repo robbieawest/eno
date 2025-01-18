@@ -88,24 +88,7 @@ destroy_game :: proc() {
 // Events
 
 @(private)
-poll_sdl_events :: proc() -> (ok: bool) {
-    if win.CURRENT_WINDOWER != .SDL do return ok
 
-    current_sdl_event: SDL.Event
-    for SDL.PollEvent(&current_sdl_event) {
-        event_type := current_sdl_event.type
-        action, action_found := Game.sdl_event_map[event_type]
-        if action_found do action()
-        
-        if event_type == .KEYDOWN {
-            key_code := current_sdl_event.key.keysym.sym
-            key_action, key_action_found := Game.sdl_key_map[key_code]
-            if key_action_found do key_action()
-        }
-    }
-
-    return true
-}
 
 SDLEventPair :: struct {
     event: SDL.EventType,

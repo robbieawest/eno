@@ -71,7 +71,7 @@ before_frame :: proc() {
 
 
     // Camera
-    ecs.scene_add_camera(game.Game.scene, cutils.default_camera(glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
+    ecs.scene_add_camera(game.Game.scene, cutils.init_camera("helmet_cam", glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
     ok = set_uniforms(&helmet_draw_properties); if !ok do return
 }
 

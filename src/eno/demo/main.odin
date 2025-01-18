@@ -1,15 +1,9 @@
 package demo
 
-import SDL "vendor:sdl2"
-
 import win "../window"
-import ecs "../ecs"
-import gpu "../gpu"
-import model "../model"
 import game "../game"
 
 import "core:log"
-import "core:fmt"
 
 main :: proc() {
     context.logger = log.create_console_logger()
