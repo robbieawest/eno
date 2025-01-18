@@ -11,6 +11,7 @@ import "../model"
 import "../gpu"
 import "../render"
 import cutils "../camera_utils"
+import cam "../camera"
 
 import "core:log"
 import "core:math/linalg"
@@ -70,7 +71,7 @@ before_frame :: proc() {
 
 
     // Camera
-    ecs.scene_add_camera(game.Game.scene, cutils.default_camera(glm.vec3{ 0.5, 0.0, -0.5 }))  // Will set the scene viewpoint
+    ecs.scene_add_camera(game.Game.scene, cutils.default_camera(glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
     ok = set_uniforms(&helmet_draw_properties); if !ok do return
 }
 
@@ -108,13 +109,13 @@ set_uniforms :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool) {  // T
     model_loc := gpu.get_uniform_location(program, "m_Model") or_return
     gl.UniformMatrix4fv(model_loc, 1, false, &model[0, 0])
 
-    view := cutils.camera_look_at(game.Game.scene.viewpoint)
+    view := cam.camera_look_at(game.Game.scene.viewpoint)
     //                         dir       campos      world up
     //view := glm.mat4LookAt({0, 0, -1}, {0, 0, 0}, {0, 1, 0})
     view_loc := gpu.get_uniform_location(program, "m_View") or_return
     gl.UniformMatrix4fv(view_loc, 1, false, &view[0, 0])
 
-    perspective := cutils.get_perspective(game.Game.scene.viewpoint)
+    perspective := cam.get_perspective(game.Game.scene.viewpoint)
     log.infof("perspective: %#v", perspective)
     proj_loc := gpu.get_uniform_location(program, "m_Projection") or_return
     gl.UniformMatrix4fv(proj_loc, 1, false, &perspective[0, 0])

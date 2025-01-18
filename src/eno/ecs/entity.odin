@@ -1,10 +1,10 @@
 package ecs
 
 import dbg "../debug"
+import cam "../camera"
 
 import "core:mem"
 import "core:slice"
-import glm "core:math/linalg/glsl"
 
 // Todo: look into component/entity deletion and custom allocators
 // Relate it to every type defined in eno
@@ -56,8 +56,8 @@ Scene :: struct {
     archetypes: [dynamic]Archetype,
     archetype_label_match: map[string]u32,  // Maps string label to index in archetypes
     allocated: bool,
-    cameras: [dynamic]Camera,
-    viewpoint: ^Camera
+    cameras: [dynamic]cam.Camera,
+    viewpoint: ^cam.Camera
 }
 
 // Scene should be stack allocated if possible
@@ -254,52 +254,6 @@ archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label:
 
         append_elems(&archetype.components[comp_index], ..serialized_component.data)
     }
-
-    ok = true
-    return
-}
-
-
-Camera :: struct {
-    position: glm.vec3,
-    towards: glm.vec3,
-    up: glm.vec3,
-    look_at: glm.mat4,
-    field_of_view: f32,
-    aspect_ratio: f32,
-    near_plane: f32,
-    far_plane: f32
-}
-
-
-scene_add_camera :: proc(scene: ^Scene, camera: Camera) {
-    append(&scene.cameras, camera)
-    if len(scene.cameras) == 1 do scene.viewpoint = &scene.cameras[0]
-}
-
-
-scene_remove_camera :: proc(scene: ^Scene, camera_index: int) -> (ok: bool) {
-    if camera_index < 0 || camera_index >= len(scene.cameras) {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Camera index out of range")
-        return
-    }
-    if scene.viewpoint == &scene.cameras[camera_index] {
-    // Replace viewpoint
-
-        i: int
-        for i = 0; i < len(scene.cameras); i += 1 {
-            if i != camera_index {
-                scene.viewpoint = &scene.cameras[i]
-                break
-            }
-        }
-        if i == len(scene.cameras) {
-            dbg.debug_point(dbg.LogLevel.ERROR, "No camera to replace as scene viewpoint")
-            return
-        }
-    }
-
-    // todo Remove camera at index
 
     ok = true
     return
