@@ -6,6 +6,7 @@ import ecs "../ecs"
 import win "../window"
 import dbg "../debug"
 import "../gpu"
+import control "../control"
 
 import "core:log"
 import "core:os"
@@ -27,16 +28,19 @@ EnoGame :: struct {
     every_frame: frame_loop_proc_,
     before_frame: before_loop_proc_,
     game_state: GAME_STATE,
-    sdl_event_map: map[SDL.EventType]event_action_proc_,
+    sdl_event_map: map[SDL.EventType]event_action_proc_, // todo replace these
     sdl_key_map: map[SDL.Keycode]event_action_proc_,
+    controller: control.Controller
 }
 
-
+/*
+    The game loop
+*/
 run_game :: proc() {
     Game.game_state = .RUNNING
     Game.before_frame()
     for Game.game_state == .RUNNING {
-        poll_sdl_events()
+        control.poll_sdl_events(&Game.controller)
         gpu.frame_setup()
         Game.every_frame()
     }
@@ -56,38 +60,38 @@ quit_game :: proc() {
 init_game :: proc { init_game_with_scene, init_game_default_scene }
 
 
-init_game_with_scene :: proc(scene: ^ecs.Scene, window: win.WindowTarget, every_frame: frame_loop_proc_, before_frame: before_loop_proc_) {
-    Game = new(EnoGame)
+init_game_with_scene :: proc(scene: ^ecs.Scene, window: win.WindowTarget, every_frame: frame_loop_proc_, before_frame: before_loop_proc_, allocator := context.allocator) {
+    Game = new(EnoGame, allocator)
     Game.scene = scene
     Game.window = window
     Game.every_frame = every_frame
     Game.before_frame = before_frame
+    Game.controller = control.init_controller(allocator)
 }
 
 
-init_game_default_scene :: proc(window: win.WindowTarget, every_frame: frame_loop_proc_, before_frame: before_loop_proc_) {
-    Game = new(EnoGame)
+init_game_default_scene :: proc(window: win.WindowTarget, every_frame: frame_loop_proc_, before_frame: before_loop_proc_, allocator := context.allocator) {
+    Game = new(EnoGame, allocator)
     Game.scene = ecs.init_scene()
     Game.window = window
     Game.every_frame = every_frame
     Game.before_frame = before_frame
+    Game.controller = control.init_controller(allocator)
 }
 
 
-destroy_game :: proc() {
+destroy_game :: proc(allocator := context.allocator) {
     win.destroy_window(Game.window)
-    ecs.destroy_scene(Game.scene)
+    ecs.destroy_scene(Game.scene, allocator)
+    control.destroy_controller(&Game.controller)
+
     dbg.log_debug_stack()
     dbg.destroy_debug_stack()
 
-    free_all(context.allocator)
-    free_all(context.temp_allocator)
     os.exit(0)
 }
 
 // Events
-
-@(private)
 
 
 SDLEventPair :: struct {

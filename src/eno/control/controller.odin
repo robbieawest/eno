@@ -76,12 +76,12 @@ set_number_of_past_events :: proc(controller: ^Controller, cap: int) {
 }
 
 
-poll_sdl_events :: proc() -> (ok: bool) {
+poll_sdl_events :: proc(controller: ^Controller) -> (ok: bool) {
+    save_current_events(controller)
+    clear_current_events(controller)
 
     current_event: SDL.Event
-    for SDL.PollEvent(&current_event) {
-
-    }
+    for SDL.PollEvent(&current_event) do append(&controller.current_events, current_event)
 
     return true
 }
