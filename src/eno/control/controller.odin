@@ -16,10 +16,14 @@ import "../utils/queue_utils"
 // Holds currently activated controls
 // Holds past activated controls
 
+event_action_proc_ :: #type proc()
+
 MAX_PAST_EVENTS :: 20
 Controller :: struct {
     current_events: [dynamic]SDL.Event,
-    past_events: queue.Queue(SDL.Event)
+    past_events: queue.Queue(SDL.Event),
+    global_hooks: map[SDL.EventType]event_action_proc_,
+    key_hooks: map[SDL.Keycode]event_action_proc_
 }
 
 
@@ -81,7 +85,49 @@ poll_sdl_events :: proc(controller: ^Controller) -> (ok: bool) {
     clear_current_events(controller)
 
     current_event: SDL.Event
-    for SDL.PollEvent(&current_event) do append(&controller.current_events, current_event)
+    for SDL.PollEvent(&current_event) {
+        poll_global_hooks(controller, current_event.type)
+        poll_key_hooks(controller, current_event.key.keysym.sym)
+        append(&controller.current_events, current_event)
+
+    }
 
     return true
+}
+
+
+EventHook :: union {
+    GlobalHook, KeyHook
+}
+
+GlobalHook :: struct {
+    event_type: SDL.EventType,
+    action: event_action_proc_
+}
+
+KeyHook :: struct {
+    key: SDL.Keycode,
+    action: event_action_proc_
+}
+
+add_event_hooks :: proc(controller: ^Controller, hooks: ..EventHook) {
+    for hook in hooks {
+        switch v in hook {
+        case GlobalHook:
+            controller.global_hooks[v.event_type] = v.action
+        case KeyHook:
+            controller.key_hooks[v.key] = v.action
+        }
+    }
+}
+
+
+poll_global_hooks :: proc(controller: ^Controller, event_type: SDL.EventType) {
+    action, action_exists := controller.global_hooks[event_type]
+    if action_exists do action()
+}
+
+poll_key_hooks :: proc(controller: ^Controller, key: SDL.Keycode) {
+    action, action_exists := controller.key_hooks[key]
+    if action_exists do action()
 }
