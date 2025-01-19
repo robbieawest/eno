@@ -12,6 +12,7 @@ import "../gpu"
 import "../render"
 import cutils "../camera_utils"
 import cam "../camera"
+import control "../control"
 
 import "core:log"
 import "core:math/linalg"
@@ -29,13 +30,10 @@ every_frame :: proc() {
 
 before_frame :: proc() {
 
-    ok := game.map_sdl_events(
-        { SDL.EventType.QUIT, proc() { game.quit_game() }}
-    ); if !ok do log.errorf("Could not map SDL event")
-
-    ok = game.map_sdl_key_events(
-        { SDL.Keycode.ESCAPE, proc() { game.quit_game() }}
-    ); if !ok do log.errorf("Could not map SDL key event")
+     game.add_event_hooks(
+        control.GlobalHook{ SDL.EventType.QUIT, proc() { game.quit_game() }},
+        control.KeyHook{ SDL.Keycode.ESCAPE, proc() { game.quit_game() }}
+    );
 
 
     helmet_arch, _ := ecs.scene_add_archetype(game.Game.scene, "helmet_arch", context.allocator,
@@ -50,7 +48,7 @@ before_frame :: proc() {
 
     helmet_draw_properties: gpu.DrawProperties
     helmet_draw_properties.mesh, helmet_draw_properties.indices = helmet_mesh_and_indices()
-    ok = create_shader_program(&helmet_draw_properties); if !ok do return
+    ok := create_shader_program(&helmet_draw_properties); if !ok do return
 
     /*
     helmet_gl_comp.program, ok = gpu.read_shader_source({ Express = true }, "./resources/shaders/demo_shader")

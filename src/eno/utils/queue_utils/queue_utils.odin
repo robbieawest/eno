@@ -20,7 +20,7 @@ remove_back_n_elems :: proc(queue_in: ^$Q/queue.Queue($T), n: int) -> (err: Queu
 
     pop_ok: bool
     for i := 0; i < n; i += 1 {
-        _, pop_ok = queue.pop_back_safe(&queue_in); if !pop_ok {
+        _, pop_ok = queue.pop_back_safe(queue_in); if !pop_ok {
             err = .Not_Enough_Elems
             return
         }
@@ -47,14 +47,14 @@ pop_back_n_elems :: proc(queue_in: ^$Q/queue.Queue($T), n: int) -> (elems: []T, 
     Should not grow queue, returns an error when size of elems is greater than the queue space
 */
 push_front_elems :: proc(queue_in: ^$Q/queue.Queue($T), elems: ..T) -> (err: QueueError) {
-    if len(elems) > queue.space(queue_in) {
+    if len(elems) > queue.space(queue_in^) {
         err = .No_Space
         return
     }
 
     push_ok: bool; alloc_err: mem.Allocator_Error
     for elem in elems {
-        push_ok, alloc_err = queue.push_front(&queue_in, elem)
+        push_ok, alloc_err = queue.push_front(queue_in, elem)
         if !push_ok {
             err = .Unknown
             return
