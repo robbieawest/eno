@@ -12,18 +12,98 @@ import "../utils/queue_utils"
 // This package defines functionality between input controls (keyboard, mouse etc.) and the game world
 // Uses SDL events
 
+EventType :: enum u32 {
+    FIRSTEVENT,
+    QUIT,
+    APP_TERMINATING,
+    APP_LOWMEMORY,
+    APP_WILLENTERBACKGROUND,
+    APP_DIDENTERBACKGROUND,
+    APP_WILLENTERFOREGROUND,
+    APP_DIDENTERFOREGROUND,
+    LOCALECHANGED,
+    DISPLAYEVENT,
+    WINDOWEVENT,
+    SYSWMEVENT,
+    KEYDOWN,
+    KEYUP,
+    TEXTEDITING,
+    TEXTINPUT,
+    KEYMAPCHANGED,
+    MOUSEMOTION,
+    MOUSEBUTTONDOWN,
+    MOUSEBUTTONUP,
+    MOUSEWHEEL,
+    JOYAXISMOTION,
+    JOYBALLMOTION,
+    JOYHATMOTION,
+    JOYBUTTONDOWN,
+    JOYBUTTONUP,
+    JOYDEVICEADDED,
+    JOYDEVICEREMOVED,
+    CONTROLLERAXISMOTION,
+    CONTROLLERBUTTONDOWN,
+    CONTROLLERBUTTONUP,
+    CONTROLLERDEVICEADDED,
+    CONTROLLERDEVICEREMOVED,
+    CONTROLLERDEVICEREMAPPED,
+    CONTROLLERTOUCHPADDOWN,
+    CONTROLLERTOUCHPADMOTION,
+    CONTROLLERTOUCHPADUP,
+    CONTROLLERSENSORUPDATE,
+    FINGERDOWN,
+    FINGERUP,
+    FINGERMOTION,
+    DOLLARGESTURE,
+    DOLLARRECORD,
+    MULTIGESTURE,
+    CLIPBOARDUPDATE,
+    DROPFILE,
+    DROPTEXT,
+    DROPBEGIN,
+    DROPCOMPLETE,
+    AUDIODEVICEADDED,
+    AUDIODEVICEREMOVED,
+    SENSORUPDATE,
+    RENDER_TARGETS_RESET,
+    RENDER_DEVICE_RESET,
+    USEREVENT,
+    LASTEVENT,
+}
+
+EventTypes :: bit_set[EventType]
+KeyboardEvents :: EventTypes{ .KEYDOWN, .KEYUP, .TEXTEDITING, .TEXTINPUT, .KEYMAPCHANGED }
+
 
 MAX_PAST_EVENTS :: 20
 Controller :: struct {
     current_events: [dynamic]SDL.Event,
     past_events: queue.Queue(SDL.Event),
-    global_hooks: GlobalHooks
+    global_hooks: GlobalHooks,
+    camera_hooks: CameraHooks
 }
 
-hook :: #type proc()
+
+action :: union #no_nil {
+    #type proc(),
+    #type proc(event: SDL.Event)
+}
+
 GlobalHooks :: struct {
-    event_hooks: map[SDL.EventType]hook,
-    key_hooks: map[SDL.Keycode]hook
+    event_hooks: map[SDL.EventType]action,
+    key_hooks: map[SDL.Keycode]action
+}
+
+
+camera_action :: union #no_nil {
+    #type proc(camera: ^cam.Camera),
+    #type proc(camera: ^cam.Camera, event: SDL.Event)
+}
+
+CameraHooks :: struct {
+    event_hooks: map[SDL.EventType]camera_action,
+    key_hooks: map[SDL.Keycode]camera_action,
+    active_cameras: [dynamic]^cam.Camera
 }
 
 
@@ -86,8 +166,8 @@ poll_sdl_events :: proc(controller: ^Controller) -> (ok: bool) {
 
     current_event: SDL.Event
     for SDL.PollEvent(&current_event) {
-        poll_global_hooks(controller, current_event.type)
-        poll_key_hooks(controller, current_event.key.keysym.sym)
+        //poll_global_hooks(controller, current_event.type)
+        //poll_key_hooks(controller, current_event.key.keysym.sym)
         append(&controller.current_events, current_event)
 
     }
@@ -102,12 +182,12 @@ EventHook :: union {
 
 GlobalHook :: struct {
     event_type: SDL.EventType,
-    action: hook
+    action: action
 }
 
 KeyHook :: struct {
     key: SDL.Keycode,
-    action: hook
+    action: action
 }
 
 add_event_hooks :: proc(controller: ^Controller, hooks: ..EventHook) {
@@ -121,13 +201,26 @@ add_event_hooks :: proc(controller: ^Controller, hooks: ..EventHook) {
     }
 }
 
-
-poll_global_hooks :: proc(controller: ^Controller, event_type: SDL.EventType) {
-    action, action_exists := controller.global_hooks.event_hooks[event_type]
-    if action_exists do action()
+poll_global_hooks :: proc(controller: ^Controller, event: SDL.Event) {
+    action, action_exists := controller.global_hooks.event_hooks[event.type]
+    if action_exists {
+        switch act in action {
+        case proc(SDL.Event): act(event)
+        case proc(): act()
+        }
+    }
 }
 
-poll_key_hooks :: proc(controller: ^Controller, key: SDL.Keycode) {
-    action, action_exists := controller.global_hooks.key_hooks[key]
-    if action_exists do action()
+
+
+poll_key_hooks :: proc(controller: ^Controller, event: SDL.Event) {
+    if cast(EventType)(event.type) not_in KeyboardEvents do return
+
+    action, action_exists := controller.global_hooks.key_hooks[event.key.keysym.sym]
+    if action_exists {
+        switch act in action {
+        case proc(SDL.Event): act(event)
+        case proc(): act()
+        }
+    }
 }
