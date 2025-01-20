@@ -89,6 +89,6 @@ destroy_game :: proc(allocator := context.allocator) {
 }
 
 
-add_event_hooks :: proc(hooks: ..control.EventHook) {
+add_event_hooks :: proc(hooks: ..control.Hook) {
     control.add_event_hooks(&Game.controller, ..hooks)
 }

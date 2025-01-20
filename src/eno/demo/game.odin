@@ -31,8 +31,8 @@ every_frame :: proc() {
 before_frame :: proc() {
 
      game.add_event_hooks(
-        control.GlobalHook{ SDL.EventType.QUIT, proc() { game.quit_game() }},
-        control.KeyHook{ SDL.Keycode.ESCAPE, proc() { game.quit_game() }}
+        control.EmptyGlobalHook{ control.EventType.QUIT, proc() { game.quit_game() }},
+        control.EmptyKeyHook{ SDL.Keycode.ESCAPE, proc() { game.quit_game() }}
     );
 
 

@@ -85,23 +85,29 @@ Controller :: struct {
 
 
 action :: union #no_nil {
-    #type proc(),
-    #type proc(event: SDL.Event)
+    empty_action,
+    event_action
 }
 
+empty_action :: proc()
+event_action :: proc(event: SDL.Event)
+
 GlobalHooks :: struct {
-    event_hooks: map[SDL.EventType]action,
+    event_hooks: map[EventType]action,
     key_hooks: map[SDL.Keycode]action
 }
 
 
 camera_action :: union #no_nil {
-    #type proc(camera: ^cam.Camera),
-    #type proc(camera: ^cam.Camera, event: SDL.Event)
+    empty_camera_action,
+    event_camera_action
 }
 
+empty_camera_action :: proc(camera: ^cam.Camera)
+event_camera_action :: proc(camera: ^cam.Camera, event: SDL.Event)
+
 CameraHooks :: struct {
-    event_hooks: map[SDL.EventType]camera_action,
+    event_hooks: map[EventType]camera_action,
     key_hooks: map[SDL.Keycode]camera_action,
     active_cameras: [dynamic]^cam.Camera
 }
@@ -166,8 +172,8 @@ poll_sdl_events :: proc(controller: ^Controller) -> (ok: bool) {
 
     current_event: SDL.Event
     for SDL.PollEvent(&current_event) {
-        //poll_global_hooks(controller, current_event.type)
-        //poll_key_hooks(controller, current_event.key.keysym.sym)
+        poll_global_hooks(controller, current_event)
+        poll_key_hooks(controller, current_event)
         append(&controller.current_events, current_event)
 
     }
@@ -176,37 +182,84 @@ poll_sdl_events :: proc(controller: ^Controller) -> (ok: bool) {
 }
 
 
-EventHook :: union {
-    GlobalHook, KeyHook
+Hook :: union {
+    EmptyGlobalHook,
+    EventGlobalHook,
+    EmptyKeyHook,
+    EventKeyHook,
+
+    EmptyCameraGlobalHook,
+    EventCameraGlobalHook,
+    EmptyCameraKeyHook,
+    EventCameraKeyHook
 }
 
-GlobalHook :: struct {
-    event_type: SDL.EventType,
-    action: action
+EmptyGlobalHook :: GlobalHook(empty_action)
+EventGlobalHook :: GlobalHook(event_action)
+EmptyKeyHook :: KeyHook(empty_action)
+EventKeyHook :: KeyHook(event_action)
+
+EmptyCameraGlobalHook :: GlobalHook(empty_camera_action)
+EventCameraGlobalHook :: GlobalHook(event_camera_action)
+EmptyCameraKeyHook :: KeyHook(empty_camera_action)
+EventCameraKeyHook :: KeyHook(event_camera_action)
+
+
+GlobalHook :: struct($proc_type: typeid)
+    where
+        proc_type == empty_action           ||
+        proc_type == event_action           ||
+        proc_type == empty_camera_action    ||
+        proc_type == event_camera_action
+{
+    event_type: EventType,
+    action: proc_type
 }
 
-KeyHook :: struct {
+KeyHook :: struct($proc_type: typeid)
+    where
+        proc_type == empty_action           ||
+        proc_type == event_action           ||
+        proc_type == empty_camera_action    ||
+        proc_type == event_camera_action
+{
     key: SDL.Keycode,
-    action: action
+    action: proc_type
 }
 
-add_event_hooks :: proc(controller: ^Controller, hooks: ..EventHook) {
+
+add_event_hooks :: proc(controller: ^Controller, hooks: ..Hook) {
     for hook in hooks {
         switch v in hook {
-        case GlobalHook:
+        case EventGlobalHook:
             controller.global_hooks.event_hooks[v.event_type] = v.action
-        case KeyHook:
+        case EmptyGlobalHook:
+            controller.global_hooks.event_hooks[v.event_type] = v.action
+
+        case EmptyKeyHook:
             controller.global_hooks.key_hooks[v.key] = v.action
+        case EventKeyHook:
+            controller.global_hooks.key_hooks[v.key] = v.action
+
+        case EmptyCameraGlobalHook:
+            controller.camera_hooks.event_hooks[v.event_type] = v.action
+        case EventCameraGlobalHook:
+            controller.camera_hooks.event_hooks[v.event_type] = v.action
+
+        case EmptyCameraKeyHook:
+            controller.camera_hooks.key_hooks[v.key] = v.action
+        case EventCameraKeyHook:
+            controller.camera_hooks.key_hooks[v.key] = v.action
         }
     }
 }
 
 poll_global_hooks :: proc(controller: ^Controller, event: SDL.Event) {
-    action, action_exists := controller.global_hooks.event_hooks[event.type]
+    action, action_exists := controller.global_hooks.event_hooks[cast(EventType)event.type]
     if action_exists {
         switch act in action {
-        case proc(SDL.Event): act(event)
-        case proc(): act()
+            case empty_action: act()
+            case event_action: act(event)
         }
     }
 }
@@ -219,8 +272,8 @@ poll_key_hooks :: proc(controller: ^Controller, event: SDL.Event) {
     action, action_exists := controller.global_hooks.key_hooks[event.key.keysym.sym]
     if action_exists {
         switch act in action {
-        case proc(SDL.Event): act(event)
-        case proc(): act()
+        case empty_action: act()
+        case event_action: act(event)
         }
     }
 }
