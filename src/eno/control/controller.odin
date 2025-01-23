@@ -8,6 +8,7 @@ import qutils "../utils/queue_utils"
 
 import "core:container/queue"
 import "../utils/queue_utils"
+import "core:reflect"
 
 // This package defines functionality between input controls (keyboard, mouse etc.) and the game world
 // Uses SDL events
@@ -69,6 +70,17 @@ EventType :: enum u32 {
     RENDER_DEVICE_RESET,
     USEREVENT,
     LASTEVENT,
+}
+
+conv_event_type :: proc(type: SDL.EventType) -> (conv: EventType) {
+    name, ok := reflect.enum_name_from_value(type); if !ok {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not convert enum")
+        return
+    }
+    conv, ok = reflect.enum_from_name(EventType, name); if !ok {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not convert enum")
+    }
+    return
 }
 
 EventTypes :: bit_set[EventType]
@@ -255,7 +267,8 @@ add_event_hooks :: proc(controller: ^Controller, hooks: ..Hook) {
 }
 
 poll_global_hooks :: proc(controller: ^Controller, event: SDL.Event) {
-    action, action_exists := controller.global_hooks.event_hooks[cast(EventType)event.type]
+    dbg.debug_point(dbg.LogLevel.INFO, "event type: %v", conv_event_type(event.type))
+    action, action_exists := controller.global_hooks.event_hooks[conv_event_type(event.type)]
     if action_exists {
         switch act in action {
             case empty_action: act()
@@ -265,9 +278,8 @@ poll_global_hooks :: proc(controller: ^Controller, event: SDL.Event) {
 }
 
 
-
 poll_key_hooks :: proc(controller: ^Controller, event: SDL.Event) {
-    if cast(EventType)(event.type) not_in KeyboardEvents do return
+    if conv_event_type(event.type) not_in KeyboardEvents do return
 
     action, action_exists := controller.global_hooks.key_hooks[event.key.keysym.sym]
     if action_exists {
