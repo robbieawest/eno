@@ -11,8 +11,22 @@ Camera :: struct {
     aspect_ratio: f32,
     near_plane: f32,
     far_plane: f32,
-    label: string
+    label: string,
+    move_speed: f32,
+    move_amp: glm.vec3,  // Allows one to modulate the velocite at finer details than a simple scalar
 }
+
+
+DEFAULT_POSITION : glm.vec3 : { 0.0, 0.0, 0.0 }
+DEFAULT_TOWARDS : glm.vec3 : { 0.0, 0.0, -1.0 }
+DEFAULT_UP : glm.vec3 : { 0.0, 1.0, 0.0 }
+DEFAULT_FOV: f32 : 45
+DEFAULT_ASPECT : f32 : 1.77
+DEFAULT_NEAR_PLANE : f32: 0.1
+DEFAULT_FAR_PLANE : f32: 100.0
+DEFAULT_MOVSPD : f32 : 1.0
+DEFAULT_MOVAMP: glm.vec3 : { 1.0, 1.0, 1.0 }
+
 
 // todo: Update this
 camera_look_at :: proc{ camera_look_at_updated_position, camera_look_at_position }

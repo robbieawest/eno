@@ -32,7 +32,8 @@ before_frame :: proc() {
 
      game.add_event_hooks(
         control.EmptyGlobalHook{ control.EventType.QUIT, proc() { game.quit_game() }},
-        control.EmptyKeyHook{ SDL.Keycode.ESCAPE, proc() { game.quit_game() }}
+        control.EmptyKeyHook{ SDL.Keycode.ESCAPE, proc() { game.quit_game() }},
+        //control.EmptyCameraKeyHook{ SDL.Keycode.A, proc(camera: ^cam.Camera) { cam.move}}
     );
 
 
@@ -69,7 +70,7 @@ before_frame :: proc() {
 
 
     // Camera
-    ecs.scene_add_camera(game.Game.scene, cutils.init_camera("helmet_cam", glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
+    ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "helmet_cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
     ok = set_uniforms(&helmet_draw_properties); if !ok do return
 }
 
