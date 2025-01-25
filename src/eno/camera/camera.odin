@@ -42,7 +42,7 @@ up: glm.vec3
 }
 
 camera_look_at_position :: proc(camera: ^Camera) -> (look_at: glm.mat4) {
-    camera.look_at = glm.mat4LookAt(camera.towards, camera.position, camera.up)
+    camera.look_at = glm.mat4LookAt(camera.position, camera.towards, camera.up)
     return camera.look_at
 }
 
