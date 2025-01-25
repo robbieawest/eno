@@ -23,18 +23,32 @@ import glm "core:math/linalg/glsl"
 
 // Certain operations are done around this every frame, look inside game pacakge
 every_frame :: proc() {
+
+    // Update camera
+    copied_program := draw_properties.gpu_component.(gpu.gl_GPUComponent).program
+    update_view(&copied_program)
+
+    // Draw
     render.draw_indexed_entities(game.Game.scene, "helmet_arch", "helmet_entity")
+
+    // Swap
     ok := win.swap_window_bufs(game.Game.window); if !ok do log.errorf("could not swap bufs")
 }
 
+draw_properties: ^gpu.DrawProperties
 
 before_frame :: proc() {
-
-     game.add_event_hooks(
+    game.add_event_hooks(
         control.EmptyGlobalHook{ control.EventType.QUIT, proc() { game.quit_game() }},
         control.EmptyKeyHook{ SDL.Keycode.ESCAPE, proc() { game.quit_game() }},
-        //control.EmptyCameraKeyHook{ SDL.Keycode.A, proc(camera: ^cam.Camera) { cam.move}}
+        control.EmptyCameraKeyHook{ SDL.Keycode.W, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, 0.0, -1.0 }) }},
+        control.EmptyCameraKeyHook{ SDL.Keycode.A, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ -1.0, 0.0, 0.0 }) }},
+        control.EmptyCameraKeyHook{ SDL.Keycode.S, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, 0.0, 1.0 }) }},
+        control.EmptyCameraKeyHook{ SDL.Keycode.D, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 1.0, 0.0, 0.0 }) }},
+        control.EmptyCameraKeyHook{ SDL.Keycode.SPACE, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, 1.0, 0.0 }) }},
+        control.EmptyCameraKeyHook{ SDL.Keycode.Q, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, -1.0, 0.0 }) }}
     );
+
 
 
     helmet_arch, _ := ecs.scene_add_archetype(game.Game.scene, "helmet_arch", context.allocator,
@@ -48,8 +62,10 @@ before_frame :: proc() {
 
 
     helmet_draw_properties: gpu.DrawProperties
+
     helmet_draw_properties.mesh, helmet_draw_properties.indices = helmet_mesh_and_indices()
     ok := create_shader_program(&helmet_draw_properties); if !ok do return
+
 
     /*
     helmet_gl_comp.program, ok = gpu.read_shader_source({ Express = true }, "./resources/shaders/demo_shader")
@@ -62,6 +78,7 @@ before_frame :: proc() {
 
     gpu.express_draw_properties(&helmet_draw_properties)
 
+
     ecs.archetype_add_entity(game.Game.scene, helmet_arch, "helmet_entity",
         ecs.make_component_data_untyped_s(&helmet_draw_properties, "draw_properties"),
         ecs.make_component_data_untyped_s(&position, "position"),
@@ -71,7 +88,12 @@ before_frame :: proc() {
 
     // Camera
     ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "helmet_cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
+    game.add_scene_viewpoint_as_controller()
+
     ok = set_uniforms(&helmet_draw_properties); if !ok do return
+
+     draw_properties_ret, ecs_ok := ecs.query_component_from_archetype(helmet_arch, "draw_properties", gpu.DrawProperties, "helmet_entity"); if !ecs_ok do return
+     draw_properties = draw_properties_ret[0].data
 }
 
 
@@ -90,36 +112,33 @@ set_uniforms :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool) {  // T
     position: ^glm.vec3 = position_res[0].data
     scale: ^glm.vec3 = scale_res[0].data
 
-    // proce: gpu.UniformMatrixProc(f32) = gl.UniformMatrix4fv  check
-    // gpu.set_matrix_uniform(program, "m_Model", false, model, proce)
-    // matrix indexing and array short with `.x`
 
-
-    // native swizzling support for arrays
-
-
-
-    log.infof("scale: %v", scale_res)
     model := glm.mat4Scale(scale^)
-   // model *= glm.mat4Rotate({ 1, 1, 1}, 1.0)
     model *= glm.mat4Translate(position^)
-    log.infof("model: %#v", model)
 
     model_loc := gpu.get_uniform_location(program, "m_Model") or_return
     gl.UniformMatrix4fv(model_loc, 1, false, &model[0, 0])
 
-    view := cam.camera_look_at(game.Game.scene.viewpoint)
-    //                         dir       campos      world up
-    //view := glm.mat4LookAt({0, 0, -1}, {0, 0, 0}, {0, 1, 0})
-    view_loc := gpu.get_uniform_location(program, "m_View") or_return
-    gl.UniformMatrix4fv(view_loc, 1, false, &view[0, 0])
+    update_view(program) or_return
 
     perspective := cam.get_perspective(game.Game.scene.viewpoint)
-    log.infof("perspective: %#v", perspective)
     proj_loc := gpu.get_uniform_location(program, "m_Projection") or_return
     gl.UniformMatrix4fv(proj_loc, 1, false, &perspective[0, 0])
 
     draw_properties.gpu_component = gl_comp
+    ok = true
+    return
+}
+
+
+update_view :: proc(program: ^gpu.ShaderProgram) -> (ok: bool) {
+    view := cam.camera_look_at(game.Game.scene.viewpoint)
+    //                         dir       campos      world up
+    //view := glm.mat4LookAt({0, 0, -1}, {0, 0, 0}, {0, 1, 0})
+
+    view_loc := gpu.get_uniform_location(program, "m_View") or_return
+    gl.UniformMatrix4fv(view_loc, 1, false, &view[0, 0])
+
     ok = true
     return
 }

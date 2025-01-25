@@ -302,3 +302,8 @@ handle_camera_action :: proc(controller: ^Controller, camera_action: CameraActio
         case event_camera_action: for &active_camera in controller.camera_hooks.active_cameras do act(active_camera, event)
     }
 }
+
+
+add_active_camera :: proc(controller: ^Controller, camera: ^cam.Camera) {
+    append(&controller.camera_hooks.active_cameras, camera)
+}

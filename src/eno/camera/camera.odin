@@ -65,3 +65,14 @@ far_plane: f32
 get_camera_perspective :: proc(camera: ^Camera) -> glm.mat4 {
     return glm.mat4Perspective(camera.field_of_view, camera.aspect_ratio, camera.near_plane, camera.far_plane)
 }
+
+
+move :: proc(camera: ^Camera, direction: glm.vec3) {
+    vec := direction * camera.move_speed
+    modulated := glm.vec3{ camera.move_amp.x * vec.x, camera.move_amp.y * vec.y, camera.move_amp.z * vec.z }
+    camera.position += modulated
+}
+
+move_x_amount :: proc(camera: ^Camera, vec: glm.vec3) {
+    camera.position += vec
+}

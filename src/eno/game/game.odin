@@ -92,3 +92,8 @@ destroy_game :: proc(allocator := context.allocator) {
 add_event_hooks :: proc(hooks: ..control.Hook) {
     control.add_event_hooks(&Game.controller, ..hooks)
 }
+
+
+add_scene_viewpoint_as_controller :: proc() {
+    control.add_active_camera(&Game.controller, Game.scene.viewpoint)
+}
