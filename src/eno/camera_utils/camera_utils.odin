@@ -3,9 +3,12 @@ package camera_utils
 import win "../window"
 import "../game"
 import cam "../camera"
+import lutils "../utils/linalg_utils"
 
 import glm "core:math/linalg/glsl"
+import "core:math/linalg/"
 import "core:fmt"
+import "../control"
 
 // Utilities for cameras placed elsewhere from camera package, due to circular dependency issues
 
@@ -20,7 +23,10 @@ init_camera :: proc(
     near_plane := cam.DEFAULT_NEAR_PLANE,
     far_plane := cam.DEFAULT_FAR_PLANE,
     move_speed := cam.DEFAULT_MOVSPD,
-    move_amp := cam.DEFAULT_MOVAMP
+    move_amp := cam.DEFAULT_MOVAMP,
+    pitch := cam.DEFAULT_PITCH,
+    yaw := cam.DEFAULT_YAW,
+    roll := cam.DEFAULT_ROLL,
 ) -> cam.Camera {
     return cam.Camera {
         label = len(label) != 0 ? label : get_default_label(),
@@ -32,7 +38,10 @@ init_camera :: proc(
         near_plane = near_plane,
         far_plane = far_plane,
         move_speed = move_speed,
-        move_amp = move_amp
+        move_amp = move_amp,
+        pitch = pitch,
+        yaw = yaw,
+        roll = roll
     }
 }
 

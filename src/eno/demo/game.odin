@@ -2,7 +2,6 @@ package demo
 
 import SDL "vendor:sdl2"
 import gl "vendor:OpenGL"
-import "vendor:cgltf"
 
 import win "../window"
 import game "../game"
@@ -46,8 +45,11 @@ before_frame :: proc() {
         control.EmptyCameraKeyHook{ SDL.Keycode.S, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, 0.0, 1.0 }) }},
         control.EmptyCameraKeyHook{ SDL.Keycode.D, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 1.0, 0.0, 0.0 }) }},
         control.EmptyCameraKeyHook{ SDL.Keycode.SPACE, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, 1.0, 0.0 }) }},
-        control.EmptyCameraKeyHook{ SDL.Keycode.Q, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, -1.0, 0.0 }) }}
-    );
+        control.EmptyCameraKeyHook{ SDL.Keycode.Q, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, -1.0, 0.0 }) }},
+        control.EventCameraGlobalHook{ control.EventType.MOUSEMOTION, proc(camera: ^cam.Camera, event: SDL.Event) {
+            xrel, yrel := game.scale_mouse_relative(f32(event.motion.xrel), f32(event.motion.yrel))
+            control.move_camera_via_mouse(camera, xrel, yrel)
+    }});
 
 
 

@@ -10,6 +10,9 @@ main :: proc() {
     log.info("Starting Demo")
 
     window_target := win.initialize_window(900, 900, "eno engine demo")
+    win.set_mouse_relative_mode(true)
+    win.set_mouse_raw_input(true)
+
     game.init_game(window_target, every_frame, before_frame); defer game.destroy_game()
 
     game.run_game()

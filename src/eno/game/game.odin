@@ -97,3 +97,20 @@ add_event_hooks :: proc(hooks: ..control.Hook) {
 add_scene_viewpoint_as_controller :: proc() {
     control.add_active_camera(&Game.controller, Game.scene.viewpoint)
 }
+
+
+get_mouse_speed_unscaled :: proc() -> f32 {
+    return Game.controller.mouse_settings.mouse_speed
+}
+
+get_mouse_speed :: proc() -> f32 {
+    return Game.controller.mouse_settings.mouse_speed * control.MOUSE_SPEED_SCALING
+}
+
+
+scale_mouse_relative :: proc(xrel: f32, yrel: f32) -> (xout: f32, yout: f32) {
+    scaling := Game.controller.mouse_settings.mouse_speed * control.MOUSE_SPEED_SCALING
+    xout = xrel * scaling
+    yout = yrel * scaling
+    return
+}

@@ -1,10 +1,11 @@
 package camera
 
 import glm "core:math/linalg/glsl"
+import "core:math/linalg"
 
 Camera :: struct {
     position: glm.vec3,
-    towards: glm.vec3,
+    towards: glm.vec3,  // A direction vector - check if needs to be norm
     up: glm.vec3,
     look_at: glm.mat4,
     field_of_view: f32,
@@ -14,6 +15,10 @@ Camera :: struct {
     label: string,
     move_speed: f32,
     move_amp: glm.vec3,  // Allows one to modulate the velocite at finer details than a simple scalar
+
+    pitch: f32,
+    yaw: f32,
+    roll: f32
 }
 
 
@@ -25,7 +30,10 @@ DEFAULT_ASPECT : f32 : 1.77
 DEFAULT_NEAR_PLANE : f32: 0.1
 DEFAULT_FAR_PLANE : f32: 100.0
 DEFAULT_MOVSPD : f32 : 1.0
-DEFAULT_MOVAMP: glm.vec3 : { 1.0, 1.0, 1.0 }
+DEFAULT_MOVAMP : glm.vec3 : { 1.0, 1.0, 1.0 }
+DEFAULT_PITCH : f32 : 0.0
+DEFAULT_YAW : f32 : 0.0
+DEFAULT_ROLL : f32 : 0.0
 
 
 // todo: Update this
@@ -42,7 +50,7 @@ up: glm.vec3
 }
 
 camera_look_at_position :: proc(camera: ^Camera) -> (look_at: glm.mat4) {
-    camera.look_at = glm.mat4LookAt(camera.position, camera.towards, camera.up)
+    camera.look_at = glm.mat4LookAt(camera.position, camera.position + camera.towards, camera.up)
     return camera.look_at
 }
 
@@ -71,6 +79,13 @@ move :: proc(camera: ^Camera, direction: glm.vec3) {
     vec := direction * camera.move_speed
     modulated := glm.vec3{ camera.move_amp.x * vec.x, camera.move_amp.y * vec.y, camera.move_amp.z * vec.z }
     camera.position += modulated
+}
+
+move_relative :: proc(camera: ^Camera, direction: glm.vec3) {
+    //direction := todo
+    vec := direction * camera.move_speed
+    modulated := glm.vec3{ camera.move_amp.x * vec.x, camera.move_amp.y * vec.y, camera.move_amp.z * vec.z }
+
 }
 
 move_x_amount :: proc(camera: ^Camera, vec: glm.vec3) {

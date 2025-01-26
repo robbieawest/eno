@@ -236,6 +236,8 @@ get_window_resolution :: proc(window_target: WindowTarget) -> (res: WindowResolu
 }
 
 
+// Aspect ratio
+
 get_aspect_ratio :: proc(window_target: WindowTarget) -> (ratio: f32, ok: bool) #optional_ok {
     res: WindowResolution; res, ok = get_window_resolution(window_target); if !ok do return
     return get_aspect_ratio_from_resolution(res), true;
@@ -243,4 +245,23 @@ get_aspect_ratio :: proc(window_target: WindowTarget) -> (ratio: f32, ok: bool) 
 
 get_aspect_ratio_from_resolution :: proc(res: WindowResolution) -> (ratio: f32) {
     return f32(res.w) / f32(res.h)
+}
+
+
+// Mouse
+
+set_mouse_relative_mode :: proc(flag: bool) {
+    SDL.SetRelativeMouseMode(SDL.bool(flag))
+}
+
+set_mouse_raw_input :: proc(flag: bool) {
+    if flag {
+        is_relative := SDL.GetRelativeMouseMode()
+        if is_relative do SDL.SetRelativeMouseMode(false)
+        SDL.SetHint(SDL.HINT_MOUSE_RELATIVE_MODE_WARP, "0")
+        if is_relative do SDL.SetRelativeMouseMode(true)
+
+    } else{
+        SDL.SetHint(SDL.HINT_MOUSE_RELATIVE_MODE_WARP, "1")
+    }
 }

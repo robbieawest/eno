@@ -9,6 +9,7 @@ import qutils "../utils/queue_utils"
 import "core:container/queue"
 import "../utils/queue_utils"
 import "core:reflect"
+import glm "core:math/linalg/glsl"
 
 // This package defines functionality between input controls (keyboard, mouse etc.) and the game world
 // Uses SDL events
@@ -92,7 +93,8 @@ Controller :: struct {
     current_events: [dynamic]SDL.Event,
     past_events: queue.Queue(SDL.Event),
     global_hooks: GlobalHooks,
-    camera_hooks: CameraHooks
+    camera_hooks: CameraHooks,
+    mouse_settings: MouseSettings
 }
 
 
@@ -128,6 +130,7 @@ CameraHooks :: struct {
 init_controller :: proc(allocator := context.allocator) -> (controller: Controller) {
     queue.init(&controller.past_events, MAX_PAST_EVENTS, allocator)
     make_current_events(&controller)
+    controller.mouse_settings = init_mouse_settings()
     return
 }
 
@@ -306,4 +309,41 @@ handle_camera_action :: proc(controller: ^Controller, camera_action: CameraActio
 
 add_active_camera :: proc(controller: ^Controller, camera: ^cam.Camera) {
     append(&controller.camera_hooks.active_cameras, camera)
+}
+
+
+// Mouse
+
+MouseSettings :: struct {
+    mouse_speed: f32
+}
+DEFAULT_MOUSE_SPEED : f32 : 1.0
+MOUSE_SPEED_SCALING : f32 : 0.01
+
+
+init_mouse_settings :: proc(mouse_speed := DEFAULT_MOUSE_SPEED) -> MouseSettings {
+    return { mouse_speed = mouse_speed }
+}
+
+set_mouse_speed :: proc(controller: ^Controller, mouse_speed := DEFAULT_MOUSE_SPEED) {
+    controller.mouse_settings.mouse_speed = mouse_speed
+}
+
+
+move_camera_via_mouse :: proc(camera: ^cam.Camera, xrel: f32, yrel: f32) {
+    camera.yaw += xrel
+    camera.pitch -= yrel
+
+    // Constrain
+    camera.pitch = max(-89.0, camera.pitch)
+    camera.pitch = min(89.0, camera.pitch)
+
+    // Euler rotation
+    yaw := glm.radians_f32(camera.yaw)
+    pitch := glm.radians_f32(camera.pitch)
+
+    camera.towards.x = glm.cos(yaw) * glm.cos(pitch)
+    camera.towards.y = glm.sin(pitch)
+    camera.towards.z = glm.sin(yaw) * glm.cos(pitch)
+    camera.towards = glm.normalize(camera.towards)
 }
