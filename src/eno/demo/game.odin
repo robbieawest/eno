@@ -40,15 +40,15 @@ before_frame :: proc() {
     game.add_event_hooks(
         control.EmptyGlobalHook{ control.EventType.QUIT, proc() { game.quit_game() }},
         control.EmptyKeyHook{ SDL.Keycode.ESCAPE, proc() { game.quit_game() }},
-        control.EmptyCameraKeyHook{ SDL.Keycode.W, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, 0.0, -1.0 }) }},
-        control.EmptyCameraKeyHook{ SDL.Keycode.A, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ -1.0, 0.0, 0.0 }) }},
-        control.EmptyCameraKeyHook{ SDL.Keycode.S, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, 0.0, 1.0 }) }},
-        control.EmptyCameraKeyHook{ SDL.Keycode.D, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 1.0, 0.0, 0.0 }) }},
+        control.EmptyCameraKeyHook{ SDL.Keycode.W, proc(camera: ^cam.Camera) { cam.move_with_yaw(camera, glm.vec3{ 0.0, 0.0, -1.0 }) }},
+        control.EmptyCameraKeyHook{ SDL.Keycode.A, proc(camera: ^cam.Camera) { cam.move_with_yaw(camera, glm.vec3{ -1.0, 0.0, 0.0 }) }},
+        control.EmptyCameraKeyHook{ SDL.Keycode.S, proc(camera: ^cam.Camera) { cam.move_with_yaw(camera, glm.vec3{ 0.0, 0.0, 1.0 }) }},
+        control.EmptyCameraKeyHook{ SDL.Keycode.D, proc(camera: ^cam.Camera) { cam.move_with_yaw(camera, glm.vec3{ 1.0, 0.0, 0.0 }) }},
         control.EmptyCameraKeyHook{ SDL.Keycode.SPACE, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, 1.0, 0.0 }) }},
         control.EmptyCameraKeyHook{ SDL.Keycode.Q, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, -1.0, 0.0 }) }},
         control.EventCameraGlobalHook{ control.EventType.MOUSEMOTION, proc(camera: ^cam.Camera, event: SDL.Event) {
             xrel, yrel := game.scale_mouse_relative(f32(event.motion.xrel), f32(event.motion.yrel))
-            control.move_camera_via_mouse(camera, xrel, yrel)
+            control.direct_camera(camera, xrel, yrel)
     }});
 
 

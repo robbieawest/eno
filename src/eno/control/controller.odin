@@ -318,7 +318,7 @@ MouseSettings :: struct {
     mouse_speed: f32
 }
 DEFAULT_MOUSE_SPEED : f32 : 1.0
-MOUSE_SPEED_SCALING : f32 : 0.01
+MOUSE_SPEED_SCALING : f32 : 0.1
 
 
 init_mouse_settings :: proc(mouse_speed := DEFAULT_MOUSE_SPEED) -> MouseSettings {
@@ -329,8 +329,14 @@ set_mouse_speed :: proc(controller: ^Controller, mouse_speed := DEFAULT_MOUSE_SP
     controller.mouse_settings.mouse_speed = mouse_speed
 }
 
+/*
+    Right handed
+    yaw axis (0, -1, 0)
+    pitch axis (-1, 0, 0)
 
-move_camera_via_mouse :: proc(camera: ^cam.Camera, xrel: f32, yrel: f32) {
+    if only the bloody engineers found a standard for this I wouldn't have to create arbitrary axis'
+*/
+direct_camera :: proc(camera: ^cam.Camera, xrel: f32, yrel: f32) {
     camera.yaw += xrel
     camera.pitch -= yrel
 
@@ -339,11 +345,12 @@ move_camera_via_mouse :: proc(camera: ^cam.Camera, xrel: f32, yrel: f32) {
     camera.pitch = min(89.0, camera.pitch)
 
     // Euler rotation
-    yaw := glm.radians_f32(camera.yaw)
-    pitch := glm.radians_f32(camera.pitch)
+    yaw := glm.radians(camera.yaw)
+    pitch := glm.radians(camera.pitch)
 
     camera.towards.x = glm.cos(yaw) * glm.cos(pitch)
     camera.towards.y = glm.sin(pitch)
     camera.towards.z = glm.sin(yaw) * glm.cos(pitch)
+
     camera.towards = glm.normalize(camera.towards)
 }

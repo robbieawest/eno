@@ -76,18 +76,32 @@ get_camera_perspective :: proc(camera: ^Camera) -> glm.mat4 {
 
 
 move :: proc(camera: ^Camera, direction: glm.vec3) {
-    vec := direction * camera.move_speed
-    modulated := glm.vec3{ camera.move_amp.x * vec.x, camera.move_amp.y * vec.y, camera.move_amp.z * vec.z }
-    camera.position += modulated
+    camera.position += apply_movement_modulation(camera, direction)
 }
 
-move_relative :: proc(camera: ^Camera, direction: glm.vec3) {
-    //direction := todo
-    vec := direction * camera.move_speed
-    modulated := glm.vec3{ camera.move_amp.x * vec.x, camera.move_amp.y * vec.y, camera.move_amp.z * vec.z }
-
+move_unmodulated :: proc(camera: ^Camera, direction: glm.vec3) {
+    camera.position += direction
 }
 
-move_x_amount :: proc(camera: ^Camera, vec: glm.vec3) {
-    camera.position += vec
+/*
+    Moves the camera relative to the yaw of the camera
+    Used for keyboard controls for example
+    May be buggy for values which are not normalized or are not WASD directions
+*/
+move_with_yaw :: proc(camera: ^Camera, direction: glm.vec3) {
+    assert(direction.y == 0)
+    length := glm.length(direction)
+    angle_from_default_towards := glm.acos(glm.dot(direction, DEFAULT_TOWARDS) / length)
+    if direction.x < 0 do angle_from_default_towards *= -1
+
+    new_direction_angle := angle_from_default_towards + glm.radians(camera.yaw)
+    new_direction := glm.vec3{length * glm.cos(new_direction_angle),  0.0, length * glm.sin(new_direction_angle) }
+
+    move(camera, new_direction)
+}
+
+
+apply_movement_modulation :: proc(camera: ^Camera, direction: glm.vec3) -> glm.vec3 {
+    vec := direction * camera.move_speed
+    return { camera.move_amp.x * vec.x, camera.move_amp.y * vec.y, camera.move_amp.z * vec.z }
 }
