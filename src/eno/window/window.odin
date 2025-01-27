@@ -77,6 +77,8 @@ SDL_init_window :: proc(width, height: i32, window_tag: string, extra_params: ..
         window = SDL.CreateWindow(c_window_tag, SDL.WINDOWPOS_UNDEFINED, SDL.WINDOWPOS_UNDEFINED, width, height, render_api_winflags)
     }
 
+    SDL.CreateRenderer(window, -1, SDL.RENDERER_ACCELERATED)
+
 	if window == nil {
         dbg.debug_point(dbg.LogLevel.ERROR, "Could not initialize SDL window")
         return
@@ -215,7 +217,8 @@ get_window_resolution :: proc(window_target: WindowTarget) -> (res: WindowResolu
         x, y: c.int
         sdl_err := SDL.GetRendererOutputSize(SDL.GetRenderer(sdl_win), &x, &y)
         if sdl_err != 0 {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Failed to get fullscreen resolution, SDL error code: %d", sdl_err)
+            last_sdl_err: cstring = SDL.GetError()
+            dbg.debug_point(dbg.LogLevel.ERROR, "Failed to get fullscreen resolution, SDL error: %s", last_sdl_err)
             return
         }
         res = WindowResolution { u32(x), u32(y) }
@@ -224,7 +227,8 @@ get_window_resolution :: proc(window_target: WindowTarget) -> (res: WindowResolu
         display_mode: SDL.DisplayMode
         sdl_err := SDL.GetDesktopDisplayMode(0, &display_mode)
         if sdl_err != 0 {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Failed to get window resolution, SDL error code: %d", sdl_err)
+            last_sdl_err: cstring = SDL.GetError()
+            dbg.debug_point(dbg.LogLevel.ERROR, "Failed to get window resolution, SDL error: %s", last_sdl_err)
             return
         }
 
@@ -264,4 +268,23 @@ set_mouse_raw_input :: proc(flag: bool) {
     } else{
         SDL.SetHint(SDL.HINT_MOUSE_RELATIVE_MODE_WARP, "1")
     }
+}
+
+
+set_fullscreen :: proc(window_target: ^WindowTarget) -> (ok: bool) {
+    sdl_win: ^SDL.Window
+    sdl_win, ok = window_target.(^SDL.Window); if !ok {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Not supported")
+        return
+    }
+
+    sdl_err := SDL.SetWindowFullscreen(sdl_win, SDL.WINDOW_FULLSCREEN)
+    if sdl_err != 0 {
+        last_sdl_err: cstring = SDL.GetError()
+        dbg.debug_point(dbg.LogLevel.ERROR, "Error while enabling fullscreen, sdl error: %s", last_sdl_err)
+        return
+    }
+
+    ok = true
+    return
 }
