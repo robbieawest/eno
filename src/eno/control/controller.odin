@@ -94,7 +94,9 @@ Controller :: struct {
     past_events: queue.Queue(SDL.Event),
     global_hooks: GlobalHooks,
     camera_hooks: CameraHooks,
-    mouse_settings: MouseSettings
+    mouse_settings: MouseSettings,
+    states: State,
+    state_hooks: StateHooks
 }
 
 
@@ -108,7 +110,8 @@ event_action :: proc(event: SDL.Event)
 
 GlobalHooks :: struct {
     event_hooks: map[EventType]Action,
-    key_hooks: map[SDL.Keycode]Action
+    key_hooks: map[SDL.Keycode]Action,
+    state_hooks: StateHooks
 }
 
 
@@ -353,4 +356,61 @@ direct_camera :: proc(camera: ^cam.Camera, xrel: f32, yrel: f32) {
     camera.towards.z = glm.sin(yaw) * glm.cos(pitch)
 
     camera.towards = glm.normalize(camera.towards)
+}
+
+
+// Handling states
+
+State :: struct {
+    keyboard_state: KeyboardState,
+    mouse_state: MouseState,
+}
+
+Button :: enum u8 {
+    BUTTON_LEFT,
+    BUTTON_MIDDLE,
+    BUTTON_RIGHT,
+    BUTTON_X1,
+    BUTTON_X2
+}
+
+MouseState :: bit_set[Button]
+
+KeyboardState :: []SDL.Scancode
+
+get_states :: proc(state: ^State) {
+    state.keyboard_state = transmute(KeyboardState) SDL.GetKeyboardStateAsSlice()
+
+    x: i32; y: i32;
+    state.mouse_state = transmute(MouseState) u8(SDL.GetMouseState(&x, &y))  // Cast is safe - only 5 possible values
+}
+
+
+StateHook :: union {
+    MouseStateHook, KeyboardStateHook
+}
+StateHooks :: []StateHook
+
+StateHookPair :: struct($state_type: typeid)
+    where state_type == Button || state_type == KeyboardState
+{
+    state: state_type,
+    action: StateAction
+}
+
+MouseStateHook :: StateHookPair(Button)
+KeyboardStateHook :: StateHookPair(KeyboardState)  // Slightly different - slice of scancode allows for multiple keys to be mapped to the same action
+
+
+StateAction :: empty_action
+
+poll_states :: proc(controller: ^Controller, update: bool) {
+    if update do get_states(&controller.states)
+
+    for state_hook in controller.state_hooks {
+        switch hook in state_hook {
+            case MouseStateHook:
+                if hook.state in controller.states.mouse_state do hook.action()
+        }
+    }
 }
