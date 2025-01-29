@@ -124,7 +124,8 @@ direct_camera :: proc(camera: ^cam.Camera, xrel: f32, yrel: f32) {
 
 Hook :: struct {
     identifier: HookIdentifier,
-    action: Action
+    action: Action,
+    data: rawptr
 }
 
 destroy_hook :: proc(hook: ^Hook) {
@@ -175,7 +176,7 @@ remove_mouse_button :: proc(ident: ^HookIdentifier, button: i32) {
     ident.mouse_button_mask &~= button
 }
 
-add_key_code :: proc(ident: ^HookIdentifier, code: SDL.Keycode) {
+add_key_code :: proc(ident: ^HookIdentifier, code: SDL.Scancode) {
     append(&ident.event_keys, code)
 }
 
@@ -184,9 +185,10 @@ add_key_state :: proc(ident: ^HookIdentifier, scancode: SDL.Scancode) {
 }
 
 
-add_hook :: proc(controller: ^Controller, ident: HookIdentifier, action: Action) {
-    append(&controller.hooks, Hook{ ident, action })
+add_hook :: proc(controller: ^Controller, ident: HookIdentifier, action: Action, data: rawptr) {
+    append(&controller.hooks, Hook{ ident, action, data })
 }
+
 
 /*
     Polls SDL for events
@@ -203,11 +205,32 @@ poll :: proc(controller: ^Controller) {
         if current_event == nil do continue
 
         for &hook in controller.hooks {
-            if u32(current_event.type) | hook.identifier.event_type_mask != 0 || slice.contains(hook.identifier.event_keys[:], current_event.key.keysym.scancode) {
+            if u32(current_event.type) | hook.identifier.event_type_mask != 0 ||
+                slice.contains(hook.identifier.event_keys[:], current_event.key.keysym.scancode)
+            {
                 append(&activated, &hook)
                 break
             }
 
         }
+    }
+
+    mouse_state := SDL.GetMouseState(nil, nil)
+    keyboard_state := SDL.GetKeyboardStateAsSlice()
+
+    for &hook in controller.hooks {
+        if slice.contains(activated[:], &hook) do continue
+
+        for state in hook.identifier.key_state {
+            if keyboard_state[state] == 1 {
+                append(&activated, &hook)
+                break
+            }
+        }
+    }
+
+
+    for actived_hook in activated {
+        actived_hook.action(current_event, actived_hook.data)
     }
 }
