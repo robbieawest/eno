@@ -4,6 +4,7 @@ import SDL "vendor:sdl2"
 
 import cam "../camera"
 import qutils "../utils/queue_utils"
+import dbg "../debug"
 
 import "core:container/queue"
 import glm "core:math/linalg/glsl"
@@ -141,14 +142,25 @@ HookIdentifier :: struct {
     mouse_button_mask: i32     // For mouse states - not directly tied to events
 }
 
+
+EMPTY_EVENT_TYPES :: []SDL.EventType{}
+EMPTY_KEY_CODES :: []SDL.Scancode{}
+EMPTY_KEY_STATES :: []SDL.Scancode{}
+EMPTY_MOUSE_BUTTONS :: []SDL.Scancode{}
+
 /*
     Construct a hook identifier from properties which you want the hook to be activated on
     Use the add and remove procedrues to directly update a hook identifier
 */
-make_hook_identifier :: proc(event_types: []SDL.EventType, key_codes: []SDL.Scancode, key_states: []SDL.Scancode, mouse_buttons: []i32) -> (ident: HookIdentifier) {
+make_hook_identifier :: proc(
+    event_types := []SDL.EventType{},
+    event_keys := []SDL.Scancode{},
+    key_states := []SDL.Scancode{},
+    mouse_buttons := []i32{}
+) -> (ident: HookIdentifier) {
     for type in event_types do add_event_type(&ident, type)
     for button in mouse_buttons do add_mouse_button(&ident, button)
-    ident.event_keys = slice.clone_to_dynamic(key_codes)
+    ident.event_keys = slice.clone_to_dynamic(event_keys)
     ident.key_state = slice.clone_to_dynamic(key_states)
 
     return
@@ -200,12 +212,10 @@ poll :: proc(controller: ^Controller) {
 
     activated := make([dynamic]^Hook, 0); defer delete(activated)  // make into a hashset
 
-    current_event: ^SDL.Event
-    for SDL.PollEvent(current_event) {
-        if current_event == nil do continue
-
+    current_event: SDL.Event
+    for SDL.PollEvent(&current_event) {
         for &hook in controller.hooks {
-            if u32(current_event.type) | hook.identifier.event_type_mask != 0 ||
+            if u32(current_event.type) & hook.identifier.event_type_mask != 0 ||
                 slice.contains(hook.identifier.event_keys[:], current_event.key.keysym.scancode)
             {
                 append(&activated, &hook)
@@ -214,7 +224,6 @@ poll :: proc(controller: ^Controller) {
 
         }
     }
-
     mouse_state := SDL.GetMouseState(nil, nil)
     keyboard_state := SDL.GetKeyboardStateAsSlice()
 
@@ -231,6 +240,7 @@ poll :: proc(controller: ^Controller) {
 
 
     for actived_hook in activated {
-        actived_hook.action(current_event, actived_hook.data)
+        dbg.debug_point(dbg.LogLevel.INFO, "Acting with hook: %#v", actived_hook)
+        actived_hook.action(&current_event, actived_hook.data)
     }
 }

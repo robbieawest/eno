@@ -407,10 +407,12 @@ StateAction :: empty_action
 poll_states :: proc(controller: ^Controller, update: bool) {
     if update do get_states(&controller.states)
 
+    /*
     for state_hook in controller.state_hooks {
         switch hook in state_hook {
             case MouseStateHook:
                 if hook.state in controller.states.mouse_state do hook.action()
         }
     }
+    */
 }

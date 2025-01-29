@@ -11,7 +11,7 @@ import "../gpu"
 import "../render"
 import cutils "../camera_utils"
 import cam "../camera"
-import control "../control"
+import control2 "../control2"
 
 import "core:log"
 import "core:math/linalg"
@@ -37,19 +37,7 @@ every_frame :: proc() {
 draw_properties: ^gpu.DrawProperties
 
 before_frame :: proc() {
-    game.add_event_hooks(
-        control.EmptyGlobalHook{ control.EventType.QUIT, proc() { game.quit_game() }},
-        control.EmptyKeyHook{ SDL.Keycode.ESCAPE, proc() { game.quit_game() }},
-        control.EmptyCameraKeyHook{ SDL.Keycode.W, proc(camera: ^cam.Camera) { cam.move_with_yaw(camera, glm.vec3{ 0.0, 0.0, -1.0 }) }},
-        control.EmptyCameraKeyHook{ SDL.Keycode.A, proc(camera: ^cam.Camera) { cam.move_with_yaw(camera, glm.vec3{ -1.0, 0.0, 0.0 }) }},
-        control.EmptyCameraKeyHook{ SDL.Keycode.S, proc(camera: ^cam.Camera) { cam.move_with_yaw(camera, glm.vec3{ 0.0, 0.0, 1.0 }) }},
-        control.EmptyCameraKeyHook{ SDL.Keycode.D, proc(camera: ^cam.Camera) { cam.move_with_yaw(camera, glm.vec3{ 1.0, 0.0, 0.0 }) }},
-        control.EmptyCameraKeyHook{ SDL.Keycode.SPACE, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, 1.0, 0.0 }) }},
-        control.EmptyCameraKeyHook{ SDL.Keycode.Q, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, -1.0, 0.0 }) }},
-        control.EventCameraGlobalHook{ control.EventType.MOUSEMOTION, proc(camera: ^cam.Camera, event: SDL.Event) {
-            xrel, yrel := game.scale_mouse_relative(f32(event.motion.xrel), f32(event.motion.yrel))
-            control.direct_camera(camera, xrel, yrel)
-    }});
+
 
 
 
@@ -90,12 +78,65 @@ before_frame :: proc() {
 
     // Camera
     ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "helmet_cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
-    game.add_scene_viewpoint_as_controller()
 
     ok = set_uniforms(&helmet_draw_properties); if !ok do return
 
-     draw_properties_ret, ecs_ok := ecs.query_component_from_archetype(helmet_arch, "draw_properties", gpu.DrawProperties, "helmet_entity"); if !ecs_ok do return
-     draw_properties = draw_properties_ret[0].data
+    draw_properties_ret, ecs_ok := ecs.query_component_from_archetype(helmet_arch, "draw_properties", gpu.DrawProperties, "helmet_entity"); if !ecs_ok do return
+    draw_properties = draw_properties_ret[0].data
+
+
+    /*
+    game.add_event_hooks(
+        control.EmptyGlobalHook{ control.EventType.QUIT, proc() { game.quit_game() }},
+        control.EmptyKeyHook{ SDL.Keycode.ESCAPE, proc() { game.quit_game() }},
+        control.EmptyCameraKeyHook{ SDL.Keycode.W, proc(camera: ^cam.Camera) { cam.move_with_yaw(camera, glm.vec3{ 0.0, 0.0, -1.0 }) }},
+        control.EmptyCameraKeyHook{ SDL.Keycode.A, proc(camera: ^cam.Camera) { cam.move_with_yaw(camera, glm.vec3{ -1.0, 0.0, 0.0 }) }},
+        control.EmptyCameraKeyHook{ SDL.Keycode.S, proc(camera: ^cam.Camera) { cam.move_with_yaw(camera, glm.vec3{ 0.0, 0.0, 1.0 }) }},
+        control.EmptyCameraKeyHook{ SDL.Keycode.D, proc(camera: ^cam.Camera) { cam.move_with_yaw(camera, glm.vec3{ 1.0, 0.0, 0.0 }) }},
+        control.EmptyCameraKeyHook{ SDL.Keycode.SPACE, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, 1.0, 0.0 }) }},
+        control.EmptyCameraKeyHook{ SDL.Keycode.Q, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, -1.0, 0.0 }) }},
+        control.EventCameraGlobalHook{ control.EventType.MOUSEMOTION, proc(camera: ^cam.Camera, event: SDL.Event) {
+            xrel, yrel := game.scale_mouse_relative(f32(event.motion.xrel), f32(event.motion.yrel))
+            control.direct_camera(camera, xrel, yrel)
+    }});
+    */
+    game.add_event_hooks(
+        control2.Hook{
+            control2.make_hook_identifier(event_types = []SDL.EventType{ .QUIT }, event_keys = []SDL.Scancode{ .ESCAPE }),
+            proc(_: ^SDL.Event, _: rawptr) { game.quit_game() },
+            nil
+        },
+        control2.Hook{
+            control2.make_hook_identifier(key_states = []SDL.Scancode{ .W }),
+            proc(_: ^SDL.Event, cam_data: rawptr) { cam.move_with_yaw(cast(^cam.Camera)cam_data, glm.vec3{ 0.0, 0.0, -1.0 }) },
+            game.scene_viewpoint()
+        },
+        control2.Hook{
+            control2.make_hook_identifier(key_states = []SDL.Scancode{ .A }),
+            proc(_: ^SDL.Event, cam_data: rawptr) { cam.move_with_yaw(cast(^cam.Camera)cam_data, glm.vec3{ -1.0, 0.0, 0.0 }) },
+            game.scene_viewpoint()
+        },
+        control2.Hook{
+            control2.make_hook_identifier(key_states = []SDL.Scancode{ .S }),
+            proc(_: ^SDL.Event, cam_data: rawptr) { cam.move_with_yaw(cast(^cam.Camera)cam_data, glm.vec3{ 0.0, 0.0, 1.0 }) },
+            game.scene_viewpoint()
+        },
+        control2.Hook{
+            control2.make_hook_identifier(key_states = []SDL.Scancode{ .D }),
+            proc(_: ^SDL.Event, cam_data: rawptr) { cam.move_with_yaw(cast(^cam.Camera)cam_data, glm.vec3{ 1.0, 0.0, 0.0 }) },
+            game.scene_viewpoint()
+        },
+        control2.Hook{
+            control2.make_hook_identifier(key_states = []SDL.Scancode{ .SPACE }),
+            proc(_: ^SDL.Event, cam_data: rawptr) { cam.move_with_yaw(cast(^cam.Camera)cam_data, glm.vec3{ 0.0, 1.0, 0.0 }) },
+            game.scene_viewpoint()
+        },
+        control2.Hook{
+            control2.make_hook_identifier(key_states = []SDL.Scancode{ .Q }),
+            proc(_: ^SDL.Event, cam_data: rawptr) { cam.move_with_yaw(cast(^cam.Camera)cam_data, glm.vec3{ 0.0, -1.0, 0.0 }) },
+            game.scene_viewpoint()
+        },
+    )
 }
 
 
