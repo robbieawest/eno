@@ -249,3 +249,23 @@ poll :: proc(controller: ^Controller) {
         actived_hook.action(&copy_event, actived_hook.data)
     }
 }
+
+HookInput :: union {
+    Hook,
+    [dynamic]Hook
+}
+
+/*
+    Consumes hooks given
+*/
+add_hooks :: proc(controller: ^Controller, hook_inputs: ..HookInput) {
+    for hook_input in hook_inputs {
+        switch hook in hook_input {
+            case Hook:
+                append(&controller.hooks, hook)
+            case [dynamic]Hook:
+                append_elems(&controller.hooks, ..hook[:])
+                delete(hook)
+        }
+    }
+}

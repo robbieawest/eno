@@ -71,51 +71,10 @@ before_frame :: proc() {
     draw_properties_ret, ecs_ok := ecs.query_component_from_archetype(helmet_arch, "draw_properties", gpu.DrawProperties, "helmet_entity"); if !ecs_ok do return
     draw_properties = draw_properties_ret[0].data
 
-
     game.add_event_hooks(
-        control2.Hook{
-            control2.make_hook_identifier(event_types = []SDL.EventType{ .QUIT }, event_keys = []SDL.Scancode{ .ESCAPE }),
-            proc(_: ^SDL.Event, _: rawptr) { game.quit_game() },
-            nil
-        },
-        control2.Hook{
-            control2.make_hook_identifier(key_states = []SDL.Scancode{ .W }),
-            proc(_: ^SDL.Event, cam_data: rawptr) { cam.move_with_yaw(cast(^cam.Camera)cam_data, glm.vec3{ 0.0, 0.0, -1.0 }) },
-            game.scene_viewpoint()
-        },
-        control2.Hook{
-            control2.make_hook_identifier(key_states = []SDL.Scancode{ .A }),
-            proc(_: ^SDL.Event, cam_data: rawptr) { cam.move_with_yaw(cast(^cam.Camera)cam_data, glm.vec3{ -1.0, 0.0, 0.0 }) },
-            game.scene_viewpoint()
-        },
-        control2.Hook{
-            control2.make_hook_identifier(key_states = []SDL.Scancode{ .S }),
-            proc(_: ^SDL.Event, cam_data: rawptr) { cam.move_with_yaw(cast(^cam.Camera)cam_data, glm.vec3{ 0.0, 0.0, 1.0 }) },
-            game.scene_viewpoint()
-        },
-        control2.Hook{
-            control2.make_hook_identifier(key_states = []SDL.Scancode{ .D }),
-            proc(_: ^SDL.Event, cam_data: rawptr) { cam.move_with_yaw(cast(^cam.Camera)cam_data, glm.vec3{ 1.0, 0.0, 0.0 }) },
-            game.scene_viewpoint()
-        },
-        control2.Hook{
-            control2.make_hook_identifier(key_states = []SDL.Scancode{ .SPACE }),
-            proc(_: ^SDL.Event, cam_data: rawptr) { cam.move_with_yaw(cast(^cam.Camera)cam_data, glm.vec3{ 0.0, 1.0, 0.0 }) },
-            game.scene_viewpoint()
-        },
-        control2.Hook{
-            control2.make_hook_identifier(key_states = []SDL.Scancode{ .Q }),
-            proc(_: ^SDL.Event, cam_data: rawptr) { cam.move_with_yaw(cast(^cam.Camera)cam_data, glm.vec3{ 0.0, -1.0, 0.0 }) },
-            game.scene_viewpoint()
-        },
-        control2.Hook{
-            control2.make_hook_identifier(event_types = []SDL.EventType{ .MOUSEMOTION }),
-            proc(event: ^SDL.Event, cam_data: rawptr) {
-                xrel, yrel := game.scale_mouse_relative(f32(event.motion.xrel), f32(event.motion.yrel))
-                control2.direct_camera(cast(^cam.Camera)cam_data, xrel, yrel)
-            },
-            game.scene_viewpoint()
-        },
+        game.HOOK_MOUSE_MOTION(),
+        game.HOOK_CLOSE_WINDOW(),
+        game.HOOKS_CAMERA_MOVEMENT()
     )
 }
 
