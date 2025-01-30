@@ -20,7 +20,7 @@ import glm "core:math/linalg/glsl"
 // Implement your before_frame and every_frame procedures in a file like this
 // APIs for ecs are dogwater right now
 
-// Certain operations are done around this every frame, look inside game pacakge
+// Certain operations are done around this every frame, look inside game package
 every_frame :: proc() {
 
     // Update camera
@@ -38,9 +38,6 @@ draw_properties: ^gpu.DrawProperties
 
 before_frame :: proc() {
 
-
-
-
     helmet_arch, _ := ecs.scene_add_archetype(game.Game.scene, "helmet_arch", context.allocator,
         ecs.make_component_info(gpu.DrawProperties, "draw_properties"),
         ecs.make_component_info(linalg.Vector3f32, "position"),
@@ -55,16 +52,6 @@ before_frame :: proc() {
 
     helmet_draw_properties.mesh, helmet_draw_properties.indices = helmet_mesh_and_indices()
     ok := create_shader_program(&helmet_draw_properties); if !ok do return
-
-
-    /*
-    helmet_gl_comp.program, ok = gpu.read_shader_source({ Express = true }, "./resources/shaders/demo_shader")
-    if !ok {
-        log.errorf("Error while reading shader source, returning.")
-        return
-    }
-    helmet_draw_properties.gpu_component = helmet_gl_comp
-    */
 
     gpu.express_draw_properties(&helmet_draw_properties)
 
@@ -85,21 +72,6 @@ before_frame :: proc() {
     draw_properties = draw_properties_ret[0].data
 
 
-    /*
-    game.add_event_hooks(
-        control.EmptyGlobalHook{ control.EventType.QUIT, proc() { game.quit_game() }},
-        control.EmptyKeyHook{ SDL.Keycode.ESCAPE, proc() { game.quit_game() }},
-        control.EmptyCameraKeyHook{ SDL.Keycode.W, proc(camera: ^cam.Camera) { cam.move_with_yaw(camera, glm.vec3{ 0.0, 0.0, -1.0 }) }},
-        control.EmptyCameraKeyHook{ SDL.Keycode.A, proc(camera: ^cam.Camera) { cam.move_with_yaw(camera, glm.vec3{ -1.0, 0.0, 0.0 }) }},
-        control.EmptyCameraKeyHook{ SDL.Keycode.S, proc(camera: ^cam.Camera) { cam.move_with_yaw(camera, glm.vec3{ 0.0, 0.0, 1.0 }) }},
-        control.EmptyCameraKeyHook{ SDL.Keycode.D, proc(camera: ^cam.Camera) { cam.move_with_yaw(camera, glm.vec3{ 1.0, 0.0, 0.0 }) }},
-        control.EmptyCameraKeyHook{ SDL.Keycode.SPACE, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, 1.0, 0.0 }) }},
-        control.EmptyCameraKeyHook{ SDL.Keycode.Q, proc(camera: ^cam.Camera) { cam.move(camera, glm.vec3{ 0.0, -1.0, 0.0 }) }},
-        control.EventCameraGlobalHook{ control.EventType.MOUSEMOTION, proc(camera: ^cam.Camera, event: SDL.Event) {
-            xrel, yrel := game.scale_mouse_relative(f32(event.motion.xrel), f32(event.motion.yrel))
-            control.direct_camera(camera, xrel, yrel)
-    }});
-    */
     game.add_event_hooks(
         control2.Hook{
             control2.make_hook_identifier(event_types = []SDL.EventType{ .QUIT }, event_keys = []SDL.Scancode{ .ESCAPE }),
@@ -134,6 +106,15 @@ before_frame :: proc() {
         control2.Hook{
             control2.make_hook_identifier(key_states = []SDL.Scancode{ .Q }),
             proc(_: ^SDL.Event, cam_data: rawptr) { cam.move_with_yaw(cast(^cam.Camera)cam_data, glm.vec3{ 0.0, -1.0, 0.0 }) },
+            game.scene_viewpoint()
+        },
+        control2.Hook{
+            control2.make_hook_identifier(event_types = []SDL.EventType{ .MOUSEMOTION }),
+            proc(event: ^SDL.Event, cam_data: rawptr) {
+                log.infof("moving mouse: %d %d %d %d", event.motion.xrel, event.motion.yrel, event.motion.x, event.motion.y)
+                xrel, yrel := game.scale_mouse_relative(f32(event.motion.xrel), f32(event.motion.yrel))
+                control2.direct_camera(cast(^cam.Camera)cam_data, xrel, yrel)
+            },
             game.scene_viewpoint()
         },
     )

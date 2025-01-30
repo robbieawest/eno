@@ -136,7 +136,7 @@ destroy_hook :: proc(hook: ^Hook) {
 Action :: #type proc(event: ^SDL.Event, data: rawptr)
 
 HookIdentifier :: struct {
-    event_type_mask: u32,
+    event_types: [dynamic]SDL.EventType,
     event_keys: [dynamic] SDL.Scancode,  // For keys pressed in an event
     key_state: [dynamic] SDL.Scancode, // For keyboard state - not directly tied to events
     mouse_button_mask: i32     // For mouse states - not directly tied to events
@@ -158,10 +158,10 @@ make_hook_identifier :: proc(
     key_states := []SDL.Scancode{},
     mouse_buttons := []i32{}
 ) -> (ident: HookIdentifier) {
-    for type in event_types do add_event_type(&ident, type)
     for button in mouse_buttons do add_mouse_button(&ident, button)
     ident.event_keys = slice.clone_to_dynamic(event_keys)
     ident.key_state = slice.clone_to_dynamic(key_states)
+    ident.event_types = slice.clone_to_dynamic(event_types)
 
     return
 }
@@ -169,16 +169,9 @@ make_hook_identifier :: proc(
 destroy_hook_identifier :: proc(ident: ^HookIdentifier) {
     delete(ident.key_state)
     delete(ident.event_keys)
+    delete(ident.event_types)
 }
 
-
-add_event_type :: proc(ident: ^HookIdentifier, type: SDL.EventType) {
-    ident.event_type_mask |= u32(type)
-}
-
-remove_event_type :: proc(ident: ^HookIdentifier, type: SDL.EventType) {
-    ident.event_type_mask &~= u32(type)
-}
 
 add_mouse_button :: proc(ident: ^HookIdentifier, button: i32) {
     ident.mouse_button_mask |= button
@@ -201,6 +194,10 @@ add_hook :: proc(controller: ^Controller, ident: HookIdentifier, action: Action,
     append(&controller.hooks, Hook{ ident, action, data })
 }
 
+add_event_type :: proc(ident: ^HookIdentifier, type: SDL.EventType) {
+    append(&ident.event_types, type)
+}
+
 
 /*
     Polls SDL for events
@@ -213,12 +210,18 @@ poll :: proc(controller: ^Controller) {
     activated := make([dynamic]^Hook, 0); defer delete(activated)  // make into a hashset
 
     current_event: SDL.Event
+    copy_event: SDL.Event
     for SDL.PollEvent(&current_event) {
+        if current_event.type == .MOUSEMOTION {
+            dbg.debug_point(dbg.LogLevel.INFO, "%#v", current_event.motion)
+        }
+
         for &hook in controller.hooks {
-            if u32(current_event.type) & hook.identifier.event_type_mask != 0 ||
+            if slice.contains(hook.identifier.event_types[:], current_event.type) ||
                 slice.contains(hook.identifier.event_keys[:], current_event.key.keysym.scancode)
             {
                 append(&activated, &hook)
+                copy_event = current_event
                 break
             }
 
@@ -241,6 +244,6 @@ poll :: proc(controller: ^Controller) {
 
     for actived_hook in activated {
         dbg.debug_point(dbg.LogLevel.INFO, "Acting with hook: %#v", actived_hook)
-        actived_hook.action(&current_event, actived_hook.data)
+        actived_hook.action(&copy_event, actived_hook.data)
     }
 }
