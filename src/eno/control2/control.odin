@@ -212,9 +212,11 @@ poll :: proc(controller: ^Controller) {
     current_event: SDL.Event
     copy_event: SDL.Event
     for SDL.PollEvent(&current_event) {
+        /*
         if current_event.type == .MOUSEMOTION {
             dbg.debug_point(dbg.LogLevel.INFO, "%#v", current_event.motion)
         }
+        */
 
         for &hook in controller.hooks {
             if slice.contains(hook.identifier.event_types[:], current_event.type) ||
@@ -243,7 +245,7 @@ poll :: proc(controller: ^Controller) {
 
 
     for actived_hook in activated {
-        dbg.debug_point(dbg.LogLevel.INFO, "Acting with hook: %#v", actived_hook)
+        //dbg.debug_point(dbg.LogLevel.INFO, "Acting with hook: %#v", actived_hook)
         actived_hook.action(&copy_event, actived_hook.data)
     }
 }

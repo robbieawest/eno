@@ -111,7 +111,6 @@ before_frame :: proc() {
         control2.Hook{
             control2.make_hook_identifier(event_types = []SDL.EventType{ .MOUSEMOTION }),
             proc(event: ^SDL.Event, cam_data: rawptr) {
-                log.infof("moving mouse: %d %d %d %d", event.motion.xrel, event.motion.yrel, event.motion.x, event.motion.y)
                 xrel, yrel := game.scale_mouse_relative(f32(event.motion.xrel), f32(event.motion.yrel))
                 control2.direct_camera(cast(^cam.Camera)cam_data, xrel, yrel)
             },
