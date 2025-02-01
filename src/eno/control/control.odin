@@ -4,6 +4,7 @@ import SDL "vendor:sdl2"
 
 import cam "../camera"
 import qutils "../utils/queue_utils"
+import dbg "../debug"
 
 import "core:container/queue"
 import glm "core:math/linalg/glsl"
@@ -126,6 +127,10 @@ Hook :: struct {
     identifier: HookIdentifier,
     action: Action,
     data: rawptr
+}
+
+make_hook :: proc(ident: HookIdentifier, action: Action, data: rawptr) -> (hook: Hook) {
+    return { ident, action, data }
 }
 
 destroy_hook :: proc(hook: ^Hook) {

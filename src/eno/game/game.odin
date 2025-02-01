@@ -120,36 +120,36 @@ scale_mouse_relative :: proc(xrel: f32, yrel: f32) -> (xout: f32, yout: f32) {
 HOOKS_CAMERA_MOVEMENT :: proc() -> (hooks: control.Hooks) {
     hooks = make([dynamic]control.Hook)
     append_elems(&hooks,
-        control.Hook{
+        control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .W }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, 0.0, -1.0 }) },
             scene_viewpoint()
-        },
-        control.Hook{
+        ),
+        control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .A }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ -1.0, 0.0, 0.0 }) },
             scene_viewpoint()
-        },
-        control.Hook{
+        ),
+        control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .S }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, 0.0, 1.0 }) },
             scene_viewpoint()
-        },
-        control.Hook{
+        ),
+        control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .D }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 1.0, 0.0, 0.0 }) },
             scene_viewpoint()
-        },
-        control.Hook{
+        ),
+        control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .SPACE }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, 1.0, 0.0 }) },
             scene_viewpoint()
-        },
-        control.Hook{
+        ),
+        control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .Q }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, -1.0, 0.0 }) },
             scene_viewpoint()
-        },
+        ),
     )
     return
 }
@@ -157,14 +157,14 @@ HOOKS_CAMERA_MOVEMENT :: proc() -> (hooks: control.Hooks) {
 HOOK_MOUSE_MOTION :: proc() -> (hooks: control.Hooks) {
     hooks = make(control.Hooks)
     append(&hooks,
-        control.Hook{
+        control.make_hook(
             control.make_hook_identifier(event_types = []SDL.EventType{ .MOUSEMOTION }),
             proc(event: ^SDL.Event, cam_data: rawptr) {
                 xrel, yrel := scale_mouse_relative(f32(event.motion.xrel), f32(event.motion.yrel))
                 control.direct_camera(cast(^camera.Camera)cam_data, xrel, yrel)
             },
             scene_viewpoint()
-        },
+        ),
     )
     return
 }
@@ -172,11 +172,11 @@ HOOK_MOUSE_MOTION :: proc() -> (hooks: control.Hooks) {
 HOOK_CLOSE_WINDOW :: proc() -> (hooks: control.Hooks) {
     hooks = make(control.Hooks)
     append(&hooks,
-        control.Hook{
+        control.make_hook(
             control.make_hook_identifier(event_types = []SDL.EventType{ .QUIT }, event_keys = []SDL.Scancode{ .ESCAPE }),
             proc(_: ^SDL.Event, _: rawptr) { quit_game() },
             nil
-        }
+        )
     )
     return
 }

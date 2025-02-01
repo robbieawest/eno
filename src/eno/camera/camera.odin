@@ -74,10 +74,12 @@ get_camera_perspective :: proc(camera: ^Camera) -> glm.mat4 {
 
 
 move :: proc(camera: ^Camera, direction: glm.vec3) {
+    assert(camera != nil)
     camera.position += apply_movement_modulation(camera, direction)
 }
 
 move_unmodulated :: proc(camera: ^Camera, direction: glm.vec3) {
+    assert(camera != nil)
     camera.position += direction
 }
 
@@ -88,6 +90,8 @@ move_unmodulated :: proc(camera: ^Camera, direction: glm.vec3) {
 */
 move_with_yaw :: proc(camera: ^Camera, direction: glm.vec3) {
     assert(direction.y == 0)
+    assert(camera != nil)
+
     length := glm.length(direction)
     angle_from_default_towards := glm.acos(glm.dot(direction, DEFAULT_TOWARDS) / length)
     if direction.x < 0 do angle_from_default_towards *= -1
@@ -99,6 +103,10 @@ move_with_yaw :: proc(camera: ^Camera, direction: glm.vec3) {
 }
 
 MOVE_SPEED_SCALING :: 0.00025
+/*
+    camera unchecked
+*/
+@(private)
 apply_movement_modulation :: proc(camera: ^Camera, direction: glm.vec3) -> glm.vec3 {
     vec := direction * camera.move_speed * MOVE_SPEED_SCALING
     return { camera.move_amp.x * vec.x, camera.move_amp.y * vec.y, camera.move_amp.z * vec.z }
