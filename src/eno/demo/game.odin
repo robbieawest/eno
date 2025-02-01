@@ -1,6 +1,5 @@
 package demo
 
-import SDL "vendor:sdl2"
 import gl "vendor:OpenGL"
 
 import win "../window"
@@ -11,7 +10,6 @@ import "../gpu"
 import "../render"
 import cutils "../camera_utils"
 import cam "../camera"
-import control2 "../control2"
 
 import "core:log"
 import "core:math/linalg"

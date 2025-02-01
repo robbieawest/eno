@@ -1,7 +1,6 @@
 package camera
 
 import glm "core:math/linalg/glsl"
-import "core:math/linalg"
 
 Camera :: struct {
     position: glm.vec3,

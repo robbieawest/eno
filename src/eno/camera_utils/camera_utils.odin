@@ -8,7 +8,7 @@ import lutils "../utils/linalg_utils"
 import glm "core:math/linalg/glsl"
 import "core:math/linalg/"
 import "core:fmt"
-import "../control"
+import "../control_old"
 
 // Utilities for cameras placed elsewhere from camera package, due to circular dependency issues
 

@@ -7,10 +7,8 @@ import win "../window"
 import dbg "../debug"
 import "../gpu"
 import control "../control"
-import control2 "../control2"
 import "../camera"
 
-import "core:log"
 import "core:os"
 import glm "core:math/linalg/glsl"
 
@@ -30,7 +28,7 @@ EnoGame :: struct {
     every_frame: frame_loop_proc_,
     before_frame: before_loop_proc_,
     game_state: GAME_STATE,
-    controller: control2.Controller
+    controller: control.Controller
 }
 
 /*
@@ -40,7 +38,7 @@ run_game :: proc() {
     Game.game_state = .RUNNING
     Game.before_frame()
     for Game.game_state == .RUNNING {
-        control2.poll(&Game.controller)
+        control.poll(&Game.controller)
         gpu.frame_setup()
         Game.every_frame()
     }
@@ -66,7 +64,7 @@ init_game_with_scene :: proc(scene: ^ecs.Scene, window: win.WindowTarget, every_
     Game.window = window
     Game.every_frame = every_frame
     Game.before_frame = before_frame
-    Game.controller = control2.init_controller(allocator)
+    Game.controller = control.init_controller(allocator)
 }
 
 
@@ -76,14 +74,14 @@ init_game_default_scene :: proc(window: win.WindowTarget, every_frame: frame_loo
     Game.window = window
     Game.every_frame = every_frame
     Game.before_frame = before_frame
-    Game.controller = control2.init_controller(allocator)
+    Game.controller = control.init_controller(allocator)
 }
 
 
 destroy_game :: proc(allocator := context.allocator) {
     win.destroy_window(Game.window)
     ecs.destroy_scene(Game.scene, allocator)
-    control2.destroy_controller(&Game.controller)
+    control.destroy_controller(&Game.controller)
 
     dbg.log_debug_stack()
     dbg.destroy_debug_stack()
@@ -92,8 +90,8 @@ destroy_game :: proc(allocator := context.allocator) {
 }
 
 
-add_event_hooks :: proc(hooks: ..control2.HookInput) {
-    control2.add_hooks(&Game.controller, ..hooks)
+add_event_hooks :: proc(hooks: ..control.HookInput) {
+    control.add_hooks(&Game.controller, ..hooks)
 }
 
 
@@ -119,36 +117,36 @@ scale_mouse_relative :: proc(xrel: f32, yrel: f32) -> (xout: f32, yout: f32) {
 }
 
 
-HOOKS_CAMERA_MOVEMENT :: proc() -> (hooks: control2.Hooks) {
-    hooks = make([dynamic]control2.Hook)
+HOOKS_CAMERA_MOVEMENT :: proc() -> (hooks: control.Hooks) {
+    hooks = make([dynamic]control.Hook)
     append_elems(&hooks,
-        control2.Hook{
-            control2.make_hook_identifier(key_states = []SDL.Scancode{ .W }),
+        control.Hook{
+            control.make_hook_identifier(key_states = []SDL.Scancode{ .W }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, 0.0, -1.0 }) },
             scene_viewpoint()
         },
-        control2.Hook{
-            control2.make_hook_identifier(key_states = []SDL.Scancode{ .A }),
+        control.Hook{
+            control.make_hook_identifier(key_states = []SDL.Scancode{ .A }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ -1.0, 0.0, 0.0 }) },
             scene_viewpoint()
         },
-        control2.Hook{
-            control2.make_hook_identifier(key_states = []SDL.Scancode{ .S }),
+        control.Hook{
+            control.make_hook_identifier(key_states = []SDL.Scancode{ .S }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, 0.0, 1.0 }) },
             scene_viewpoint()
         },
-        control2.Hook{
-            control2.make_hook_identifier(key_states = []SDL.Scancode{ .D }),
+        control.Hook{
+            control.make_hook_identifier(key_states = []SDL.Scancode{ .D }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 1.0, 0.0, 0.0 }) },
             scene_viewpoint()
         },
-        control2.Hook{
-            control2.make_hook_identifier(key_states = []SDL.Scancode{ .SPACE }),
+        control.Hook{
+            control.make_hook_identifier(key_states = []SDL.Scancode{ .SPACE }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, 1.0, 0.0 }) },
             scene_viewpoint()
         },
-        control2.Hook{
-            control2.make_hook_identifier(key_states = []SDL.Scancode{ .Q }),
+        control.Hook{
+            control.make_hook_identifier(key_states = []SDL.Scancode{ .Q }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, -1.0, 0.0 }) },
             scene_viewpoint()
         },
@@ -156,14 +154,14 @@ HOOKS_CAMERA_MOVEMENT :: proc() -> (hooks: control2.Hooks) {
     return
 }
 
-HOOK_MOUSE_MOTION :: proc() -> (hooks: control2.Hooks) {
-    hooks = make(control2.Hooks)
+HOOK_MOUSE_MOTION :: proc() -> (hooks: control.Hooks) {
+    hooks = make(control.Hooks)
     append(&hooks,
-        control2.Hook{
-            control2.make_hook_identifier(event_types = []SDL.EventType{ .MOUSEMOTION }),
+        control.Hook{
+            control.make_hook_identifier(event_types = []SDL.EventType{ .MOUSEMOTION }),
             proc(event: ^SDL.Event, cam_data: rawptr) {
                 xrel, yrel := scale_mouse_relative(f32(event.motion.xrel), f32(event.motion.yrel))
-                control2.direct_camera(cast(^camera.Camera)cam_data, xrel, yrel)
+                control.direct_camera(cast(^camera.Camera)cam_data, xrel, yrel)
             },
             scene_viewpoint()
         },
@@ -171,11 +169,11 @@ HOOK_MOUSE_MOTION :: proc() -> (hooks: control2.Hooks) {
     return
 }
 
-HOOK_CLOSE_WINDOW :: proc() -> (hooks: control2.Hooks) {
-    hooks = make(control2.Hooks)
+HOOK_CLOSE_WINDOW :: proc() -> (hooks: control.Hooks) {
+    hooks = make(control.Hooks)
     append(&hooks,
-        control2.Hook{
-            control2.make_hook_identifier(event_types = []SDL.EventType{ .QUIT }, event_keys = []SDL.Scancode{ .ESCAPE }),
+        control.Hook{
+            control.make_hook_identifier(event_types = []SDL.EventType{ .QUIT }, event_keys = []SDL.Scancode{ .ESCAPE }),
             proc(_: ^SDL.Event, _: rawptr) { quit_game() },
             nil
         }
