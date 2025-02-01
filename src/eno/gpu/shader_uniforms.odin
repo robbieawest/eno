@@ -252,8 +252,9 @@ set_matrix_uniform :: proc(
 
     switch 4 * N + M {
         case 10:
+            // Switch should be possible but no! matrix $T parapoly bug?
             if T == f32 do gl.UniformMatrix2fv(location, count, transpose, &mat[0, 0])
-            else do gl.UniformMatrix2dv(location, count, transpose, cast([^]f64)&mat[0, 0])
+            else do gl.UniformMatrix2dv(location, count, transpose, cast([^]f64)&mat[0, 0])  // This cast should not be needed but the compiler wants it - thinks mat[0, 0] is f32
         case 14:
             if T == f32 do gl.UniformMatrix3x2fv(location, count, transpose, &mat[0, 0])
             else do gl.UniformMatrix3x2dv(location, count, transpose, cast([^]f64)&mat[0, 0])
