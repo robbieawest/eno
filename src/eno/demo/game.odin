@@ -23,7 +23,7 @@ every_frame :: proc() {
 
     // Update camera
     copied_program := draw_properties.gpu_component.(gpu.gl_GPUComponent).program
-    update_view(&copied_program)
+    cutils.update_view(&copied_program)
 
     // Draw
     render.draw_indexed_entities(game.Game.scene, "helmet_arch", "helmet_entity")
@@ -98,7 +98,7 @@ set_uniforms :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool) {
 
     gpu.set_matrix_uniform(program, "m_Model", 1, false, model)
 
-    update_view(program) or_return
+    cutils.update_view(program)
 
     perspective := cam.get_perspective(game.Game.scene.viewpoint)
     gpu.set_matrix_uniform(program, "m_Projection", 1, false, perspective)
@@ -108,45 +108,6 @@ set_uniforms :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool) {
     return
 }
 
-
-update_view :: proc(program: ^gpu.ShaderProgram) -> (ok: bool) {
-    view := cam.camera_look_at(game.Game.scene.viewpoint)
-    //                         dir       campos      world up
-    //view := glm.mat4LookAt({0, 0, -1}, {0, 0, 0}, {0, 1, 0})
-    gpu.set_matrix_uniform(program, "m_View", 1, false, view)
-
-    ok = true
-    return
-}
-
-
-@(private)
-helmet_mesh_and_indices_direct :: proc() -> (mesh: model.Mesh, indices: model.IndexData) {
-    vertex_data := make([dynamic]f32)
-    append_elems(&vertex_data,
-        0.5, 0.5, 0.0,   1.0, 0.0, 0.0,  //tr
-        0.5, -0.5, 0.0,  0.0, 1.0, 0.0,  //br
-        -0.5, -0.5, 0.0, 0.0, 0.0, 1.0,  //bl
-        -0.5, 0.5, 0.0,  1.0, 1.0, 0.0  //tl
-    )
-
-    layout: model.VertexLayout
-    append_soa(&layout,
-        model.MeshAttributeInfo{ .position, .vec3, .f32, 12, 3, "position" },
-        model.MeshAttributeInfo{ .color, .vec3, .f32, 12, 3, "colour" }
-    )
-
-    mesh = model.Mesh{ vertex_data, layout }
-
-    index_data := make([dynamic]u32)
-    append_elems(&index_data,
-        1, 2, 3,
-        0, 1, 3
-    )
-
-    indices = { index_data }
-    return
-}
 
 @(private)
 helmet_mesh_and_indices :: proc() -> (mesh: model.Mesh, indices: model.IndexData) {

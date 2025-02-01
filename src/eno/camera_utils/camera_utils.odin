@@ -3,12 +3,10 @@ package camera_utils
 import win "../window"
 import "../game"
 import cam "../camera"
-import lutils "../utils/linalg_utils"
 
 import glm "core:math/linalg/glsl"
-import "core:math/linalg/"
 import "core:fmt"
-import "../control_old"
+import "../gpu"
 
 // Utilities for cameras placed elsewhere from camera package, due to circular dependency issues
 
@@ -50,35 +48,6 @@ get_default_label :: proc() -> string {
     return fmt.aprintf("Camera%i", num_cameras)
 }
 
-
-
-
-init_camera_old :: proc{ default_camera_with_position, default_camera_without_position }
-
-@(private)
-default_camera_without_position :: proc(label: string) -> (camera: cam.Camera) {
-    return cam.Camera {
-        position = { 0.0, 0.0, 0.0 },
-        towards = { 0.0, 0.0, -1.0 },
-        up = {0.0, 1.0, 0.0 },
-        field_of_view = 45,
-        aspect_ratio = win.get_aspect_ratio(game.Game.window),
-        near_plane = 0.1,
-        far_plane = 100.0,
-        label = label
-    }
-}
-
-@(private)
-default_camera_with_position :: proc(label: string, position: glm.vec3) -> (camera: cam.Camera) {
-    return cam.Camera {
-        position = position,
-        towards = { 0.0, 0.0, -1.0 },
-        up = {0.0, 1.0, 0.0 },
-        field_of_view = 45,
-        aspect_ratio = win.get_aspect_ratio(game.Game.window),
-        near_plane = 0.1,
-        far_plane = 100.0,
-        label = label
-    }
+update_view :: proc(program: ^gpu.ShaderProgram, label := "m_View") {
+    gpu.set_matrix_uniform(program, label, 1, false, cam.camera_look_at(game.Game.scene.viewpoint))
 }
