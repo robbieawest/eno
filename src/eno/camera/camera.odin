@@ -100,7 +100,7 @@ move_with_yaw :: proc(camera: ^Camera, direction: glm.vec3) {
     move(camera, new_direction)
 }
 
-MOVE_SPEED_SCALING :: 0.001
+MOVE_SPEED_SCALING :: 0.00025
 apply_movement_modulation :: proc(camera: ^Camera, direction: glm.vec3) -> glm.vec3 {
     vec := direction * camera.move_speed * MOVE_SPEED_SCALING
     return { camera.move_amp.x * vec.x, camera.move_amp.y * vec.y, camera.move_amp.z * vec.z }
