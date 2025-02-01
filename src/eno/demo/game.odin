@@ -77,7 +77,7 @@ before_frame :: proc() {
 }
 
 
-set_uniforms :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool) {  // Todo update setting uniforms
+set_uniforms :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool) {
     gl_comp := draw_properties.gpu_component.(gpu.gl_GPUComponent)
     program := &gl_comp.program
 

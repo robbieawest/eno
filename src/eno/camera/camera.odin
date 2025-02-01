@@ -35,7 +35,6 @@ DEFAULT_YAW : f32 : 0.0
 DEFAULT_ROLL : f32 : 0.0
 
 
-// todo: Update this
 camera_look_at :: proc{ camera_look_at_updated_position, camera_look_at_position }
 
 camera_look_at_updated_position :: proc(
