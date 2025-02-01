@@ -147,6 +147,11 @@ extract_index_data_from_mesh :: proc(mesh: cgltf.mesh) -> (result: []IndexData, 
 }
 
 
+extract_texture_data_from_mesh :: proc(mesh: cgltf.mesh) {
+    mesh.primitives[0].material.
+}
+
+
 @(private)
 cgltf_component_type_to_typeid :: proc(type: cgltf.component_type) -> (ret: typeid, ok: bool) {
     switch type {
