@@ -178,17 +178,13 @@ Uniform4ui :: proc(program: ^ShaderProgram, label: string, v0: u32, v1: u32, v2:
 }
 
 
-vector_uniform_typed :: proc(type: $T) -> bool {
-    return T == i32 || T == u32 || T == f32 || T == f64
-}
-
 set_vector_uniform :: proc(
     program: ^ShaderProgram,
     label: string,
     count: i32,
     args: ..$T
 ) -> (ok: bool)
-    where vector_uniform_typed(T)
+    where  T == i32 || T == u32 || T == f32 || T == f64
 {
     if len(args) % count != 0 {
         dbg.debug_point(dbg.LogLevel.ERROR, "Number of args must be divisible by count")
@@ -201,39 +197,39 @@ set_vector_uniform :: proc(
     switch T {
     case u32:
         switch len(args) / count {
-        case 1: gl.Uniform1uiv(location, count, raw_data(args))
-        case 2: gl.Uniform2uiv(location, count, raw_data(args))
-        case 3: gl.Uniform3uiv(location, count, raw_data(args))
-        case 4: gl.Uniform4uiv(location, count, raw_data(args))
-        case :
-            return invalid()
+            case 1: gl.Uniform1uiv(location, count, raw_data(args))
+            case 2: gl.Uniform2uiv(location, count, raw_data(args))
+            case 3: gl.Uniform3uiv(location, count, raw_data(args))
+            case 4: gl.Uniform4uiv(location, count, raw_data(args))
+            case :
+                return invalid()
         }
     case i32:
         switch len(args) / count {
-        case 1: gl.Uniform1iv(location, count, raw_data(args))
-        case 2: gl.Uniform2iv(location, count, raw_data(args))
-        case 3: gl.Uniform3iv(location, count, raw_data(args))
-        case 4: gl.Uniform4iv(location, count, raw_data(args))
-        case :
-            return invalid()
+            case 1: gl.Uniform1iv(location, count, raw_data(args))
+            case 2: gl.Uniform2iv(location, count, raw_data(args))
+            case 3: gl.Uniform3iv(location, count, raw_data(args))
+            case 4: gl.Uniform4iv(location, count, raw_data(args))
+            case :
+                return invalid()
         }
     case f32:
         switch len(args) / count {
-        case 1: gl.Uniform1fv(location, count, raw_data(args))
-        case 2: gl.Uniform2fv(location, count, raw_data(args))
-        case 3: gl.Uniform3fv(location, count, raw_data(args))
-        case 4: gl.Uniform4fv(location, count, raw_data(args))
-        case :
-            return invalid()
+            case 1: gl.Uniform1fv(location, count, raw_data(args))
+            case 2: gl.Uniform2fv(location, count, raw_data(args))
+            case 3: gl.Uniform3fv(location, count, raw_data(args))
+            case 4: gl.Uniform4fv(location, count, raw_data(args))
+            case :
+                return invalid()
         }
     case f64:
         switch len(args) / count {
-        case 1: gl.Uniform1dv(location, count, raw_data(args))
-        case 2: gl.Uniform2dv(location, count, raw_data(args))
-        case 3: gl.Uniform3dv(location, count, raw_data(args))
-        case 4: gl.Uniform4dv(location, count, raw_data(args))
-        case :
-            return invalid()
+            case 1: gl.Uniform1dv(location, count, raw_data(args))
+            case 2: gl.Uniform2dv(location, count, raw_data(args))
+            case 3: gl.Uniform3dv(location, count, raw_data(args))
+            case 4: gl.Uniform4dv(location, count, raw_data(args))
+            case :
+                return invalid()
         }
     }
 
@@ -242,71 +238,46 @@ set_vector_uniform :: proc(
 }
 
 
-matrix_uniform_typed :: proc(type: $T) -> bool {
-    return T == f32 || T == f64
-}
-
 set_matrix_uniform :: proc(
     program: ^ShaderProgram,
     label: string,
     count: i32,
     transpose: bool,
-    mat: matrix[$N,$M]$T
+    mat: matrix[$N, $M]$T
 )
-    where matrix_uniform_typed(T) && N > 1 && N <= 4 && M > 1 && M <= 4
+    where T == f32 || T == f64 && N > 1 && N <= 4 && M > 1 && M <= 4
 {
-
-    invalid :: proc() -> bool { dbg.debug_point(dbg.LogLevel.ERROR, "Combination of args and count is invalid. num_args: %d, count: %d", len(args), count); return }
-
+    mat := mat
     location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
 
     switch 4 * N + M {
         case 10:
-            switch T {
-                case f32: gl.UniformMatrix2fv(location, count, transpose, raw_data(mat))
-                case f64: gl.UniformMatrix2dv(location, count, transpose, raw_data(mat))
-            }
+            if T == f32 do gl.UniformMatrix2fv(location, count, transpose, &mat[0, 0])
+            else do gl.UniformMatrix2dv(location, count, transpose, cast([^]f64)&mat[0, 0])
         case 14:
-            switch T {
-            case f32: gl.UniformMatrix3x2fv(location, count, transpose, raw_data(mat))
-            case f64: gl.UniformMatrix3x2dv(location, count, transpose, raw_data(mat))
-            }
+            if T == f32 do gl.UniformMatrix3x2fv(location, count, transpose, &mat[0, 0])
+            else do gl.UniformMatrix3x2dv(location, count, transpose, cast([^]f64)&mat[0, 0])
         case 18:
-            switch T {
-            case f32: gl.UniformMatrix4x2fv(location, count, transpose, raw_data(mat))
-            case f64: gl.UniformMatrix4x2dv(location, count, transpose, raw_data(mat))
-            }
+            if T == f32 do gl.UniformMatrix4x2fv(location, count, transpose, &mat[0, 0])
+            else do gl.UniformMatrix4x2dv(location, count, transpose, cast([^]f64)&mat[0, 0])
         case 11:
-            switch T {
-            case f32: gl.UniformMatrix2x3fv(location, count, transpose, raw_data(mat))
-            case f64: gl.UniformMatrix2x3dv(location, count, transpose, raw_data(mat))
-            }
+            if T == f32 do gl.UniformMatrix2x3fv(location, count, transpose, &mat[0, 0])
+            else do gl.UniformMatrix2x3dv(location, count, transpose, cast([^]f64)&mat[0, 0])
         case 15:
-            switch T {
-            case f32: gl.UniformMatrix3fv(location, count, transpose, raw_data(mat))
-            case f64: gl.UniformMatrix3dv(location, count, transpose, raw_data(mat))
-            }
+            if T == f32 do gl.UniformMatrix3fv(location, count, transpose, &mat[0, 0])
+            else do gl.UniformMatrix3dv(location, count, transpose, cast([^]f64)&mat[0, 0])
         case 19:
-            switch T {
-            case f32: gl.UniformMatrix4x3fv(location, count, transpose, raw_data(mat))
-            case f64: gl.UniformMatrix4x3dv(location, count, transpose, raw_data(mat))
-            }
+            if T == f32 do gl.UniformMatrix4x3fv(location, count, transpose, &mat[0, 0])
+            else do gl.UniformMatrix4x3dv(location, count, transpose, cast([^]f64)&mat[0, 0])
         case 12:
-            switch T {
-            case f32: gl.UniformMatrix2x4fv(location, count, transpose, raw_data(mat))
-            case f64: gl.UniformMatrix2x4dv(location, count, transpose, raw_data(mat))
-            }
+            if T == f32 do gl.UniformMatrix2x4fv(location, count, transpose, &mat[0, 0])
+            else do gl.UniformMatrix2x4dv(location, count, transpose, cast([^]f64)&mat[0, 0])
         case 16:
-            switch T {
-            case f32: gl.UniformMatrix3x4fv(location, count, transpose, raw_data(mat))
-            case f64: gl.UniformMatrix3x4dv(location, count, transpose, raw_data(mat))
-            }
+            if T == f32 do gl.UniformMatrix3x4fv(location, count, transpose, &mat[0, 0])
+            else do gl.UniformMatrix3x4dv(location, count, transpose, cast([^]f64)&mat[0, 0])
         case 20:
-            switch T {
-            case f32: gl.UniformMatrix4fv(location, count, transpose, raw_data(mat))
-            case f64: gl.UniformMatrix4dv(location, count, transpose, raw_data(mat))
-            }
-
+            if T == f32 do gl.UniformMatrix4fv(location, count, transpose, &mat[0, 0])
+            else do gl.UniformMatrix4dv(location, count, transpose, cast([^]f64)&mat[0, 0])
     }
 }
 

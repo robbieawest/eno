@@ -79,7 +79,8 @@ destroy_index_data :: proc(index_data: ^IndexData) {
 
 @(test)
 destroy_mesh_test :: proc(t: ^testing.T) {
-    vertex_data: [dynamic]f32 = { 0.25 }
+    vertex_data := make([dynamic]f32)
+    append(&vertex_data, 0.25)
 
     mesh: Mesh
     mesh.vertex_data = vertex_data

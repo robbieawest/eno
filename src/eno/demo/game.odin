@@ -96,15 +96,12 @@ set_uniforms :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool) {  // T
     model := glm.mat4Scale(scale^)
     model *= glm.mat4Translate(position^)
 
-    model_loc := gpu.get_uniform_location(program, "m_Model") or_return
-    gl.UniformMatrix4fv(model_loc, 1, false, &model[0, 0])
+    gpu.set_matrix_uniform(program, "m_Model", 1, false, model)
 
     update_view(program) or_return
 
     perspective := cam.get_perspective(game.Game.scene.viewpoint)
-    proj_loc := gpu.get_uniform_location(program, "m_Projection") or_return
-    gpu.set_matrix_uniform
-    gl.UniformMatrix4fv(proj_loc, 1, false, &perspective[0, 0])
+    gpu.set_matrix_uniform(program, "m_Projection", 1, false, perspective)
 
     draw_properties.gpu_component = gl_comp
     ok = true
@@ -116,9 +113,7 @@ update_view :: proc(program: ^gpu.ShaderProgram) -> (ok: bool) {
     view := cam.camera_look_at(game.Game.scene.viewpoint)
     //                         dir       campos      world up
     //view := glm.mat4LookAt({0, 0, -1}, {0, 0, 0}, {0, 1, 0})
-
-    view_loc := gpu.get_uniform_location(program, "m_View") or_return
-    gl.UniformMatrix4fv(view_loc, 1, false, &view[0, 0])
+    gpu.set_matrix_uniform(program, "m_View", 1, false, view)
 
     ok = true
     return
@@ -127,12 +122,13 @@ update_view :: proc(program: ^gpu.ShaderProgram) -> (ok: bool) {
 
 @(private)
 helmet_mesh_and_indices_direct :: proc() -> (mesh: model.Mesh, indices: model.IndexData) {
-    vertex_data: [dynamic]f32 = {
+    vertex_data := make([dynamic]f32)
+    append_elems(&vertex_data,
         0.5, 0.5, 0.0,   1.0, 0.0, 0.0,  //tr
         0.5, -0.5, 0.0,  0.0, 1.0, 0.0,  //br
         -0.5, -0.5, 0.0, 0.0, 0.0, 1.0,  //bl
         -0.5, 0.5, 0.0,  1.0, 1.0, 0.0  //tl
-    }
+    )
 
     layout: model.VertexLayout
     append_soa(&layout,
@@ -142,10 +138,11 @@ helmet_mesh_and_indices_direct :: proc() -> (mesh: model.Mesh, indices: model.In
 
     mesh = model.Mesh{ vertex_data, layout }
 
-    index_data: [dynamic]u32 = {
+    index_data := make([dynamic]u32)
+    append_elems(&index_data,
         1, 2, 3,
         0, 1, 3
-    }
+    )
 
     indices = { index_data }
     return
