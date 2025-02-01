@@ -94,8 +94,7 @@ set_uniform :: proc{
     Uniform1f, Uniform2f, Uniform3f, Uniform4f,
     Uniform1i, Uniform2i, Uniform3i, Uniform4i,
     Uniform1ui, Uniform2ui, Uniform3ui, Uniform4ui,
-    set_vector_uniform, set_vector_uniform_given_location,
-    set_matrix_uniform, set_matrix_uniform_given_location
+    set_vector_uniform, set_matrix_uniform
 }
 
 Uniform1f :: proc(program: ^ShaderProgram, label: string, v0: f32) {
@@ -187,43 +186,72 @@ UniformVectorProc :: struct($backing_type: typeid) {
 set_vector_uniform :: proc(
     program: ^ShaderProgram,
     label: string,
-    vector: [$N]$T,
-    gl_proc: UniformVectorProc(T)
-) {
+    count: i32,
+    args: ..$T
+) -> (ok: bool) {
+    if len(args) % count != 0 {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Number of args must be divisible by count")
+        return
+    }
+
+    invalid :: proc() -> bool { dbg.debug_point(dbg.LogLevel.ERROR, "Combination of args and count is invalid. num_args: %d, count: %d", len(args), count); return }
+
     location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
-    set_vector_uniform_given_location(location, vector, gl_proc)
+    switch T {
+    case u32:
+        switch len(args) / count {
+        case 1: gl.Uniform1uiv(location, count, raw_data(args))
+        case 2: gl.Uniform2uiv(location, count, raw_data(args))
+        case 3: gl.Uniform3uiv(location, count, raw_data(args))
+        case 4: gl.Uniform4uiv(location, count, raw_data(args))
+        case :
+            return invalid()
+        }
+    case i32:
+        switch len(args) / count {
+        case 1: gl.Uniform1iv(location, count, raw_data(args))
+        case 2: gl.Uniform2iv(location, count, raw_data(args))
+        case 3: gl.Uniform3iv(location, count, raw_data(args))
+        case 4: gl.Uniform4iv(location, count, raw_data(args))
+        case :
+            return invalid()
+        }
+    case f32:
+        switch len(args) / count {
+        case 1: gl.Uniform1fv(location, count, raw_data(args))
+        case 2: gl.Uniform2fv(location, count, raw_data(args))
+        case 3: gl.Uniform3fv(location, count, raw_data(args))
+        case 4: gl.Uniform4fv(location, count, raw_data(args))
+        case :
+            return invalid()
+        }
+    case f64:
+        switch len(args) / count {
+        case 1: gl.Uniform1dv(location, count, raw_data(args))
+        case 2: gl.Uniform2dv(location, count, raw_data(args))
+        case 3: gl.Uniform3dv(location, count, raw_data(args))
+        case 4: gl.Uniform4dv(location, count, raw_data(args))
+        case :
+            return invalid()
+        }
+    case:
+        dbg.debug_point(dbg.LogLevel.ERROR, "Type not accepted: %v", T)
+        return
+    }
+
+    ok = true
+    return
 }
 
-set_vector_uniform_given_location :: proc(
-    location: UniformLocation,
-    vector: [$N]$T,
-    gl_proc: UniformVectorProc(T)
-) {
-    gl_proc(location, N, raw_data(vector))
-}
-
-
-UniformMatrixProc :: struct($backing_type: typeid) {
-    procedure: proc(location: i32, count: i32, transpose: bool, mat: [^]backing_type)
-}
 
 set_matrix_uniform :: proc(
     program: ^ShaderProgram,
     label: string, transpose: bool,
-    mat: [$N]$T,
-    gl_proc: UniformMatrixProc(T)
+    mat: matrix[$N,$M]$T
 ) {
     location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
-    set_matrix_uniform_given_location(location, transpose, mat, gl_proc)
+    //todo
 }
 
-set_matrix_uniform_given_location :: proc(
-    location: UniformLocation,
-    transpose: bool,
-    mat: [$N]$T,
-    gl_proc: UniformMatrixProc(T)
-) {
-    gl_proc(location, N, transpose, raw_data(vector))
-}
 
 //

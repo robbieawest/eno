@@ -103,6 +103,7 @@ set_uniforms :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool) {  // T
 
     perspective := cam.get_perspective(game.Game.scene.viewpoint)
     proj_loc := gpu.get_uniform_location(program, "m_Projection") or_return
+    gpu.set_matrix_uniform
     gl.UniformMatrix4fv(proj_loc, 1, false, &perspective[0, 0])
 
     draw_properties.gpu_component = gl_comp
