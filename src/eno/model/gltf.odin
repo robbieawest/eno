@@ -48,81 +48,11 @@ load_model_test :: proc(t: ^testing.T) {
     //log.infof("data: \n%#v", data)
 }
 
-/*
-extract_gltf_mesh :: proc(mesh: ^cgltf.mesh, vertex_layouts: []VertexLayout) -> (result: []Mesh, ok: bool) {
-
-    //This is assuming all mesh attributes (aside from indices) have the same count (for each primitive/mesh output)
-
-    log.infof("mesh: \n%#v", mesh)
-    log.infof("vertex layouts: \n%#v", vertex_layouts)
-
-    mesh_data := make([dynamic]Mesh, len(mesh.primitives))
-    defer delete(mesh_data)
-    
-    if len(vertex_layouts) != len(mesh.primitives) {
-        log.errorf("%s: Number of mesh primitives does not match vertex layout", #procedure)
-        return result, false
-    }
-
-    for _primitive, i in mesh.primitives {
-        mesh_ret: Mesh
-        mesh_ret.layout = vertex_layouts[i]
-
-        if len(mesh_ret.layout.sizes) != len(_primitive.attributes) {
-            log.errorf("%s: Number of primitive attributes does not match vertex layout", #procedure);
-            return result, false
-        }
-
-        count_throughout: uint = 0
-        current_offset: uint = 0
-        for _attribute, j in _primitive.attributes {
-            _accessor := _attribute.data
-
-            //Todo: Consider other datatypes by matching component type of accessor against odin type (maybe just raise error when found)
-
-            element_size := mesh_ret.layout.sizes[j]
-        
-            //Validating mesh
-            count := _accessor.count
-            if count_throughout != 0 && count != count_throughout {
-                log.errorf("%s: Attributes/accessors of mesh primitive must contain the same count/number of elements", #procedure)
-                return result, false
-            } else if count_throughout == 0 {
-                utils.append_n_defaults(&mesh_ret.vertices, count)
-            }
-            count_throughout = count
-            //
-
-            //Read in data for all the vertices of this attribute
-            next_offset := current_offset + element_size
-            for k in 0..<count {
-                if (len(mesh_ret.vertices[k].raw_data) == 0) do utils.append_n_defaults(&mesh_ret.vertices[k].raw_data, _accessor.stride)
-               
-                raw_vertex_data : [^]f32 = raw_data(mesh_ret.vertices[k].raw_data[current_offset:next_offset])
-
-                read_res: b32 = cgltf.accessor_read_float(_accessor, k, raw_vertex_data, element_size)
-                if read_res == false {
-                    log.errorf("%s: Error while reading float from accessor, received boolean false", #procedure)
-                    return result, false
-                }
-            }
-            //
-
-            current_offset = next_offset
-        }
-
-        //Slice components and vertices to add to mesh (Consider just storing dynamic arrays in mesh struct)
-        mesh_data[i] = mesh_ret
-    }
-
-    return mesh_data[:], true
-}
-*/
 
 /*
     Gives an eno mesh for each primitive in the cgltf "mesh"
 */
-extract_cgltf_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []Mesh, ok: bool) {
+extract_cgltf_mesh :: proc(mesh: cgltf.mesh) -> (result: []Mesh, ok: bool) {
     //This is assuming all mesh attributes (aside from indices) have the same count (for each primitive/mesh output)
 
     mesh_data := make([dynamic]Mesh, len(mesh.primitives))
@@ -192,7 +122,7 @@ extract_cgltf_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []Mesh, ok: bool) {
 }
 
 
-extract_index_data_from_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []IndexData, ok: bool) {
+extract_index_data_from_mesh :: proc(mesh: cgltf.mesh) -> (result: []IndexData, ok: bool) {
     index_data := make([dynamic]IndexData, len(mesh.primitives))
 
     for _primitive, i in mesh.primitives {
@@ -205,7 +135,7 @@ extract_index_data_from_mesh :: proc(mesh: ^cgltf.mesh) -> (result: []IndexData,
             read_res: b32 = cgltf.accessor_read_uint(_accessor, k, raw_index_data, 1)
             if read_res == false {
                 dbg.debug_point(dbg.LogLevel.ERROR, "Error while reading uint(index) from accessor, received boolean false")
-                return result, false
+                return
             }
 
         }
@@ -251,7 +181,7 @@ extract_vertex_data_test :: proc(t: ^testing.T) {
     //destroy_mesh does not clean up the vertex_layout, so you must do it yourself if you allocate a VertexLayout
 
 
-    res, ok := extract_cgltf_mesh(&data.meshes[0])
+    res, ok := extract_cgltf_mesh(data.meshes[0])
     defer for &mesh in res do destroy_mesh(&mesh)
 
     testing.expect(t, ok, "ok check")
@@ -264,9 +194,36 @@ extract_vertex_data_test :: proc(t: ^testing.T) {
 extract_index_data_test :: proc(t: ^testing.T) {
     data, result := load_gltf_mesh("SciFiHelmet")
 
-    res, ok := extract_index_data_from_mesh(&data.meshes[0])
+    res, ok := extract_index_data_from_mesh(data.meshes[0])
     defer for &index_data in res do destroy_index_data(&index_data)
 
     testing.expect(t, ok, "ok check")
     log.infof("indices size: %d, num indices: %d", len(res), len(res[0].raw_data))
+}
+
+
+load_and_extract_meshes :: proc(model_name: string) -> (meshes: []Mesh, indices: []IndexData, ok: bool) {
+    gltf_data, result := load_gltf_mesh(model_name)
+
+    if result != .success {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Unsuccessful attempt at loading model")
+        return
+    }
+
+    if len(gltf_data.meshes) == 0 {
+        dbg.debug_point(dbg.LogLevel.ERROR, "GLTF Model contained no meshes")
+        return
+    }
+
+    meshes_dyna := make([dynamic]Mesh)
+    indices_dyna := make([dynamic]IndexData)
+    for mesh in gltf_data.meshes {
+        meshes_got, meshes_ok := extract_cgltf_mesh(mesh); if !meshes_ok do return
+        append_elems(&meshes_dyna, ..meshes_got)
+
+        indices_got, indices_ok := extract_index_data_from_mesh(mesh); if !indices_ok do return
+        append_elems(&indices_dyna, ..indices_got)
+    }
+
+    return meshes_dyna[:], indices_dyna[:], true
 }

@@ -1,7 +1,5 @@
 package demo
 
-import gl "vendor:OpenGL"
-
 import win "../window"
 import game "../game"
 import "../ecs"
@@ -14,6 +12,7 @@ import cam "../camera"
 import "core:log"
 import "core:math/linalg"
 import glm "core:math/linalg/glsl"
+
 
 // Implement your before_frame and every_frame procedures in a file like this
 // APIs for ecs are dogwater right now
@@ -60,7 +59,6 @@ before_frame :: proc() {
         ecs.make_component_data_untyped_s(&scale, "scale")
     )
 
-
     // Camera
     ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "helmet_cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
 
@@ -72,7 +70,7 @@ before_frame :: proc() {
     game.add_event_hooks(
         game.HOOK_MOUSE_MOTION(),
         game.HOOK_CLOSE_WINDOW(),
-        game.HOOKS_CAMERA_MOVEMENT()
+        game.HOOKS_CAMERA_MOVEMENT()  // Only can be used after camera added to scene
     )
 }
 
@@ -111,31 +109,8 @@ set_uniforms :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool) {
 
 @(private)
 helmet_mesh_and_indices :: proc() -> (mesh: model.Mesh, indices: model.IndexData) {
-    meshes, index_datas := read_meshes_and_indices_from_gltf("SciFiHelmet")
+    meshes, index_datas, ok := model.load_and_extract_meshes("SciFiHelmet"); if !ok do return
     return meshes[0], index_datas[0]
-}
-
-
-// Move this into gltf.odin
-@(private)
-read_meshes_and_indices_from_gltf :: proc(model_name: string) -> (meshes: []model.Mesh, indices: []model.IndexData) {
-    data, result := model.load_gltf_mesh(model_name)
-    assert(result == .success, "gltf read success assertion") // todo switch to log
-    assert(len(data.meshes) > 0, "gltf data meshes available assertion")
-
-    ok := false
-    meshes, ok = model.extract_cgltf_mesh(&data.meshes[0])
-    if !ok {
-        log.error("Failed to read mesh")
-        return meshes, indices
-    }
-    indices, ok = model.extract_index_data_from_mesh(&data.meshes[0])
-    if !ok {
-        log.error("Failed to read indices")
-        return meshes, indices
-    }
-
-    return meshes, indices
 }
 
 
