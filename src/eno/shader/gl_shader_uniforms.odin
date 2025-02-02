@@ -8,7 +8,7 @@ import "core:strings"
 import "core:reflect"
 import glm "core:math/linalg/glsl"
 
-// Defines procedures for working with uniforms
+// Defines procedures for working with opengl uniforms
 
 @(private)
 UniformLocation :: i32

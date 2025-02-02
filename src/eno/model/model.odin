@@ -59,34 +59,37 @@ MeshComponentType :: enum {
 
 Mesh :: struct {
     vertex_data: [dynamic]f32,
-    layout: VertexLayout
+    index_data: [dynamic]u32,
+    layout: VertexLayout,
+    material: Material,
+    gl_component: GLComponent
 }
 
-
-IndexData :: struct {
-    raw_data: [dynamic]u32
+GLComponent :: struct {
+    vao: VertexArrayObject,
+    vbo: VertexBufferObject,
+    ebo: ElementBufferObject
 }
 
+VertexArrayObject :: struct {
+    id: u32,
+    transferred: bool
+}
 
+VertexBufferObject :: struct {
+    id: u32,
+    transferred: bool
+}
+
+ElementBufferObject :: struct {
+    id: u32,
+    transferred: bool
+}
+
+// DOES NOT RELEASE GPU MEMORY - USE RENDERER PROCEDURES FOR THIS
 destroy_mesh :: proc(mesh: ^Mesh) {
     delete(mesh.vertex_data)
-}
-
-
-destroy_index_data :: proc(index_data: ^IndexData) {
-    delete(index_data.raw_data)
-}
-
-
-@(test)
-destroy_mesh_test :: proc(t: ^testing.T) {
-    vertex_data := make([dynamic]f32)
-    append(&vertex_data, 0.25)
-
-    mesh: Mesh
-    mesh.vertex_data = vertex_data
-    defer destroy_mesh(&mesh)
-    log.infof("mesh leak test, check for leaks: %#v", mesh)
+    delete(mesh.index_data)
 }
 
 
@@ -143,4 +146,9 @@ MaterialProperty :: union {
     Iridescence,
     Anisotropy,
     AlphaMode
+}
+
+
+Model :: struct {
+    meshes: [dynamic]Mesh,
 }

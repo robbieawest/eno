@@ -13,68 +13,31 @@ GraphicsAPI :: enum { OPENGL, VULKAN } //Making it easy for the future - Is it r
 RENDER_API: GraphicsAPI = GraphicsAPI.OPENGL
 
 
-// Defined way to store VAO, VBO, EBO in the entity component system
 
-GPUComponent :: union #no_nil {
-    gl_GPUComponent,
-    vl_GPUComponent
+GlComponentStates :: enum {
+    VAO_TRANSFERRED,
+    VBO_TRANSFERRED,
+    EBO_TRANSFERRED,
+}
+GlComponentState :: bit_set[GlComponentStates]
+
+gl_component_is_drawable :: proc(component: model.GLComponent) -> GlComponentState {
+    return (u32(!component.vao.transferred)) | (u32(!component.vbo.transferred) << 1) | (u32(!component.ebo.transferred) << 2)
 }
 
-
-gl_GPUComponent :: struct {
-    vao, vbo, ebo: u32,
-    expressed_vert, expressed_ind: bool,
-    program: ShaderProgram
+// todo look at shaders for this
+release_mesh :: proc(mesh: model.Mesh) {
+    delete(mesh.vertex_data)
+    delete(mesh.index_data)
+    gl.DeleteVertexArrays(1, &mesh.gl_component.vao.id)
+    gl.DeleteBuffers(1, &mesh.gl_component.vbo.id)
+    gl.DeleteBuffers(1, &mesh.gl_component.ebo.id)
 }
 
-vl_GPUComponent :: struct {
-    vlwhatthefuckwouldgohere: u32
+release_model :: proc(model: model.Model) {
+    for mesh in model.meshes do release_mesh(model)
 }
 
-
-/*
-   Returns if a specific GPU component is able to be drawn to the screen
-   Returns an error code (binary representation more apt)
-   OpenGL:
-    0 -> drawable
-    0001 -> vertices not expressed
-    0010 -> indices not expressed
-    0100 -> program not attached
-    
-    A result of 0110 means 0010 | 0100 e.g. vertices not expressed U program not attached
-*/
-component_is_drawable_ :: #type proc(component: GPUComponent) -> u32
-component_is_drawable: component_is_drawable_ = gl_component_is_drawable
-
-gl_component_is_drawable :: proc(component: GPUComponent) -> u32 {
-    comp := component.(gl_GPUComponent)
-    return (u32(!comp.expressed_vert)) | (u32(!comp.expressed_ind) << 1) | (u32(!comp.program.expressed) << 2)
-}
-
-
-
-release_gpu_component :: proc(component: GPUComponent) {
-    switch RENDER_API {
-    case .OPENGL: 
-        gl_component := component.(gl_GPUComponent)
-
-        gl.DeleteVertexArrays(1, &gl_component.vao)
-        gl.DeleteBuffers(1, &gl_component.vbo)
-        gl.DeleteBuffers(1, &gl_component.ebo)
-        gl.DeleteProgram(u32(gl_component.program.id.(i32)))
-    case .VULKAN: vulkan_not_supported();
-    }
-}
-
-//
-
-
-DEFAULT_DRAW_PROPERTIES: DrawProperties
-DrawProperties :: struct {  // todo limit to opengl, makes development easier and trying to predict how vulkan works is stupid
-    mesh: model.Mesh,
-    indices: model.IndexData,
-    gpu_component: GPUComponent,
-}
 
 
 /* Main output returned via side effects */
