@@ -1,10 +1,15 @@
 # eno
 game engine WIP written in odin
 
+Focuses on providing a simple and relatively powerful game engine interface for programmers to interact with.
+Attempts to be interactable and extendible in every stage.
+
 ## Building
 
 #### Prerequisites
 - `odin` programming language is installed, the tested release is `dev-2024-11`.
+- `SDL2` is installed.
+- `OpenGL` is installed.
 
 If you wish to build eno, you can do:
 
@@ -31,7 +36,7 @@ Usage: runeno.sh [
 ```
 Permissions may have to be updated before running the build script.
 
-* On Windows you may need to add SDL2.dll to `bin/`, you can find this in `{odin_dir}/vendor/sdl2`.
+* You may need to add SDL2.dll to `bin/`, you can find this in `{odin_dir}/vendor/sdl2`.
 
 ## Features and scope
 A list of features detailing what eno currently implements:
@@ -41,16 +46,13 @@ A list of features detailing what eno currently implements:
 - Entity Component System featuring a Scene > Archetype > Entity hierarchical structure, a Component API with component serializatrion/deserialization, and systems for certain batch operations. Implements a cache optimised structure for component data with byte arrays, stored within archetypes. `ecs` package
 - GLTF model loading from a scene with cgltf Odin bindings into a Model API in the `model` package
 - Dynamic shader generation within the `shader` package
-- OpenGL rendering utilities in the `gpu` package
-- A WIP renderer in the `render` package
+- Controls using a centralized hook structure
 
 Shortly upcoming features:
+- Deferred rendering pipeline - integrates everything in the project so far, and changes a lot.
+- Some better APIs (particularly for ECS systems)
 
-- Renderer advancements!
-- Better APIs for handling windower input, where SDL is still used on the user side, and for model layout input where cgltf is still being used.
-- Improvements to certain rendering utilities in the `gpu` package, for example caching uniforms is not yet implemented.
-
-Eno is made to be cross-platform where possible. I have plans to add Vulkan into the rendering utilities (which has forward compatibility for this case), and to be able to target Mac with MoltenVK.
-I have certain plans to make an option for GLFW instead of SDL as the windower, however I'd likely focus on other things first as it really does not change anything for any users.
+Eno is made to be cross-platform where possible. I have plans for integrating Vulkan and to be able to target Mac with MoltenVK.
+I have certain plans to make an option for GLFW instead of SDL as the windower, however I'd likely focus on other things first as it really does not change anything for anybody.
 
 I've been developing around the renderer for a while now, so eno currently doesn't have much to show in terms of viewable graphics. This is done on purpose, so that I don't have to rewrite the renderer and adjacent systems a million times in the future (Which I still likely will, but hopefully less :)).
