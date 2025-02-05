@@ -5,14 +5,6 @@ import gl "vendor:OpenGL"
 import "../model"
 import dbg "../debug"
 
-import "core:log"
-
-
-
-GraphicsAPI :: enum { OPENGL, VULKAN } //Making it easy for the future - Is it really? Not doing vulkan any time soon no need to keep doing this
-RENDER_API: GraphicsAPI = GraphicsAPI.OPENGL
-
-
 
 GlComponentStates :: enum {
     VAO_TRANSFERRED,
@@ -39,62 +31,37 @@ release_model :: proc(model: model.Model) {
 }
 
 
-
-/* Main output returned via side effects */
-express_draw_properties :: proc(draw_properties: ^DrawProperties) -> (ok: bool) {
-    dbg.debug_point(dbg.LogLevel.INFO, "Expressing draw properties")
+transfer_model :: proc(model: model.Model) -> (ok: bool) {
+    dbg.debug_point(dbg.LogLevel.INFO, "Transferring model")
 
     gl_express_mesh_with_indices(draw_properties) or_return
-    log.infof("gpu component after: %#v", draw_properties.gpu_component)
 
-    return express_shader_given_gpu_component(&draw_properties.gpu_component)
-}
+    // currently just gl_express_mesh_with_indices
+    // todo: add shader support
 
-@(private)
-express_shader_given_gpu_component :: proc(gpu_comp: ^GPUComponent) -> (ok: bool){
-    dbg.debug_point(dbg.LogLevel.INFO, "Expressing shader given gpu components")
-    gl_comp: ^gl_GPUComponent
-    switch &comp in gpu_comp {
-    case gl_GPUComponent:
-        gl_comp = &comp
-    case vl_GPUComponent:
-        vulkan_not_supported()
-        ok = false
-        return
-    }
-
-    if !gl_comp.program.expressed do return express_shader(&gl_comp.program)
-
-    ok = true
     return
 }
 
 
-// Procedures to express mesh structures on the GPU
-gl_express_mesh_with_indices :: proc(draw_properties: ^DrawProperties) -> (ok: bool) {
-    if RENDER_API == .VULKAN {
-        vulkan_not_supported()
-        return
-    }
+gl_express_mesh_with_indices :: proc(mesh: ^model.Mesh) -> (ok: bool) {
 
-    gpu_component := draw_properties.gpu_component.(gl_GPUComponent)
 
-    gl.GenVertexArrays(1, &gpu_component.vao)
-    gl.BindVertexArray(gpu_component.vao)
+    gl.GenVertexArrays(1, &mesh.gl_component.vao)
+    gl.BindVertexArray(mesh.gl_component.vao)
 
     if !gpu_component.expressed_vert {
         // Express ebo
-        gl_create_and_express_vbo(&gpu_component.vbo, &draw_properties.mesh) or_return
-        gpu_component.expressed_vert = true
+        gl_create_and_express_vbo(&mesh.gl_component.vbo, mesh) or_return
+        mesh.gl_component.vbo.transferred = true
     }
 
     if !gpu_component.expressed_ind {
         // Express ebo
-         gl_create_and_express_ebo(&gpu_component.ebo, &draw_properties.indices)
-         gpu_component.expressed_ind = true
+         gl_create_and_express_ebo(&gpu_component.ebo, mesh) or_return
+         mesh.gl_component.ebo.transferred = true
     }
 
-    draw_properties.gpu_component = gpu_component
+
     ok = true
     return
 }
@@ -105,7 +72,7 @@ gl_express_mesh_with_indices :: proc(draw_properties: ^DrawProperties) -> (ok: b
     Assumes bound vao
 */
 @(private)
-gl_create_and_express_vbo :: proc(vbo: ^u32, data: ^model.Mesh) -> (ok: bool) {
+gl_create_and_express_vbo :: proc(vbo: ^u32, data: model.Mesh) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Expressing gl mesh vertices")
     if len(data.vertex_data) == 0 {
         dbg.debug_point(dbg.LogLevel.ERROR, "No vertices given to express");
@@ -141,26 +108,22 @@ gl_create_and_express_vbo :: proc(vbo: ^u32, data: ^model.Mesh) -> (ok: bool) {
     Assumes bound vao
 */
 @(private)
-gl_create_and_express_ebo :: proc(ebo: ^u32, data: ^model.IndexData) -> (ok: bool) {
+gl_create_and_express_ebo :: proc(ebo: ^u32, data: model.Mesh) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Expressing gl mesh indices")
-    if len(data.raw_data) == 0 {
+    if len(data.index_data) == 0 {
         dbg.debug_point(dbg.LogLevel.ERROR, "Cannot express 0 indices")
         return
     }
 
     gl.GenBuffers(1, ebo)
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo^)
-    gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(data.raw_data) * size_of(u32), raw_data(data.raw_data), gl.STATIC_DRAW)
+    gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(data.index_data) * size_of(u32), raw_data(data.index_data), gl.STATIC_DRAW)
 
     ok = true
     return
 }
 
-//
 
-
-draw_elements_ :: #type proc(draw_properties: ^DrawProperties)
-draw_elements: draw_elements_ = gl_draw_elements
 
 gl_draw_elements :: proc(draw_properties: ^DrawProperties) {
     // todo add checks for expressedness of components
@@ -168,51 +131,4 @@ gl_draw_elements :: proc(draw_properties: ^DrawProperties) {
     gl.BindVertexArray(comp.vao)
     gl.UseProgram(u32(comp.program.id.(i32)))
     gl.DrawElements(gl.TRIANGLES, i32(len(draw_properties.indices.raw_data)), gl.UNSIGNED_INT, nil)
-}
-
-
-vulkan_not_supported :: proc(loc := #caller_location) { dbg.debug_point(dbg.LogLevel.ERROR, "Vulkan not supported", loc = loc) }
-
-
-// Setting up opengl
-
-opengl_setup :: proc() {
-    opengl_debug_setup()
-    enable_gl_depth_test()
-}
-
-opengl_debug_setup :: proc() {
-    if dbg.DEBUG_MODE == .DEBUG {
-        gl.Enable(gl.DEBUG_OUTPUT)
-        gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
-    }
-    gl.DebugMessageCallback(dbg.GL_DEBUG_CALLBACK, nil)  // Enable even if debug mode off, does nothing if off, allows debug to be turned on mid runtime
-}
-
-enable_gl_depth_test :: proc() {
-    gl.Enable(gl.DEPTH_TEST)
-}
-
-frame_setup :: proc() {
-    if RENDER_API == .VULKAN {
-        vulkan_not_supported()
-        return
-    }
-    gl_clear()
-}
-
-// Use gl_add_clear_attributes and gl_remove_clear_attributes to modify
-@(private)
-GL_CLEAR_MASK : u32 = gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT
-
-gl_add_clear_attributes :: proc(attributes: ..u32) {
-    for attribute in attributes do GL_CLEAR_MASK |= attribute
-}
-
-gl_remove_clear_attributes :: proc(attributes: ..u32) {
-    for attribute in attributes do GL_CLEAR_MASK &~= attribute
-}
-
-gl_clear :: proc() {
-    gl.Clear(GL_CLEAR_MASK)
 }
