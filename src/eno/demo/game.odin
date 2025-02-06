@@ -31,32 +31,29 @@ every_frame :: proc() {
     ok := win.swap_window_bufs(game.Game.window); if !ok do log.errorf("could not swap bufs")
 }
 
-draw_properties: ^shader.DrawProperties
 
 before_frame :: proc() {
 
     helmet_arch, _ := ecs.scene_add_archetype(game.Game.scene, "helmet_arch", context.allocator,
-        ecs.make_component_info(shader.DrawProperties, "draw_properties"),
-        ecs.make_component_info(linalg.Vector3f32, "position"),
-        ecs.make_component_info(linalg.Vector3f32, "scale")
+        ecs.make_component_info(model.Model, ecs.MODEL_COMPONENT),
+        ecs.make_component_info(ecs.WorldComponent, ecs.WORLD_COMPONENT)
     )
 
-    position: linalg.Vector3f32 = { 0.0, 0.0, 0.0 }
-    scale: linalg.Vector3f32 = { 0.5, 0.5, 0.5 }
+    world_properties := ecs.WorldComponent{
+        position = { 0.0, 0.0, 0.0 },
+        scale = { 0.5, 0.5, 0.5 }
+    }
 
 
-    helmet_draw_properties: shader.DrawProperties
-
-    helmet_draw_properties.mesh, helmet_draw_properties.indices = helmet_mesh_and_indices()
+    model := helmet_model()
     ok := create_shader_program(&helmet_draw_properties); if !ok do return
 
     shader.express_draw_properties(&helmet_draw_properties)
 
 
     ecs.archetype_add_entity(game.Game.scene, helmet_arch, "helmet_entity",
-        ecs.make_component_data_untyped_s(&helmet_draw_properties, "draw_properties"),
-        ecs.make_component_data_untyped_s(&position, "position"),
-        ecs.make_component_data_untyped_s(&scale, "scale")
+        ecs.make_component_data_untyped_s(&model, ecs.MODEL_COMPONENT),
+        ecs.make_component_data_untyped_s(&world_properties, ecs.WORLD_COMPONENT),
     )
 
     // Camera
@@ -108,9 +105,9 @@ set_uniforms :: proc(draw_properties: ^shader.DrawProperties) -> (ok: bool) {
 
 
 @(private)
-helmet_mesh_and_indices :: proc() -> (mesh: model.Mesh, indices: model.IndexData) {
-    meshes, index_datas, ok := model.load_and_extract_meshes("SciFiHelmet"); if !ok do return
-    return meshes[0], index_datas[0]
+helmet_model :: proc() -> (helmet_model: model.Model) {
+    meshes, ok := model.load_and_extract_meshes("SciFiHelmet"); if !ok do return
+    return model.Model{ meshes }
 }
 
 

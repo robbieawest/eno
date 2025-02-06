@@ -1,9 +1,11 @@
 package ecs
 
 import dbg "../debug"
+import "../model"
 
 import "core:mem"
 import "core:reflect"
+import glm "core:math/linalg/glsl"
 
 
 
@@ -300,4 +302,16 @@ components_deserialize_copy_untyped :: proc(allocator: mem.Allocator, components
 
     ok = true
     return
+}
+
+
+// Standardized components
+
+MODEL_COMPONENT :: "model"
+WORLD_COMPONENT :: "world"
+
+WorldComponent :: struct {
+    position: glm.vec3,
+    scale: glm.vec3,
+    rotation: glm.quat
 }

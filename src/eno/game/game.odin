@@ -117,37 +117,43 @@ scale_mouse_relative :: proc(xrel: f32, yrel: f32) -> (xout: f32, yout: f32) {
 
 
 HOOKS_CAMERA_MOVEMENT :: proc() -> (hooks: control.Hooks) {
+    viewpoint := Game.scene.viewpoint
+    if viewpoint == nil {
+        dbg.debug_point(dbg.LogLevel.INFO, "Cannot add camera hooks without scene viewpoint")
+        return
+    }
+
     hooks = make([dynamic]control.Hook)
     append_elems(&hooks,
         control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .W }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, 0.0, -1.0 }) },
-            scene_viewpoint()
+            viewpoint
         ),
         control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .A }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ -1.0, 0.0, 0.0 }) },
-            scene_viewpoint()
+            viewpoint
         ),
         control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .S }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, 0.0, 1.0 }) },
-            scene_viewpoint()
+            viewpoint
         ),
         control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .D }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 1.0, 0.0, 0.0 }) },
-            scene_viewpoint()
+            viewpoint
         ),
         control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .SPACE }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, 1.0, 0.0 }) },
-            scene_viewpoint()
+            viewpoint
         ),
         control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .Q }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, -1.0, 0.0 }) },
-            scene_viewpoint()
+            viewpoint
         ),
     )
     return

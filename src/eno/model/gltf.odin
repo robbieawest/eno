@@ -207,7 +207,7 @@ extract_index_data_test :: proc(t: ^testing.T) {
 }
 
 
-load_and_extract_meshes :: proc(model_name: string) -> (meshes: []Mesh, indices: []IndexData, ok: bool) {
+load_and_extract_meshes :: proc(model_name: string) -> (meshes: [dynamic]Mesh, ok: bool) {
     gltf_data, result := load_gltf_mesh(model_name)
 
     if result != .success {
@@ -223,12 +223,22 @@ load_and_extract_meshes :: proc(model_name: string) -> (meshes: []Mesh, indices:
     meshes_dyna := make([dynamic]Mesh)
     indices_dyna := make([dynamic]IndexData)
     for mesh in gltf_data.meshes {
-        meshes_got, meshes_ok := extract_cgltf_mesh(mesh); if !meshes_ok do return
-        append_elems(&meshes_dyna, ..meshes_got)
-
         indices_got, indices_ok := extract_index_data_from_mesh(mesh); if !indices_ok do return
-        append_elems(&indices_dyna, ..indices_got)
+        meshes_got, meshes_ok := extract_cgltf_mesh(mesh); if !meshes_ok do return
+
+        if len(indices_got) != len(meshes_got) {
+            dbg.debug_point(dbg.LogLevel.INFO, "Indices do not match meshes")
+            return
+        }
+
+        for i := 0; i < len(indices_got); i += 1 {
+            meshes_got[i].index_data = indices_got[i]
+        }
+
+        append_elems(&meshes_dyna, ..meshes_got)
     }
 
-    return meshes_dyna[:], indices_dyna[:], true
+
+
+    return meshes_dyna, true
 }
