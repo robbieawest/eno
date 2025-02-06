@@ -34,7 +34,7 @@ release_model :: proc(model: model.Model) {
 transfer_model :: proc(model: model.Model) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Transferring model")
 
-    gl_express_mesh_with_indices(draw_properties) or_return
+    express_mesh_with_indices(draw_properties) or_return
 
     // currently just gl_express_mesh_with_indices
     // todo: add shader support
@@ -43,7 +43,7 @@ transfer_model :: proc(model: model.Model) -> (ok: bool) {
 }
 
 
-gl_express_mesh_with_indices :: proc(mesh: ^model.Mesh) -> (ok: bool) {
+express_mesh_with_indices :: proc(mesh: ^model.Mesh) -> (ok: bool) {
 
 
     gl.GenVertexArrays(1, &mesh.gl_component.vao)
@@ -51,13 +51,13 @@ gl_express_mesh_with_indices :: proc(mesh: ^model.Mesh) -> (ok: bool) {
 
     if !gpu_component.expressed_vert {
         // Express ebo
-        gl_create_and_express_vbo(&mesh.gl_component.vbo, mesh) or_return
+        create_and_express_vbo(&mesh.gl_component.vbo, mesh) or_return
         mesh.gl_component.vbo.transferred = true
     }
 
     if !gpu_component.expressed_ind {
         // Express ebo
-         gl_create_and_express_ebo(&gpu_component.ebo, mesh) or_return
+         create_and_express_ebo(&gpu_component.ebo, mesh) or_return
          mesh.gl_component.ebo.transferred = true
     }
 
@@ -72,7 +72,7 @@ gl_express_mesh_with_indices :: proc(mesh: ^model.Mesh) -> (ok: bool) {
     Assumes bound vao
 */
 @(private)
-gl_create_and_express_vbo :: proc(vbo: ^u32, data: model.Mesh) -> (ok: bool) {
+create_and_express_vbo :: proc(vbo: ^u32, data: model.Mesh) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Expressing gl mesh vertices")
     if len(data.vertex_data) == 0 {
         dbg.debug_point(dbg.LogLevel.ERROR, "No vertices given to express");
@@ -108,7 +108,7 @@ gl_create_and_express_vbo :: proc(vbo: ^u32, data: model.Mesh) -> (ok: bool) {
     Assumes bound vao
 */
 @(private)
-gl_create_and_express_ebo :: proc(ebo: ^u32, data: model.Mesh) -> (ok: bool) {
+create_and_express_ebo :: proc(ebo: ^u32, data: model.Mesh) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Expressing gl mesh indices")
     if len(data.index_data) == 0 {
         dbg.debug_point(dbg.LogLevel.ERROR, "Cannot express 0 indices")
@@ -124,7 +124,7 @@ gl_create_and_express_ebo :: proc(ebo: ^u32, data: model.Mesh) -> (ok: bool) {
 }
 
 
-
+/*
 gl_draw_elements :: proc(draw_properties: ^DrawProperties) {
     // todo add checks for expressedness of components
     comp := draw_properties.gpu_component.(gl_GPUComponent)
@@ -132,3 +132,4 @@ gl_draw_elements :: proc(draw_properties: ^DrawProperties) {
     gl.UseProgram(u32(comp.program.id.(i32)))
     gl.DrawElements(gl.TRIANGLES, i32(len(draw_properties.indices.raw_data)), gl.UNSIGNED_INT, nil)
 }
+*/

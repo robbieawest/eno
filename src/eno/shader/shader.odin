@@ -187,11 +187,8 @@ destroy_shader_source :: proc(source: ^ShaderSource) {
     delete(source.source)
 }
 
-// todo This needs to be rethought I think
-ShaderIdentifier :: union {
-    i32,  // Stores program id for OpenGL
-    //VkShaderModule or a pipeline ?
-}
+
+ShaderIdentifier :: i32
 
 ShaderProgram :: struct {
     id: ShaderIdentifier,
@@ -408,7 +405,7 @@ express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
 
     program.id = i32(gl.create_and_link_program(shader_ids[:]) or_return)
     program.expressed = true
-    
+
     return true
 }
 
@@ -689,25 +686,9 @@ handle_shader_read_error :: proc(filepath: string, err: utils.FileError, loc := 
 */
 
 
-// Working with draw properties
-
-draw_properties_add_source :: proc(properties: ^DrawProperties, source: ShaderSource) {
-    gl_comp := properties.gpu_component.(gl_GPUComponent)
-    append(&gl_comp.program.sources, source)
-    properties.gpu_component = gl_comp
-}
-
-
-// General shader utils
-
 attach_program :: proc(program: ShaderProgram, loc := #caller_location) {
-    id, idi32 := program.id.(i32); if !idi32 {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Shader id not valid", loc = loc)
-        return
+    if !program.expressed {
+        dbg.debug_point(dbg.LogLevel.INFO, "Shader program not expressed")
     }
-    if id < 0 {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Shader not expressed", loc = loc)
-        return
-    }
-    gl.UseProgram(u32(id))
+    gl.UseProgram(u32(program.id))
 }

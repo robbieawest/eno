@@ -25,7 +25,7 @@ every_frame :: proc() {
     //cutils.update_view(&copied_program)
 
     // Draw
-    render_old.draw_indexed_entities(game.Game.scene, "helmet_arch", "helmet_entity")
+   // render_old.draw_indexed_entities(game.Game.scene, "helmet_arch", "helmet_entity")
 
     // Swap
     ok := win.swap_window_bufs(game.Game.window); if !ok do log.errorf("could not swap bufs")
