@@ -4,10 +4,10 @@ import win "../window"
 import game "../game"
 import "../ecs"
 import "../model"
-import "../gpu"
 import "../render_old"
 import cutils "../camera_utils"
 import cam "../camera"
+import shader "../shader"
 
 import "core:log"
 import "core:math/linalg"
@@ -21,8 +21,8 @@ import glm "core:math/linalg/glsl"
 every_frame :: proc() {
 
     // Update camera
-    copied_program := draw_properties.gpu_component.(gpu.gl_GPUComponent).program
-    cutils.update_view(&copied_program)
+    //copied_program := draw_properties.gpu_component.(shader.gl_GPUComponent).program
+    //cutils.update_view(&copied_program)
 
     // Draw
     render_old.draw_indexed_entities(game.Game.scene, "helmet_arch", "helmet_entity")
@@ -31,12 +31,12 @@ every_frame :: proc() {
     ok := win.swap_window_bufs(game.Game.window); if !ok do log.errorf("could not swap bufs")
 }
 
-draw_properties: ^gpu.DrawProperties
+draw_properties: ^shader.DrawProperties
 
 before_frame :: proc() {
 
     helmet_arch, _ := ecs.scene_add_archetype(game.Game.scene, "helmet_arch", context.allocator,
-        ecs.make_component_info(gpu.DrawProperties, "draw_properties"),
+        ecs.make_component_info(shader.DrawProperties, "draw_properties"),
         ecs.make_component_info(linalg.Vector3f32, "position"),
         ecs.make_component_info(linalg.Vector3f32, "scale")
     )
@@ -45,12 +45,12 @@ before_frame :: proc() {
     scale: linalg.Vector3f32 = { 0.5, 0.5, 0.5 }
 
 
-    helmet_draw_properties: gpu.DrawProperties
+    helmet_draw_properties: shader.DrawProperties
 
     helmet_draw_properties.mesh, helmet_draw_properties.indices = helmet_mesh_and_indices()
     ok := create_shader_program(&helmet_draw_properties); if !ok do return
 
-    gpu.express_draw_properties(&helmet_draw_properties)
+    shader.express_draw_properties(&helmet_draw_properties)
 
 
     ecs.archetype_add_entity(game.Game.scene, helmet_arch, "helmet_entity",
@@ -64,7 +64,7 @@ before_frame :: proc() {
 
     ok = set_uniforms(&helmet_draw_properties); if !ok do return
 
-    draw_properties_ret, ecs_ok := ecs.query_component_from_archetype(helmet_arch, "draw_properties", gpu.DrawProperties, "helmet_entity"); if !ecs_ok do return
+    draw_properties_ret, ecs_ok := ecs.query_component_from_archetype(helmet_arch, "draw_properties", shader.DrawProperties, "helmet_entity"); if !ecs_ok do return
     draw_properties = draw_properties_ret[0].data
 
     game.add_event_hooks(
@@ -75,8 +75,8 @@ before_frame :: proc() {
 }
 
 
-set_uniforms :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool) {
-    gl_comp := draw_properties.gpu_component.(gpu.gl_GPUComponent)
+set_uniforms :: proc(draw_properties: ^shader.DrawProperties) -> (ok: bool) {
+    gl_comp := draw_properties.gpu_component.(shader.gl_GPUComponent)
     program := &gl_comp.program
 
     // Get scale and position
@@ -94,12 +94,12 @@ set_uniforms :: proc(draw_properties: ^gpu.DrawProperties) -> (ok: bool) {
     model := glm.mat4Scale(scale^)
     model *= glm.mat4Translate(position^)
 
-    gpu.set_matrix_uniform(program, "m_Model", 1, false, model)
+    shader.set_matrix_uniform(program, "m_Model", 1, false, model)
 
     cutils.update_view(program)
 
     perspective := cam.get_perspective(game.Game.scene.viewpoint)
-    gpu.set_matrix_uniform(program, "m_Projection", 1, false, perspective)
+    shader.set_matrix_uniform(program, "m_Projection", 1, false, perspective)
 
     draw_properties.gpu_component = gl_comp
     ok = true
@@ -115,21 +115,21 @@ helmet_mesh_and_indices :: proc() -> (mesh: model.Mesh, indices: model.IndexData
 
 
 @(private)
-create_shader_program :: proc(properties: ^gpu.DrawProperties) -> (ok: bool) {
-    sources := make([dynamic]gpu.ShaderSource, 0)
-    gl_comp := properties.gpu_component.(gpu.gl_GPUComponent)
-    gl_comp.program = gpu.init_shader_program()
+create_shader_program :: proc(properties: ^shader.DrawProperties) -> (ok: bool) {
+    sources := make([dynamic]shader.ShaderSource, 0)
+    gl_comp := properties.gpu_component.(shader.gl_GPUComponent)
+    gl_comp.program = shader.init_shader_program()
 
-    vertex_shader: gpu.Shader
-    gpu.shader_layout_from_mesh(&vertex_shader, properties.mesh) or_return
+    vertex_shader: shader.Shader
+    shader.shader_layout_from_mesh(&vertex_shader, properties.mesh) or_return
 
-    gpu.add_uniforms(&vertex_shader, { .mat4, "m_Model" })
-    gpu.add_uniforms(&vertex_shader, { .mat4, "m_View" })
-    gpu.add_uniforms(&vertex_shader, { .mat4, "m_Projection" })
+    shader.add_uniforms(&vertex_shader, { .mat4, "m_Model" })
+    shader.add_uniforms(&vertex_shader, { .mat4, "m_View" })
+    shader.add_uniforms(&vertex_shader, { .mat4, "m_Projection" })
 
-    gpu.add_output(&vertex_shader, { .vec3, "fragColour" })
+    shader.add_output(&vertex_shader, { .vec3, "fragColour" })
 
-    gpu.add_functions(&vertex_shader, gpu.init_shader_function(
+    shader.add_functions(&vertex_shader, shader.init_shader_function(
         .void,
         "main",
         `
@@ -140,30 +140,30 @@ create_shader_program :: proc(properties: ^gpu.DrawProperties) -> (ok: bool) {
         false
     ))
 
-    append(&sources, gpu.build_shader_source(vertex_shader, .VERTEX) or_return)
+    append(&sources, shader.build_shader_source(vertex_shader, .VERTEX) or_return)
     log.infof("Built source: %#v", sources[0].source)
 
 
-    fragment_shader: gpu.Shader
-    gpu.add_output(&fragment_shader, { .vec4, "Colour" })
-    gpu.add_input(&fragment_shader, { .vec3, "fragColour" })
-    gpu.add_functions(&fragment_shader, gpu.init_shader_function(
+    fragment_shader: shader.Shader
+    shader.add_output(&fragment_shader, { .vec4, "Colour" })
+    shader.add_input(&fragment_shader, { .vec3, "fragColour" })
+    shader.add_functions(&fragment_shader, shader.init_shader_function(
         .void,
         "main",
         "   Colour = vec4(fragColour, 1.0);",
         false
     ))
 
-    append(&sources, gpu.build_shader_source(fragment_shader, .FRAGMENT) or_return)
+    append(&sources, shader.build_shader_source(fragment_shader, .FRAGMENT) or_return)
     log.infof("Built source: %#v", sources[1].source)
 
     gl_comp.program.sources = sources
-    gpu.express_shader(&gl_comp.program)
+    shader.express_shader(&gl_comp.program)
 
-    gpu.attach_program(gl_comp.program)
-    gpu.register_uniform(&gl_comp.program, "m_Model")
-    gpu.register_uniform(&gl_comp.program, "m_View")
-    gpu.register_uniform(&gl_comp.program, "m_Projection")
+    shader.attach_program(gl_comp.program)
+    shader.register_uniform(&gl_comp.program, "m_Model")
+    shader.register_uniform(&gl_comp.program, "m_View")
+    shader.register_uniform(&gl_comp.program, "m_Projection")
 
     properties.gpu_component = gl_comp
     ok = true

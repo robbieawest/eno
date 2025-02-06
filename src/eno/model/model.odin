@@ -57,9 +57,12 @@ MeshComponentType :: enum {
 }
 
 
+VertexData :: [dynamic]f32
+IndexData :: [dynamic]u32
+
 Mesh :: struct {
-    vertex_data: [dynamic]f32,
-    index_data: [dynamic]u32,
+    vertex_data: VertexData,
+    index_data: IndexData,
     layout: VertexLayout,
     material: Material,
     gl_component: GLComponent

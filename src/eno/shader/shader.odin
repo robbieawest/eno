@@ -390,34 +390,25 @@ extended_glsl_type_to_string :: proc(type: ExtendedGLSLType, caller_location := 
 express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Expressing shader")
 
-    if RENDER_API == .VULKAN {
-        vulkan_not_supported()
-        return ok
-    }
     if program.expressed do return true
 
-    switch (RENDER_API) {
-    case .OPENGL:
-        shader_ids := make([dynamic]u32, len(program.sources))
-        defer delete(shader_ids)
+    shader_ids := make([dynamic]u32, len(program.sources))
+    defer delete(shader_ids)
 
-        for shader_source, i in program.sources {
-            dbg.debug_point(dbg.LogLevel.INFO, "Expressing source")
-            log.infof("compiling source: %#s", shader_source.source)
-            id, compile_ok := gl.compile_shader_from_source(shader_source.source, conv_gl_shader_type(shader_source.type))
-            if !compile_ok {
-                dbg.debug_point(dbg.LogLevel.ERROR, "Could not compile shader source: %s", shader_source.source)
-                return ok
-            }
-            shader_ids[i] = id
+    for shader_source, i in program.sources {
+        dbg.debug_point(dbg.LogLevel.INFO, "Expressing source")
+        log.infof("compiling source: %#s", shader_source.source)
+        id, compile_ok := gl.compile_shader_from_source(shader_source.source, conv_gl_shader_type(shader_source.type))
+        if !compile_ok {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Could not compile shader source: %s", shader_source.source)
+            return ok
         }
-
-        program.id = i32(gl.create_and_link_program(shader_ids[:]) or_return)
-        program.expressed = true
-    case .VULKAN:
-        vulkan_not_supported()
-        return ok
+        shader_ids[i] = id
     }
+
+    program.id = i32(gl.create_and_link_program(shader_ids[:]) or_return)
+    program.expressed = true
+    
     return true
 }
 

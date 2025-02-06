@@ -2,7 +2,7 @@ package opengl
 
 import gl "vendor:OpenGL"
 
-import dbg "../debug"
+import dbg "../../debug"
 
 
 // Setting up opengl

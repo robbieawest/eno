@@ -8,7 +8,7 @@ import "core:mem"
 // ^ See file_utils
 
 
-append_n_defaults :: proc(dynamic_arr: ^$T/[dynamic]$E, n: u32) {
+append_n :: proc(dynamic_arr: ^$T/[dynamic]$E, n: u32) {
     reserve(dynamic_arr, n)
     for i in 0..<n {
         def: E 
@@ -29,7 +29,7 @@ s_slice := []f32{0.32, 0.12, 0.58}
     defer delete(expected_end_slice)
     defer delete(slice)
 
-    append_n_defaults(&slice, 3)
+    append_n(&slice, 3)
 
     testing.expect_value(t, len(slice), len(expected_end_slice))
     for i in 0..<len(slice) do testing.expect_value(t, slice[i], expected_end_slice[i])

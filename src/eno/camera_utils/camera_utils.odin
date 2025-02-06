@@ -4,9 +4,7 @@ import win "../window"
 import "../game"
 import cam "../camera"
 
-import glm "core:math/linalg/glsl"
 import "core:fmt"
-import "../gpu"
 
 // Utilities for cameras placed elsewhere from camera package, due to circular dependency issues
 

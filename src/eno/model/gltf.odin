@@ -93,7 +93,7 @@ extract_cgltf_mesh :: proc(mesh: cgltf.mesh) -> (result: []Mesh, ok: bool) {
                 return result, false
             } else if element_count_throughout == 0 {
                 // Initializes vertex data for entire mesh
-                utils.append_n_defaults(&mesh_ret.vertex_data, float_stride * u32(count))
+                utils.append_n(&mesh_ret.vertex_data, float_stride * u32(count))
             }
             element_count_throughout = count
 
@@ -129,9 +129,9 @@ extract_index_data_from_mesh :: proc(mesh: cgltf.mesh) -> (result: []IndexData, 
         _accessor := _primitive.indices
         indices: IndexData
 
-        utils.append_n_defaults(&indices.raw_data, u32(_accessor.count))
+        utils.append_n(&indices, u32(_accessor.count))
         for k in 0..<_accessor.count {
-            raw_index_data: [^]u32 = raw_data(indices.raw_data[k:k+1])
+            raw_index_data: [^]u32 = raw_data(indices[k:k+1])
             read_res: b32 = cgltf.accessor_read_uint(_accessor, k, raw_index_data, 1)
             if read_res == false {
                 dbg.debug_point(dbg.LogLevel.ERROR, "Error while reading uint(index) from accessor, received boolean false")
@@ -148,7 +148,7 @@ extract_index_data_from_mesh :: proc(mesh: cgltf.mesh) -> (result: []IndexData, 
 
 
 extract_texture_data_from_mesh :: proc(mesh: cgltf.mesh) {
-    mesh.primitives[0].material.
+  //  mesh.primitives[0].material. todo
 }
 
 
@@ -200,10 +200,10 @@ extract_index_data_test :: proc(t: ^testing.T) {
     data, result := load_gltf_mesh("SciFiHelmet")
 
     res, ok := extract_index_data_from_mesh(data.meshes[0])
-    defer for &index_data in res do destroy_index_data(&index_data)
+    defer for &index_data in res do delete(index_data)
 
     testing.expect(t, ok, "ok check")
-    log.infof("indices size: %d, num indices: %d", len(res), len(res[0].raw_data))
+    log.infof("indices size: %d, num indices: %d", len(res), len(res[0]))
 }
 
 

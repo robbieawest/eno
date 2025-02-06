@@ -5,7 +5,6 @@ import SDL "vendor:sdl2"
 import ecs "../ecs"
 import win "../window"
 import dbg "../debug"
-import "../gpu"
 import control "../control"
 import "../camera"
 

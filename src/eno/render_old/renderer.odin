@@ -1,17 +1,10 @@
 package render
 
 import "../ecs"
-import "../gpu"
 import dbg "../debug"
-import win "../window"
-import "../model"
-import "../game"
 
-import glm "core:math/linalg/glsl"
-import "core:fmt"
-import "core:slice"
-import "core:log"
 
+/*
 
 draw_indexed_entities :: proc{ draw_indexed_entities_noarch, draw_indexed_entities_arch }
 
@@ -44,7 +37,6 @@ draw_indexed_entities_noarch :: proc(scene: ^ecs.Scene, archetype_label: string,
 }
 
 
-/* All not used
 render_all_from_scene :: proc(game_scene: ^ecs.Scene) -> (ok: bool) {
     archetype_query := ecs.ArchetypeQuery{ entities = []string{}, components = []ecs.ComponentQuery{ { label = "draw_properties", type = gpu.DrawProperties }}}
     for &archetype in game_scene.archetypes {
