@@ -1,4 +1,0 @@
-package render
-
-import "../model"
-
