@@ -144,14 +144,16 @@ make_attachment :: proc(frame_buffer: ^FrameBuffer, type: AttachmentType, intern
     attachment := Attachment { id = gl_attachment_id, type = type }
 
     if is_renderbuffer {
-
+        attachment.data = make_renderbuffer()
+        //todo fix .? usage everywhere
+        gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, attachment_id, gl.RENDERBUFFER, attachment.data.id.?)
     }
     else {
         attachment.data = make_texture(internal_type = internal_backing_type, w = frame_buffer.w, h = frame_buffer.h, type = backing_type, lod = lod)
         gl.TexParameteri(gl.FRAMEBUFFER, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
         gl.TexParameteri(gl.FRAMEBUFFER, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 
-        gl.FramebufferTexture2D(gl.FRAMEBUFFER, attachment_id, gl.TEXTURE_2D, attachment.data.id, lod)
+        gl.FramebufferTexture2D(gl.FRAMEBUFFER, attachment_id, gl.TEXTURE_2D, attachment.data.id.?, lod)
     }
 
     append(&frame_buffer.attachments, attachment)
