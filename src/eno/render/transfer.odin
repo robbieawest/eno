@@ -133,3 +133,15 @@ gl_draw_elements :: proc(draw_properties: ^DrawProperties) {
     gl.DrawElements(gl.TRIANGLES, i32(len(draw_properties.indices.raw_data)), gl.UNSIGNED_INT, nil)
 }
 */
+
+
+/* 2D Single sample texture */
+Texture :: struct {
+    id: Maybe(u32)
+}
+
+make_texture :: proc(lod: i32 = 0, interal_type: i32 = gl.RGBA,  w, h: i32, format: u32 = gl.RGBA, type: u32 = gl.FLOAT, data: rawptr = nil) -> (texture: Texture) {
+    gl.GenTextures(1, &texture.id)
+    gl.BindTexture(gl.TEXTURE_2D, texture.id)
+    gl.TexImage2D(gl.TEXTURE_2D, lod, internal_type, w, h, 0, format, type, data)
+}
