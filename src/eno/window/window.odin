@@ -70,9 +70,9 @@ sdl_setup_gl_versioning :: proc() {
 }
 
 
-destroy_window :: proc(target: WindowTarget) {
+destroy_window :: proc(window_target: WindowTarget) {
     dbg.debug_point(dbg.LogLevel.INFO, "Destroying SDL window")
-    SDL.DestroyWindow(target.(^SDL.Window))
+    SDL.DestroyWindow(window_target)
 }
 
 
@@ -147,14 +147,9 @@ set_mouse_raw_input :: proc(flag: bool) {
 }
 
 
-set_fullscreen :: proc(window_target: ^WindowTarget) -> (ok: bool) {
-    sdl_win: ^SDL.Window
-    sdl_win, ok = window_target.(^SDL.Window); if !ok {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Not supported")
-        return
-    }
+set_fullscreen :: proc(window_target: WindowTarget) -> (ok: bool) {
 
-    sdl_err := SDL.SetWindowFullscreen(sdl_win, SDL.WINDOW_FULLSCREEN)
+    sdl_err := SDL.SetWindowFullscreen(window_target, SDL.WINDOW_FULLSCREEN)
     if sdl_err != 0 {
         last_sdl_err: cstring = SDL.GetError()
         dbg.debug_point(dbg.LogLevel.ERROR, "Error while enabling fullscreen, sdl error: %s", last_sdl_err)

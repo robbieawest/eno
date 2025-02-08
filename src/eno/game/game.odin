@@ -7,6 +7,7 @@ import win "../window"
 import dbg "../debug"
 import control "../control"
 import "../camera"
+import glutils "../utils/gl_utils"
 
 import "core:os"
 import glm "core:math/linalg/glsl"
@@ -34,11 +35,16 @@ EnoGame :: struct {
     The game loop
 */
 run_game :: proc() {
+    if Game == nil {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Game not initialized")
+        return
+    }
+
     Game.game_state = .RUNNING
     Game.before_frame()
     for Game.game_state == .RUNNING {
         control.poll(&Game.controller)
-        gpu.frame_setup()
+        glutils.frame_setup()
         Game.every_frame()
     }
 }

@@ -188,33 +188,21 @@ destroy_shader_source :: proc(source: ^ShaderSource) {
 }
 
 
-ShaderIdentifier :: i32
+ShaderIdentifier :: Maybe(u32)
 
 ShaderProgram :: struct {
     id: ShaderIdentifier,
     sources: [dynamic]ShaderSource,
-    uniform_cache: ShaderUniformCache,
-    expressed: bool
+    uniform_cache: ShaderUniformCache
 }
 
 
-init_shader_program :: proc{ init_shader_program_sources, init_shader_program_no_sources }
-
 @(private)
-init_shader_program_sources :: proc(shader_sources: []ShaderSource) -> (program: ShaderProgram) {
+init_shader_program:: proc(shader_sources: []ShaderSource) -> (program: ShaderProgram) {
     dbg.debug_point()
-    program = ShaderProgram{ id = -1 }
     append_elems(&program.sources, ..shader_sources)
     return
 }
-
-@(private)
-init_shader_program_no_sources :: proc() -> (program: ShaderProgram) {
-    dbg.debug_point()
-    program = ShaderProgram{ id = -1 }
-    return
-}
-
 
 destroy_shader_program :: proc(program: ^ShaderProgram) {
     dbg.debug_point()
@@ -387,7 +375,7 @@ extended_glsl_type_to_string :: proc(type: ExtendedGLSLType, caller_location := 
 express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Expressing shader")
 
-    if program.expressed do return true
+    if program.id != nil do return true
 
     shader_ids := make([dynamic]u32, len(program.sources))
     defer delete(shader_ids)
@@ -403,10 +391,9 @@ express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
         shader_ids[i] = id
     }
 
-    program.id = i32(gl.create_and_link_program(shader_ids[:]) or_return)
-    program.expressed = true
-
-    return true
+    program.id = gl.create_and_link_program(shader_ids[:]) or_return
+    ok = true
+    return
 }
 
 
@@ -687,8 +674,9 @@ handle_shader_read_error :: proc(filepath: string, err: utils.FileError, loc := 
 
 
 attach_program :: proc(program: ShaderProgram, loc := #caller_location) {
-    if !program.expressed {
-        dbg.debug_point(dbg.LogLevel.INFO, "Shader program not expressed")
+    if program.id == nil {
+        dbg.debug_point(dbg.LogLevel.INFO, "Shader program not yet created")
+        return
     }
-    gl.UseProgram(u32(program.id))
+    gl.UseProgram(program.id.?)
 }

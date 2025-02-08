@@ -70,7 +70,8 @@ shader_read_test :: proc(t: ^testing.T) {
     defer destroy_shader_program(&program)
 
     testing.expect(t, ok, "ok check")
-    testing.expect_value(t, i32(-1), program.id.(i32))
+    nil_maybe: Maybe(u32)
+    testing.expect_value(t, nil_maybe, program.id)
     log.infof("%#v", program)
     if len(program.sources) == 2 {
         log.infof("%s, %s", program.sources[0].type, program.sources[0].source)

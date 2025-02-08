@@ -16,7 +16,7 @@ import glm "core:math/linalg/glsl"
 
 // Implement your before_frame and every_frame procedures in a file like this
 // APIs for ecs are dogwater right now
-
+/*
 // Certain operations are done around this every frame, look inside game package
 every_frame :: proc() {
 
@@ -166,3 +166,4 @@ create_shader_program :: proc(properties: ^shader.DrawProperties) -> (ok: bool) 
     ok = true
     return
 }
+*/

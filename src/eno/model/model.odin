@@ -99,7 +99,6 @@ destroy_mesh :: proc(mesh: ^Mesh) {
 // Textures and materials
 
 MaterialPropertyInfo :: enum {
-    SHEEN,
     PBR_METALLIC_ROUGHNESS,
     PBR_METALLIC_GLOSSINESS,
     CLEARCOAT,
@@ -109,7 +108,7 @@ MaterialPropertyInfo :: enum {
     SPECULAR,
     SHEEN,
     EMISSIVE_STRENGTH,
-    IRIDESCENE,
+    IRIDESCENCE,
     ANISTROPY,
     DISPERSION,
     DOUBLE_SIDED,
@@ -132,7 +131,7 @@ Sheen :: cgltf.sheen
 Transmission :: cgltf.transmission
 Volume :: cgltf.volume
 EmissiveStrength :: cgltf.emissive_strength
-Iridescence :: cgltf.emissive_strength
+Iridescence :: cgltf.iridescence
 Anisotropy :: cgltf.anisotropy
 AlphaMode :: cgltf.alpha_mode
 
