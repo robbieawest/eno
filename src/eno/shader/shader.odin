@@ -674,9 +674,11 @@ handle_shader_read_error :: proc(filepath: string, err: utils.FileError, loc := 
 
 
 attach_program :: proc(program: ShaderProgram, loc := #caller_location) {
-    if program.id == nil {
+    if program_id, id_ok := utils.unwrap_maybe(program.id); !id_ok {
         dbg.debug_point(dbg.LogLevel.INFO, "Shader program not yet created")
         return
     }
-    gl.UseProgram(utils.unwrap_maybe(program.id))
+    else{
+        gl.UseProgram(program_id)
+    }
 }

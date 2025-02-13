@@ -53,7 +53,7 @@ get_uniform_location_without_cache :: proc(program: ^ShaderProgram, label: strin
         return
     }
 
-    location = gl.GetUniformLocation(utils.unwrap_maybe(program.id), strings.clone_to_cstring(label))
+    location = gl.GetUniformLocation(utils.unwrap_maybe(program.id) or_return, strings.clone_to_cstring(label))
     if location == -1 {
         return
     }
