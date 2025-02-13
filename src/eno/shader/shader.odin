@@ -678,5 +678,5 @@ attach_program :: proc(program: ShaderProgram, loc := #caller_location) {
         dbg.debug_point(dbg.LogLevel.INFO, "Shader program not yet created")
         return
     }
-    gl.UseProgram(program.id.?)
+    gl.UseProgram(utils.unwrap_maybe(program.id))
 }

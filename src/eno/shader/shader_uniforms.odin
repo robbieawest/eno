@@ -7,6 +7,7 @@ import dbg "../debug"
 import "core:strings"
 import "core:reflect"
 import glm "core:math/linalg/glsl"
+import "../utils"
 
 // Defines procedures for working with opengl uniforms
 
@@ -52,7 +53,7 @@ get_uniform_location_without_cache :: proc(program: ^ShaderProgram, label: strin
         return
     }
 
-    location = gl.GetUniformLocation(program.id.?, strings.clone_to_cstring(label))
+    location = gl.GetUniformLocation(utils.unwrap_maybe(program.id), strings.clone_to_cstring(label))
     if location == -1 {
         return
     }
