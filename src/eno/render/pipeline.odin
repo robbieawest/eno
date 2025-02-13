@@ -6,7 +6,7 @@ import dbg "../debug"
 
 import "core:reflect"
 import "core:strings"
-
+import "../utils"
 
 Pipeline :: struct {
     passes: [dynamic]RenderPass
@@ -144,16 +144,17 @@ make_attachment :: proc(frame_buffer: ^FrameBuffer, type: AttachmentType, intern
     attachment := Attachment { id = gl_attachment_id, type = type }
 
     if is_renderbuffer {
-        attachment.data = make_renderbuffer()
-        //todo fix .? usage everywhere
-        gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, attachment_id, gl.RENDERBUFFER, attachment.data.id.?)
+        render_buffer = make_renderbuffer()
+        gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, utils.unwrap_maybe(frame_buffer.id), gl_attachment_id, gl.RENDERBUFFER, utils.unwrap_maybe(render_buffer.id))
+        attachment.data = render_buffer
     }
     else {
-        attachment.data = make_texture(internal_type = internal_backing_type, w = frame_buffer.w, h = frame_buffer.h, type = backing_type, lod = lod)
+        texture = make_texture(internal_type = internal_backing_type, w = frame_buffer.w, h = frame_buffer.h, type = backing_type, lod = lod)
         gl.TexParameteri(gl.FRAMEBUFFER, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
         gl.TexParameteri(gl.FRAMEBUFFER, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 
-        gl.FramebufferTexture2D(gl.FRAMEBUFFER, attachment_id, gl.TEXTURE_2D, attachment.data.id.?, lod)
+        gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl_attachment_id, gl.TEXTURE_2D, utils.unwrap_maybe(texture.id), lod)
+        attachment.data = texture
     }
 
     append(&frame_buffer.attachments, attachment)

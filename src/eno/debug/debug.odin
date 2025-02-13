@@ -2,13 +2,12 @@ package debug
 
 import gl "vendor:OpenGL"
 
-import "../utils"
-
 import "core:log"
 import "core:strings"
 import "core:fmt"
 import "core:mem"
 import "core:reflect"
+import "core:slice"
 
 import "base:runtime"
 
@@ -78,7 +77,7 @@ GL_DEBUG_CALLBACK :: proc "c" (source: u32, type: u32, id: u32, severity: u32, l
     builder, err := strings.builder_make()
     if err != mem.Allocator_Error.None do log.errorf("Could not allocate debug stack builder")
 
-    s_Message := strings.clone_from_cstring(message)
+    s_Message: string = strings.clone_from_cstring(message)
     fmt.sbprintfln(&builder, "\n************* OpenGL Log **************\nMessage: %s", s_Message)
 
     if DEBUG_FLAGS.DISPLAY_DEBUG_STACK_UNINITIALIZED &&  DEBUG_STACK == nil {
@@ -122,11 +121,11 @@ GL_DEBUG_CALLBACK :: proc "c" (source: u32, type: u32, id: u32, severity: u32, l
             else if DEBUG_FLAGS.PANIC_ON_GL_ERROR do panic("Panic raised on OpenGL error via DebugFlags.PANIC_ON_GL_ERROR")
         }
 
-        if DEBUG_FLAGS.PUSH_GL_LOG_TO_DEBUG_STACK do push_to_debug_stack({ utils.concat("OpenGL LogL ", s_Message), .ERROR})
+        if DEBUG_FLAGS.PUSH_GL_LOG_TO_DEBUG_STACK do push_to_debug_stack({ fmt.aprintf("OpenGL LogL %s", s_Message), .ERROR})
     case:
         log.warnf("%s", strings.to_string(builder))
 
-        if DEBUG_FLAGS.PUSH_GL_LOG_TO_DEBUG_STACK do push_to_debug_stack({ utils.concat("OpenGL LogL ", s_Message), .WARN})
+        if DEBUG_FLAGS.PUSH_GL_LOG_TO_DEBUG_STACK do push_to_debug_stack({ fmt.aprintf("OpenGL LogL %s", s_Message), .WARN})
     }
 
 
