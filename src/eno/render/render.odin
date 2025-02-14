@@ -15,7 +15,7 @@ DepthMask :: RenderMask{ .DEPTH }
 StencilMask :: RenderMask{ .STENCIL }
 
 
-render :: proc(pipeline: Pipeline, scene: ^ecs.Scene) {
+render :: proc(pipeline: RenderPipeline, scene: ^ecs.Scene) {
     // search scene for drawable models (cached?)
     // make it non cached for now
 

@@ -8,7 +8,8 @@ import "core:reflect"
 import "core:strings"
 import "../utils"
 
-Pipeline :: struct {
+
+RenderPipeline :: struct {
     passes: [dynamic]RenderPass
 }
 
@@ -49,7 +50,7 @@ RenderBuffer :: struct {
 generate_framebuffer :: proc(w, h: u32) -> (frame_buffer: FrameBuffer, ok: bool) {
     frame_buffer.w = w
     frame_buffer.h = h
-    gen_framebuffer
+    gen_framebuffer(&frame_buffer.id)
     ok = gl.CheckFramebufferStatus(frame_buffer.id.?) == gl.FRAMEBUFFER_COMPLETE
     frame_buffer.texture_attachments = make([dynamic]TextureAttachment)
 }
@@ -58,6 +59,7 @@ destroy_framebuffer :: proc(frame_buffer: ^FrameBuffer) {
     delete(frame_buffer.texture_attachments)
     if frame_buffer.id != nil do gl.DeleteFramebuffers(1, frame_buffer.id.?)
 }
+
 
 @(private)
 gen_framebuffer :: proc(id: ^u32)  {
@@ -83,9 +85,12 @@ bind_renderbuffer :: proc(render_buffer: ^RenderBuffer) {
     gl.BindRenderbuffer(gl.RENDERBUFFER, render_buffer.id.?)
 }
 
-make_renderbuffer :: proc() -> (render_buffer: RenderBuffer) {
-    // todo
+make_renderbuffer :: proc(w, h: i32, internal_format := gl.RGBA) -> (render_buffer: RenderBuffer) {
+    gen_renderbuffer(&render_buffer.id)
+    bind_renderbuffer(&render_buffer)
+    gl.RenderbufferStorage(gl.RENDERBUFFER, internal_format, w, h)
 }
+
 
 /*
     "Draws" framebuffer at the attachment, render mask, interpolation, and w, h to the default framebuffer (sdl back buffer)
@@ -118,6 +123,11 @@ draw_framebuffer_to_screen :: proc(frame_buffer: ^FrameBuffer, attachment_index:
 // todo if last render pass has an attached renderbuffer, then blit that renderbuffer to final frame
 // if its not a renderbuffer but a texture buffer then just render that texture onto a single quad
 
+/*
+    Creates an attachment of type, either a renderbuffer or a texture.
+    The internal backing type gives the type to be used to store individual data points in the attachment.
+    backing_type and lod are both only used for texture output (if is_render_buffer is not set to true).
+*/
 make_attachment :: proc(frame_buffer: ^FrameBuffer, type: AttachmentType, internal_backing_type: i32 = gl.RGBA, backing_type: u32 = gl.FLOAT, lod: i32 = 0, is_renderbuffer := false) {
     n_attachments := get_n_attachments(frame_buffer, type)
     if type != .COLOR && n_attachments >= 1 {
@@ -144,7 +154,7 @@ make_attachment :: proc(frame_buffer: ^FrameBuffer, type: AttachmentType, intern
     attachment := Attachment { id = gl_attachment_id, type = type }
 
     if is_renderbuffer {
-        render_buffer = make_renderbuffer()
+        render_buffer = make_renderbuffer(frame_buffer.w, frame_buffer.h, internal_backing_type)
 
         frame_buffer_id, fid_ok := utils.unwrap_maybe(frame_buffer.id)
         render_buffer_id, rid_ok := utils.unwrap_maybe(render_buffer.id)
