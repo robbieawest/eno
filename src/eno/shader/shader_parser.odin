@@ -7,7 +7,7 @@ import "base:intrinsics"
 // This allows a shader file source to be represented as a Shader in the engine, and for programmers to add/modify the shader dynamically
 // WIP
 
-parse_shader_source :: proc(source: string, flags: ShaderReadFlags) -> (shader: Shader, ok: bool) {
+parse_shader_source :: proc(source: string, flags: ShaderReadFlags) -> (shader: ShaderInfo, ok: bool) {
 /*
     Parsing shader source:
         - get lines

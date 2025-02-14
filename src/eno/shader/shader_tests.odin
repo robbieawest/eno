@@ -10,7 +10,7 @@ import "core:fmt"
 @(test)
 shader_creation_test :: proc(t: ^testing.T) {
 
-    shader: Shader
+    shader: ShaderInfo
     add_layout(&shader,
         { 0, .vec3, "a_position"},
         { 1, .vec4, "a_colour"}
@@ -28,14 +28,14 @@ shader_creation_test :: proc(t: ^testing.T) {
             false
         }
     )
-    defer destroy_shader(&shader)
+    defer destroy_shader_info(&shader)
 
     log.infof("shader out: %#v", shader)
 }
 
 @(test)
 build_shader_source_test :: proc(t: ^testing.T) {
-    shader: Shader
+    shader: ShaderInfo
     add_layout(&shader,
         { 0, .vec3, "a_position"},
         { 1, .vec4, "a_colour"}
@@ -55,7 +55,7 @@ build_shader_source_test :: proc(t: ^testing.T) {
     )
 
     shader_source, ok := build_shader_source(shader, .VERTEX)
-    defer destroy_shader_source(&shader_source)
+    defer destroy_shader_info(&shader_source)
 
     testing.expect(t, ok, "ok check")
     log.infof("shader source out: %#v", shader_source)
@@ -73,8 +73,8 @@ shader_read_test :: proc(t: ^testing.T) {
     nil_maybe: Maybe(u32)
     testing.expect_value(t, nil_maybe, program.id)
     log.infof("%#v", program)
-    if len(program.sources) == 2 {
-        log.infof("%s, %s", program.sources[0].type, program.sources[0].source)
-        log.infof("%s, %s", program.sources[1].type, program.sources[1].source)
+    if len(program.shaders) == 2 {
+        log.infof("%s, %s", program.shaders[0].type, program.shaders[0].source)
+        log.infof("%s, %s", program.shaders[1].type, program.shaders[1].source)
     }
 }

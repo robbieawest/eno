@@ -12,11 +12,11 @@ import "core:reflect"
     Overwrites any shader layout already existing
 
 */
-shader_layout_from_mesh :: proc(shader: ^Shader, mesh: model.Mesh) -> (ok: bool) {
+shader_layout_from_mesh :: proc(shader: ^ShaderInfo, mesh: model.Mesh) -> (ok: bool) {
     return shader_layout_from_mesh_layout(shader, mesh.layout)
 }
 
-shader_layout_from_mesh_layout :: proc(shader: ^Shader, layout: model.VertexLayout) -> (ok: bool) {
+shader_layout_from_mesh_layout :: proc(shader: ^ShaderInfo, layout: model.VertexLayout) -> (ok: bool) {
     n_Attributes := len(layout)
     new_layout := make([dynamic]ShaderLayout, n_Attributes)
 

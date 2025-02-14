@@ -50,7 +50,7 @@ express_shader_test :: proc(t: ^testing.T) {
     window, gl_context := create_test_render_context()
     defer dbg.destroy_debug_stack()
     
-    vertex_shader: ^Shader = init_shader(
+    vertex_shader: ^ShaderInfo = init_shader(
                 []ShaderLayout {
                     { 0, .vec3, "a_position"},
                     { 1, .vec4, "a_colour"}
@@ -77,7 +77,7 @@ express_shader_test :: proc(t: ^testing.T) {
     testing.expect(t, vertex_ok, "vert check")
 
     
-    fragment_shader: ^Shader = init_shader()
+    fragment_shader: ^ShaderInfo = init_shader()
     add_input(fragment_shader, []ShaderInput {
         { .vec4, "v_colour" }
     })
@@ -97,7 +97,7 @@ express_shader_test :: proc(t: ^testing.T) {
     fragment_source, fragment_ok := build_shader_source(fragment_shader, .FRAGMENT)
     testing.expect(t, fragment_ok, "frag ok check")
 
-    program: ^ShaderProgram = init_shader_program([]^ShaderSource {
+    program: ^ShaderProgram = init_shader_program([]^Shader {
         vertex_source, fragment_source 
     })
     defer destroy_shader_program(program)
