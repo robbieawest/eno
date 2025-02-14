@@ -3,6 +3,7 @@ package render
 import gl "vendor:OpenGL"
 
 import dbg "../debug"
+import "../shader"
 
 import "core:reflect"
 import "core:strings"
@@ -13,8 +14,60 @@ RenderPipeline :: struct {
     passes: [dynamic]RenderPass
 }
 
+destroy_pipeline :: proc(pipeline: ^RenderPipeline) {
+    for &pass in passes do destroy_render_pass(pass)
+    delete(pipeline.passes)
+}
+
 RenderPass :: struct {
     frame_buffer: FrameBuffer
+}
+
+destroy_render_pass :: proc(render_pass: ^RenderPass) {
+    destroy_framebuffer(&render_pass.frame_buffer)
+}
+
+
+ShaderPassInfo :: enum u32 {
+    PBR,
+    DIRECT,
+    CUSTOM,
+}
+ShaderPassInfos :: bit_set[ShaderPassInfo]
+
+DrawInfo :: enum {
+    DRAW_ALL,
+    DRAW_TRANSPARENT_MODELS,  // Only draw models selected to be transparent
+}
+
+PassInfo :: struct {
+    attachments_info: []AttachmentInfo,
+    shader_info: ShaderPassInfos
+}
+
+/*
+    Give 0 for backing_type, lod and internal_backing_type if these are not important to you.
+    Clones given attachments - remember to call destroy_pass_info
+*/
+make_pass_info :: proc(shader_info: ShaderPassInfos, attachments: ..AttachmentInfo) -> PassInfo {
+    return PassInfo{ slice.clone(attachments), shader_info }
+}
+
+destroy_pass_info :: proc(pass_info: ^PassInfo) {
+    delete(pass_info.attachments_info)
+}
+
+
+BufferType :: enum {
+    TEXTURE,
+    RENDER
+}
+AttachmentInfo :: struct {
+    type: AttachmentType,
+    buffer_type: BufferType,
+    backing_type: u32,
+    lod: i32,
+    internal_backing_type: u32
 }
 
 
