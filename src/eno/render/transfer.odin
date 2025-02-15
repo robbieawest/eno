@@ -1,4 +1,4 @@
-package gpu
+package render
 
 import gl "vendor:OpenGL"
 
@@ -6,19 +6,20 @@ import "../model"
 import dbg "../debug"
 import "../shader"
 
-GlComponentStates :: enum {
+GlComponentStates :: enum u32 {
     VAO_TRANSFERRED,
     VBO_TRANSFERRED,
     EBO_TRANSFERRED,
 }
-GlComponentState :: bit_set[GlComponentStates]
+GlComponentState :: bit_set [GlComponentStates; u32]
 
 gl_component_is_drawable :: proc(component: model.GLComponent) -> GlComponentState {
-    return (u32(!component.vao.transferred)) | (u32(!component.vbo.transferred) << 1) | (u32(!component.ebo.transferred) << 2)
+    states: u32 = u32(!component.vao.transferred) | u32(!component.vbo.transferred) << 1 | u32(!component.ebo.transferred) << 2
+    return transmute(GlComponentState)states
 }
 
 // todo look at shaders for this
-release_mesh :: proc(mesh: model.Mesh) {
+release_mesh :: proc(mesh: ^model.Mesh) {
     delete(mesh.vertex_data)
     delete(mesh.index_data)
     gl.DeleteVertexArrays(1, &mesh.gl_component.vao.id)
@@ -26,15 +27,15 @@ release_mesh :: proc(mesh: model.Mesh) {
     gl.DeleteBuffers(1, &mesh.gl_component.ebo.id)
 }
 
-release_model :: proc(model: model.Model) {
-    for mesh in model.meshes do release_mesh(model)
+release_model :: proc(model: ^model.Model) {
+    for &mesh in model.meshes do release_mesh(&mesh)
 }
 
 
 transfer_model :: proc(model: model.Model) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Transferring model")
 
-    express_mesh_with_indices(draw_properties) or_return
+    for &mesh in model.meshes do express_mesh_with_indices(&mesh)
 
     // currently just gl_express_mesh_with_indices
     // todo: add shader support
@@ -46,18 +47,18 @@ transfer_model :: proc(model: model.Model) -> (ok: bool) {
 express_mesh_with_indices :: proc(mesh: ^model.Mesh) -> (ok: bool) {
 
 
-    gl.GenVertexArrays(1, &mesh.gl_component.vao)
-    gl.BindVertexArray(mesh.gl_component.vao)
+    gl.GenVertexArrays(1, &mesh.gl_component.vao.id)
+    gl.BindVertexArray(mesh.gl_component.vao.id)
 
-    if !gpu_component.expressed_vert {
-        // Express ebo
-        create_and_express_vbo(&mesh.gl_component.vbo, mesh) or_return
+    if !mesh.gl_component.vbo.transferred {
+        // Express vbo
+        create_and_express_vbo(&mesh.gl_component.vbo.id, mesh) or_return
         mesh.gl_component.vbo.transferred = true
     }
 
-    if !gpu_component.expressed_ind {
+    if !mesh.gl_component.ebo.transferred {
         // Express ebo
-         create_and_express_ebo(&gpu_component.ebo, mesh) or_return
+         create_and_express_ebo(&mesh.gl_component.ebo.id, mesh) or_return
          mesh.gl_component.ebo.transferred = true
     }
 
@@ -72,7 +73,7 @@ express_mesh_with_indices :: proc(mesh: ^model.Mesh) -> (ok: bool) {
     Assumes bound vao
 */
 @(private)
-create_and_express_vbo :: proc(vbo: ^u32, data: model.Mesh) -> (ok: bool) {
+create_and_express_vbo :: proc(vbo: ^u32, data: ^model.Mesh) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Expressing gl mesh vertices")
     if len(data.vertex_data) == 0 {
         dbg.debug_point(dbg.LogLevel.ERROR, "No vertices given to express");
@@ -108,7 +109,7 @@ create_and_express_vbo :: proc(vbo: ^u32, data: model.Mesh) -> (ok: bool) {
     Assumes bound vao
 */
 @(private)
-create_and_express_ebo :: proc(ebo: ^u32, data: model.Mesh) -> (ok: bool) {
+create_and_express_ebo :: proc(ebo: ^u32, data: ^model.Mesh) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Expressing gl mesh indices")
     if len(data.index_data) == 0 {
         dbg.debug_point(dbg.LogLevel.ERROR, "Cannot express 0 indices")
@@ -202,7 +203,8 @@ make_shader_storage_buffer_dynamic :: proc(data: $T/[dynamic]$E, shader_binding:
 }
 
 make_shader_storage_buffer_slice :: proc(data: $T/[]$E, shader_binding: u32, usage: BufferUsage) -> (buffer: ShaderStorageBuffer) {
-    
+    gl.GenBuffers(1, &buffer.id)
+    gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, buffer.id)
 }
 
 
@@ -213,13 +215,13 @@ add_buffer_data :: proc{ add_buffer_data_slice, add_buffer_data_dynamic }
 
 @(private)
 add_buffer_data_dynamic :: proc(target: u32, data: $T/[dynamic]$E, usage: BufferUsage, data_offset := 0) {
-    add_bufer_data_slice(target, data[:], usage, data_offset)
+    add_buffer_data_slice(target, data[:], usage, data_offset)
 }
 
 @(private)
 add_buffer_data_slice :: proc(target: u32, data: $T/[]$E, usage: BufferUsage, data_offset := 0) {
     data_size := size_of(E) * len(data)
-    if data_range_start != 0 || data_range_end != 0 {
+    if data_offset != 0 {
         gl.BufferSubData(target, data_offset, data_size, data)
     }
     gl.BufferData(target, data_size, data, buffer_usage_to_glenum(usage))
