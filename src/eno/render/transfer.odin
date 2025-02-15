@@ -141,10 +141,15 @@ Texture :: struct {
     id: Maybe(u32)
 }
 
-make_texture :: proc(lod: i32 = 0, interal_type: i32 = gl.RGBA,  w, h: i32, format: u32 = gl.RGBA, type: u32 = gl.FLOAT, data: rawptr = nil) -> (texture: Texture) {
-    gl.GenTextures(1, &texture.id)
-    gl.BindTexture(gl.TEXTURE_2D, texture.id)
+make_texture :: proc(lod: i32 = 0, internal_type: i32 = gl.RGBA, w, h: i32, format: u32 = gl.RGBA, type: u32 = gl.FLOAT, data: rawptr = nil) -> (texture: Texture) {
+    id: u32
+    gl.GenTextures(1, &id)
+    texture.id = id
+
+    gl.BindTexture(gl.TEXTURE_2D, id)
     gl.TexImage2D(gl.TEXTURE_2D, lod, internal_type, w, h, 0, format, type, data)
+
+    return
 }
 
 
@@ -222,7 +227,7 @@ add_buffer_data_dynamic :: proc(target: u32, data: $T/[dynamic]$E, usage: Buffer
 add_buffer_data_slice :: proc(target: u32, data: $T/[]$E, usage: BufferUsage, data_offset := 0) {
     data_size := size_of(E) * len(data)
     if data_offset != 0 {
-        gl.BufferSubData(target, data_offset, data_size, data)
+        gl.BufferSubData(target, data_offset, data_size, raw_data(data))
     }
-    gl.BufferData(target, data_size, data, buffer_usage_to_glenum(usage))
+    gl.BufferData(target, data_size, raw_data(data), buffer_usage_to_glenum(usage))
 }
