@@ -8,6 +8,6 @@ import dbg "../debug"
 Ok is returned back, therefore it is safe just to call or_return on call.
 */
 unwrap_maybe :: proc(maybe: Maybe($T)) -> (val: T, ok: bool) {
-    val, ok = maybe.?; if !ok do dbg.debug_point(dbg.LogLevel.ERROR)
+    val, ok = maybe.?; if !ok do dbg.debug_point(dbg.LogLevel.ERROR, "Unwrapped nil maybe")
     return
 }

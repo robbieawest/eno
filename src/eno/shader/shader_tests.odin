@@ -55,7 +55,7 @@ build_shader_source_test :: proc(t: ^testing.T) {
     )
 
     shader_source, ok := build_shader_source(shader, .VERTEX)
-    defer destroy_shader_info(&shader_source)
+    defer destroy_shader(&shader_source)
 
     testing.expect(t, ok, "ok check")
     log.infof("shader source out: %#v", shader_source)

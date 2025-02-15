@@ -210,6 +210,8 @@ make_shader_storage_buffer_dynamic :: proc(data: $T/[dynamic]$E, shader_binding:
 make_shader_storage_buffer_slice :: proc(data: $T/[]$E, shader_binding: u32, usage: BufferUsage) -> (buffer: ShaderStorageBuffer) {
     gl.GenBuffers(1, &buffer.id)
     gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, buffer.id)
+    add_buffer_data(gl.SHADER_STORAGE_BUFFER, data, usage)
+    gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, shader_binding, buffer.id)
 }
 
 
