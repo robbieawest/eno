@@ -688,4 +688,3 @@ attach_program :: proc(program: ShaderProgram, loc := #caller_location) {
         gl.UseProgram(program_id)
     }
 }
-

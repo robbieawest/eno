@@ -4,7 +4,7 @@ import gl "vendor:OpenGL"
 
 import "../model"
 import dbg "../debug"
-
+import "../shader"
 
 GlComponentStates :: enum {
     VAO_TRANSFERRED,
@@ -87,7 +87,7 @@ create_and_express_vbo :: proc(vbo: ^u32, data: model.Mesh) -> (ok: bool) {
    // log.infof("vbo: %d", gl_component.vbo)
    // log.infof("stride: %d", stride)
    // log.infof("mesh: %#v, layout: %#v, s: %d", len(mesh.vertex_data), mesh.layout, len(mesh.vertex_data))
-    gl.BufferData(gl.ARRAY_BUFFER, len(data.vertex_data) * size_of(f32), raw_data(data.vertex_data), gl.STATIC_DRAW)
+    add_buffer_data(gl.ARRAY_BUFFER, data.vertex_data, { .WRITE_ONCE_READ_MANY, .DRAW })
 
     offset, current_ind: u32 = 0, 0
     for attribute_info in data.layout {
@@ -144,4 +144,83 @@ make_texture :: proc(lod: i32 = 0, interal_type: i32 = gl.RGBA,  w, h: i32, form
     gl.GenTextures(1, &texture.id)
     gl.BindTexture(gl.TEXTURE_2D, texture.id)
     gl.TexImage2D(gl.TEXTURE_2D, lod, internal_type, w, h, 0, format, type, data)
+}
+
+
+// Can add more if needed - this exists to not directly use the glenum
+BufferAccessFrequency :: enum {
+    WRITE_ONCE_READ_MANY,
+    WRITE_MANY_READ_MANY
+}
+
+BufferAccessType :: enum {
+    DRAW,
+    READ,
+    COPY
+}
+
+BufferUsage :: struct {
+    frequency: BufferAccessFrequency,
+    type: BufferAccessType
+}
+
+@(private)
+buffer_usage_to_glenum :: proc(usage: BufferUsage) -> (res: u32) {
+    switch usage.frequency {
+        case .WRITE_ONCE_READ_MANY:
+            switch usage.type {
+                case .COPY:
+                    res = gl.STATIC_COPY
+                case .READ:
+                    res = gl.STATIC_READ
+                case .DRAW:
+                    res = gl.STATIC_DRAW
+            }
+
+        case .WRITE_MANY_READ_MANY:
+            switch usage.type {
+                case .COPY:
+                    res = gl.DYNAMIC_COPY
+                case .READ:
+                    res = gl.DYNAMIC_READ
+                case .DRAW:
+                    res = gl.DYNAMIC_DRAW
+            }
+    }
+    return
+}
+
+
+ShaderStorageBuffer :: struct {
+    id: Maybe(u32),
+    shader_binding: u32,
+    usage: BufferUsage
+}
+
+make_shader_storage_buffer_dynamic :: proc(data: $T/[dynamic]$E, shader_binding: u32, usage: BufferUsage) -> (buffer: ShaderStorageBuffer) {
+    make_shader_storage_buffer_slice(data[:], shader_binding, usage)
+}
+
+make_shader_storage_buffer_slice :: proc(data: $T/[]$E, shader_binding: u32, usage: BufferUsage) -> (buffer: ShaderStorageBuffer) {
+    
+}
+
+
+/*
+    Does not bind, create or validate
+*/
+add_buffer_data :: proc{ add_buffer_data_slice, add_buffer_data_dynamic }
+
+@(private)
+add_buffer_data_dynamic :: proc(target: u32, data: $T/[dynamic]$E, usage: BufferUsage, data_offset := 0) {
+    add_bufer_data_slice(target, data[:], usage, data_offset)
+}
+
+@(private)
+add_buffer_data_slice :: proc(target: u32, data: $T/[]$E, usage: BufferUsage, data_offset := 0) {
+    data_size := size_of(E) * len(data)
+    if data_range_start != 0 || data_range_end != 0 {
+        gl.BufferSubData(target, data_offset, data_size, data)
+    }
+    gl.BufferData(target, data_size, data, buffer_usage_to_glenum(usage))
 }

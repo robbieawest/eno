@@ -1,7 +1,7 @@
 package render
 
 import "../ecs"
-
+import "../model"
 
 RenderType :: enum u32 {
     COLOUR = gl.COLOR_BUFFER_BIT,
@@ -48,5 +48,27 @@ render :: proc(pipeline: RenderPipeline, scene: ^ecs.Scene) {
     // search scene for drawable models (cached?)
     // make it non cached for now
 
+
+}
+
+
+LightingModel :: enum {
+    DIRECT
+}
+
+MaterialModel :: enum {
+    BLING_PHONG,
+    PBR
+}
+
+/*
+    Creates a lighting shader based on vertex attribute info, a material, a lighting model and a material model
+*/
+create_forward_lighting_shader :: proc(
+    attribute_info: model.VertexLayout,
+    material: model.Material,
+    lighting_model: LightingModel,
+    material_model: MaterialModel
+) {
 
 }
