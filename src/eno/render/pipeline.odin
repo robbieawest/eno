@@ -4,10 +4,11 @@ import gl "vendor:OpenGL"
 
 import dbg "../debug"
 import "../shader"
+import "../utils"
 
 import "core:reflect"
 import "core:strings"
-import "../utils"
+import "core:slice"
 
 
 RenderPipeline :: struct {
@@ -15,7 +16,7 @@ RenderPipeline :: struct {
 }
 
 destroy_pipeline :: proc(pipeline: ^RenderPipeline) {
-    for &pass in passes do destroy_render_pass(pass)
+    for &pass in pipeline.passes do destroy_render_pass(&pass)
     delete(pipeline.passes)
 }
 
@@ -73,7 +74,7 @@ AttachmentInfo :: struct {
 
 FrameBuffer :: struct {
     id: Maybe(u32),
-    w, h: u32,
+    w, h: i32,
     attachments: [dynamic]Attachment
 }
 
@@ -100,28 +101,34 @@ RenderBuffer :: struct {
     id: Maybe(u32)
 }
 
-generate_framebuffer :: proc(w, h: u32) -> (frame_buffer: FrameBuffer, ok: bool) {
+generate_framebuffer :: proc(w, h: i32) -> (frame_buffer: FrameBuffer, ok: bool) {
     frame_buffer.w = w
     frame_buffer.h = h
-    gen_framebuffer(&frame_buffer.id)
-    ok = gl.CheckFramebufferStatus(frame_buffer.id.?) == gl.FRAMEBUFFER_COMPLETE
-    frame_buffer.texture_attachments = make([dynamic]TextureAttachment)
+
+    id: u32
+    gen_framebuffer(&id)
+    frame_buffer.id = id
+
+    ok = gl.CheckFramebufferStatus(id) == gl.FRAMEBUFFER_COMPLETE
+    frame_buffer.attachments = make([dynamic]Attachment)
+    return
 }
 
 destroy_framebuffer :: proc(frame_buffer: ^FrameBuffer) {
-    delete(frame_buffer.texture_attachments)
-    if frame_buffer.id != nil do gl.DeleteFramebuffers(1, frame_buffer.id.?)
+    delete(frame_buffer.attachments) // todo delete more
+    if id, id_ok := frame_buffer.id.?; id_ok do gl.DeleteFramebuffers(1, &id)
 }
 
 
 @(private)
 gen_framebuffer :: proc(id: ^u32)  {
-    gl.GenFramebuffers(1, &id)
+    gl.GenFramebuffers(1, id)
 }
 
 bind_framebuffer :: proc(frame_buffer: ^FrameBuffer) {
-    if frame_buffer.id == nil do gen_framebuffer(&frame_buffer.id)
-    gl.BindFramebuffer(gl.FRAMEBUFFEr, frame_buffer.id.?)
+    id, id_ok := frame_buffer.id.?
+    if !id_ok do gen_framebuffer(&id)
+    gl.BindFramebuffer(gl.FRAMEBUFFER, id)
 }
 
 bind_default_framebuffer :: proc() {
@@ -130,42 +137,47 @@ bind_default_framebuffer :: proc() {
 
 
 gen_renderbuffer :: proc(id: ^u32) {
-    gl.GenRenderbuffers(1, &id)
+    gl.GenRenderbuffers(1, id)
 }
 
 bind_renderbuffer :: proc(render_buffer: ^RenderBuffer) {
-    if render_buffer.id == nil do gen_renderbuffer(&render_buffer.id)
-    gl.BindRenderbuffer(gl.RENDERBUFFER, render_buffer.id.?)
+    id, id_ok := render_buffer.id.?
+    if !id_ok do gen_renderbuffer(&id)
+    gl.BindRenderbuffer(gl.RENDERBUFFER, id)
 }
 
-make_renderbuffer :: proc(w, h: i32, internal_format := gl.RGBA) -> (render_buffer: RenderBuffer) {
-    gen_renderbuffer(&render_buffer.id)
+make_renderbuffer :: proc(w, h: i32, internal_format: u32 = gl.RGBA) -> (render_buffer: RenderBuffer) {
+    id: u32
+    gen_renderbuffer(&id)
+    render_buffer.id = id
     bind_renderbuffer(&render_buffer)
     gl.RenderbufferStorage(gl.RENDERBUFFER, internal_format, w, h)
+    return
 }
 
 
 /*
     "Draws" framebuffer at the attachment, render mask, interpolation, and w, h to the default framebuffer (sdl back buffer)
 */
-draw_framebuffer_to_screen :: proc(frame_buffer: ^FrameBuffer, attachment_index: int, w, h: i32, render_mask: RenderMask = ColourMask, interpolation := gl.NEAREST) {
-    if frame_buffer.id == nil {
+draw_framebuffer_to_screen :: proc(frame_buffer: ^FrameBuffer, attachment_index: int, w, h: i32, render_mask: RenderMask = ColourMask, interpolation: u32 = gl.NEAREST) {
+    frame_buffer_id, id_ok := frame_buffer.id.?
+    if !id_ok {
         dbg.debug_point(dbg.LogLevel.ERROR, "Frame buffer not yet created")
         return
     }
     if attachment_index >= len(frame_buffer.attachments) {
-        dbg.debug_point(dbg.LogLevel, "Attachment index: %d out of range for attachments length %d", attachment_index, len(frame_buffer.attachments))
+        dbg.debug_point(dbg.LogLevel.ERROR, "Attachment index: %d out of range for attachments length %d", attachment_index, len(frame_buffer.attachments))
         return
     }
 
     attachment := &frame_buffer.attachments[attachment_index]
 
-    switch data in AttachmentData {
+    switch data in attachment.data {
         case RenderBuffer:
-            gl.BindFramebuffer(gl.READ_FRAMEBUFFER, frame_buffer.id.?)
+            gl.BindFramebuffer(gl.READ_FRAMEBUFFER, frame_buffer_id)
             gl.ReadBuffer(attachment.id)  // Id not validated
-            gl.BindFrameBuffer(gl.DRAW_FRAMEBUFFER, 0)
-            gl.BlitFramebuffer(0, 0, w, h, 0, 0, w, h, render_mask, interpolation)
+            gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, 0)
+            gl.BlitFramebuffer(0, 0, w, h, 0, 0, w, h, transmute(u32)render_mask, interpolation) // todo figure this out
         case Texture:
             // todo
     }
@@ -181,10 +193,17 @@ draw_framebuffer_to_screen :: proc(frame_buffer: ^FrameBuffer, attachment_index:
     The internal backing type gives the type to be used to store individual data points in the attachment.
     backing_type and lod are both only used for texture output (if is_render_buffer is not set to true).
 */
-make_attachment :: proc(frame_buffer: ^FrameBuffer, type: AttachmentType, internal_backing_type: i32 = gl.RGBA, backing_type: u32 = gl.FLOAT, lod: i32 = 0, is_renderbuffer := false) {
+make_attachment :: proc(
+    frame_buffer: ^FrameBuffer,
+    type: AttachmentType,
+    internal_backing_type: u32 = gl.RGBA,
+    backing_type: u32 = gl.FLOAT,
+    lod: i32 = 0,
+    is_renderbuffer := false
+) -> (ok: bool) {
     n_attachments := get_n_attachments(frame_buffer, type)
-    if type != .COLOR && n_attachments >= 1 {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Number of %s texture attachments exceeds 0", strings.to_lower(reflect.enum_name_from_value(type)))
+    if type != .COLOUR && n_attachments >= 1 {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Number of %s texture attachments exceeds 0", strings.to_lower(reflect.enum_name_from_value(type) or_return))
         return
     }
     else if n_attachments >= gl.MAX_COLOR_ATTACHMENTS {
@@ -196,7 +215,7 @@ make_attachment :: proc(frame_buffer: ^FrameBuffer, type: AttachmentType, intern
     defer bind_default_framebuffer()
 
 
-    gl_attachment_id := 0
+    gl_attachment_id: u32 = 0
     switch type {
         case .COLOUR: gl_attachment_id = gl.COLOR_ATTACHMENT0 + n_attachments
         case .DEPTH: gl_attachment_id = gl.DEPTH_ATTACHMENT
@@ -207,17 +226,17 @@ make_attachment :: proc(frame_buffer: ^FrameBuffer, type: AttachmentType, intern
     attachment := Attachment { id = gl_attachment_id, type = type }
 
     if is_renderbuffer {
-        render_buffer = make_renderbuffer(frame_buffer.w, frame_buffer.h, internal_backing_type)
+        render_buffer := make_renderbuffer(frame_buffer.w, frame_buffer.h, internal_backing_type)
 
         frame_buffer_id, fid_ok := utils.unwrap_maybe(frame_buffer.id)
         render_buffer_id, rid_ok := utils.unwrap_maybe(render_buffer.id)
         if fid_ok && rid_ok {
-            gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, utils.unwrap_maybe(frame_buffer.id), gl_attachment_id, gl.RENDERBUFFER, utils.unwrap_maybe(render_buffer.id))
+            gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, utils.unwrap_maybe(frame_buffer.id) or_return, gl_attachment_id, gl.RENDERBUFFER, utils.unwrap_maybe(render_buffer.id) or_return)
         }
         attachment.data = render_buffer
     }
-    else {
-        texture = make_texture(internal_type = internal_backing_type, w = frame_buffer.w, h = frame_buffer.h, type = backing_type, lod = lod)
+    else { // todo fix backing types
+        texture := make_texture(internal_type = internal_backing_type, w = frame_buffer.w, h = frame_buffer.h, type = backing_type, lod = lod)
         gl.TexParameteri(gl.FRAMEBUFFER, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
         gl.TexParameteri(gl.FRAMEBUFFER, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 
@@ -231,6 +250,7 @@ make_attachment :: proc(frame_buffer: ^FrameBuffer, type: AttachmentType, intern
 }
 
 @(private)
-get_n_attachments :: proc(frame_buffer: ^FrameBuffer,  type: AttachmentType) -> (n: int) {
-    for attachment in frame_buffer.texture_attachments do n += int(attachment.type == type)
+get_n_attachments :: proc(frame_buffer: ^FrameBuffer,  type: AttachmentType) -> (n: u32) {
+    for attachment in frame_buffer.attachments do n += u32(attachment.type == type)
+    return
 }

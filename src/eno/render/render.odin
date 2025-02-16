@@ -52,6 +52,11 @@ render :: proc(pipeline: RenderPipeline, scene: ^ecs.Scene) {
 }
 
 
+LightSource :: struct {
+
+}
+
+
 LightingModel :: enum {
     DIRECT
 }
