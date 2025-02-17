@@ -9,7 +9,8 @@ import "../utils"
 import "core:reflect"
 import "core:strings"
 import "core:slice"
-
+import "core:math"
+import "base:intrinsics"
 
 RenderPipeline :: struct {
     passes: [dynamic]RenderPass
@@ -155,6 +156,22 @@ make_renderbuffer :: proc(w, h: i32, internal_format: u32 = gl.RGBA) -> (render_
     return
 }
 
+
+RenderType :: enum {
+    COLOUR = intrinsics.constant_log2(gl.COLOR_BUFFER_BIT),
+    DEPTH = intrinsics.constant_log2(gl.DEPTH_BUFFER_BIT),
+    STENCIL = intrinsics.constant_log2(gl.STENCIL_BUFFER_BIT)
+}
+
+RenderMask :: bit_set[RenderType; u32]
+
+render_mask_to_gl_buffer_mask :: proc(type: RenderMask) -> u32 {
+    return u32(math.pow_f32(2, cast(f32)(transmute(u32)type)))
+}
+
+ColourMask :: RenderMask{ .COLOUR }
+DepthMask :: RenderMask{ .DEPTH }
+StencilMask :: RenderMask{ .STENCIL }
 
 /*
     "Draws" framebuffer at the attachment, render mask, interpolation, and w, h to the default framebuffer (sdl back buffer)

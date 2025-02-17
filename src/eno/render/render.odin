@@ -3,16 +3,7 @@ package render
 import "../ecs"
 import "../model"
 
-RenderType :: enum u32 {
-    COLOUR = gl.COLOR_BUFFER_BIT,
-    DEPTH = gl.DEPTH_BUFFER_BIT,
-    STENCIL = gl.STENCIL_BUFFER_BIT
-}
-RenderMask :: bit_set[RenderType]
 
-ColourMask :: RenderMask{ .COLOUR }
-DepthMask :: RenderMask{ .DEPTH }
-StencilMask :: RenderMask{ .STENCIL }
 
 /*
     Destroys render pass infos input
