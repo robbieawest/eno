@@ -176,7 +176,7 @@ StencilMask :: RenderMask{ .STENCIL }
 /*
     "Draws" framebuffer at the attachment, render mask, interpolation, and w, h to the default framebuffer (sdl back buffer)
 */
-draw_framebuffer_to_screen :: proc(frame_buffer: ^FrameBuffer, attachment_index: int, w, h: i32, render_mask: RenderMask = ColourMask, interpolation: u32 = gl.NEAREST) {
+draw_framebuffer_to_screen :: proc(frame_buffer: ^FrameBuffer, attachment_index: int, w, h: i32, interpolation: u32 = gl.NEAREST) {
     frame_buffer_id, id_ok := frame_buffer.id.?
     if !id_ok {
         dbg.debug_point(dbg.LogLevel.ERROR, "Frame buffer not yet created")
@@ -194,7 +194,8 @@ draw_framebuffer_to_screen :: proc(frame_buffer: ^FrameBuffer, attachment_index:
             gl.BindFramebuffer(gl.READ_FRAMEBUFFER, frame_buffer_id)
             gl.ReadBuffer(attachment.id)  // Id not validated
             gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, 0)
-            gl.BlitFramebuffer(0, 0, w, h, 0, 0, w, h, transmute(u32)render_mask, interpolation) // todo figure this out
+
+            gl.BlitFramebuffer(0, 0, w, h, 0, 0, w, h,  gl.COLOR_ATTACHMENT0, interpolation) // todo figure this out
         case Texture:
             // todo
     }
@@ -248,7 +249,7 @@ make_attachment :: proc(
         frame_buffer_id, fid_ok := utils.unwrap_maybe(frame_buffer.id)
         render_buffer_id, rid_ok := utils.unwrap_maybe(render_buffer.id)
         if fid_ok && rid_ok {
-            gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, utils.unwrap_maybe(frame_buffer.id) or_return, gl_attachment_id, gl.RENDERBUFFER, utils.unwrap_maybe(render_buffer.id) or_return)
+            gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl_attachment_id, gl.RENDERBUFFER, utils.unwrap_maybe(render_buffer.id) or_return)
         }
         attachment.data = render_buffer
     }
@@ -257,13 +258,15 @@ make_attachment :: proc(
         gl.TexParameteri(gl.FRAMEBUFFER, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
         gl.TexParameteri(gl.FRAMEBUFFER, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 
-        if texture_id, id_ok := utils.unwrap_maybe; id_ok {
-            gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl_attachment_id, gl.TEXTURE_2D, utils.unwrap_maybe(texture.id), lod)
+        if texture_id, id_ok := utils.unwrap_maybe(texture.id); id_ok {
+            gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl_attachment_id, gl.TEXTURE_2D, utils.unwrap_maybe(texture.id) or_return, lod)
         }
         attachment.data = texture
     }
 
     append(&frame_buffer.attachments, attachment)
+    ok = true
+    return
 }
 
 @(private)
