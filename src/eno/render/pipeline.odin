@@ -93,6 +93,14 @@ Attachment :: struct {
     data: AttachmentData
 }
 
+destroy_attachment :: proc(attachment: ^Attachment) {
+    switch &data in attachment.data {
+        case Texture: destroy_texture(&data)
+        case RenderBuffer: destroy_render_buffer(&data)
+    }
+}
+
+
 AttachmentData :: union {
     Texture,
     RenderBuffer
@@ -101,6 +109,11 @@ AttachmentData :: union {
 RenderBuffer :: struct {
     id: Maybe(u32)
 }
+
+destroy_render_buffer :: proc(render_buffer: ^RenderBuffer) {
+    if id, id_ok := render_buffer.id.?; id_ok do gl.DeleteRenderbuffers(1, &id)
+}
+
 
 generate_framebuffer :: proc(w, h: i32) -> (frame_buffer: FrameBuffer, ok: bool) {
     frame_buffer.w = w
@@ -116,7 +129,8 @@ generate_framebuffer :: proc(w, h: i32) -> (frame_buffer: FrameBuffer, ok: bool)
 }
 
 destroy_framebuffer :: proc(frame_buffer: ^FrameBuffer) {
-    delete(frame_buffer.attachments) // todo delete more
+    for &attachment in frame_buffer.attachments do destroy_attachment(&attachment)
+    delete(frame_buffer.attachments)
     if id, id_ok := frame_buffer.id.?; id_ok do gl.DeleteFramebuffers(1, &id)
 }
 
@@ -208,17 +222,18 @@ draw_framebuffer_to_screen :: proc(frame_buffer: ^FrameBuffer, attachment_index:
 
 /*
     Creates an attachment of type, either a renderbuffer or a texture.
-    The internal backing type gives the type to be used to store individual data points in the attachment.
-    backing_type and lod are both only used for texture output (if is_render_buffer is not set to true).
+    is_render_buffer specifies whether the attachment is renderbuffer or texture
+
+    texture_internal_format and texture_backing_type are only used in the texture case
 */
 make_attachment :: proc(
     frame_buffer: ^FrameBuffer,
     type: AttachmentType,
-    internal_backing_type: u32 = gl.RGBA,
+    texture_internal_format: i32 = gl.RGBA,
     texture_backing_type: u32 = gl.FLOAT,
-    texture_format: u32 = gl.RGBA,
+    format: u32 = gl.RGBA,
     lod: i32 = 0,
-    is_renderbuffer := false
+    is_render_buffer := false
 ) -> (ok: bool) {
     n_attachments := get_n_attachments(frame_buffer, type)
     if type != .COLOUR && n_attachments >= 1 {
@@ -233,7 +248,6 @@ make_attachment :: proc(
     bind_framebuffer(frame_buffer)
     defer bind_default_framebuffer()
 
-
     gl_attachment_id: u32 = 0
     switch type {
         case .COLOUR: gl_attachment_id = gl.COLOR_ATTACHMENT0 + n_attachments
@@ -244,8 +258,8 @@ make_attachment :: proc(
 
     attachment := Attachment { id = gl_attachment_id, type = type }
 
-    if is_renderbuffer {
-        render_buffer := make_renderbuffer(frame_buffer.w, frame_buffer.h, internal_backing_type)
+    if is_render_buffer {
+        render_buffer := make_renderbuffer(frame_buffer.w, frame_buffer.h, format)
 
         frame_buffer_id, fid_ok := utils.unwrap_maybe(frame_buffer.id)
         render_buffer_id, rid_ok := utils.unwrap_maybe(render_buffer.id)
@@ -255,7 +269,7 @@ make_attachment :: proc(
         attachment.data = render_buffer
     }
     else {
-        texture := make_texture(internal_type = internal_backing_type, w = frame_buffer.w, h = frame_buffer.h, format = texture_format, type = texture_backing_type, lod = lod)
+        texture := make_texture(internal_format = texture_internal_format, w = frame_buffer.w, h = frame_buffer.h, format = format, type = texture_backing_type, lod = lod)
         gl.TexParameteri(gl.FRAMEBUFFER, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
         gl.TexParameteri(gl.FRAMEBUFFER, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 
