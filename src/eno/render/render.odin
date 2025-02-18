@@ -15,22 +15,23 @@ forward_render_pipeline :: proc(window_w: i32, window_h: i32, pass_infos: ..Pass
     for pass_info in pass_infos {
         pass: RenderPass
         pass.frame_buffer = generate_framebuffer(window_w, window_h) or_return
-
+        /* todo This all needs to be redone - The idea behind pass infos does not really fit until I have figured out the shader process fully
         for attachment_info in pass_info.attachments_info {
-            is_renderbuffer := attachment_info.buffer_type == .RENDER
+            is_render_buffer := attachment_info.buffer_type == .RENDER
             if attachment_info.backing_type == 0 && attachment_info.internal_backing_type == 0 {
-                make_attachment(&pass.frame_buffer, attachment_info.type, lod = attachment_info.lod, is_renderbuffer = is_renderbuffer)
+                make_attachment(&pass.frame_buffer, attachment_info.type, lod = attachment_info.lod, is_render_buffer = is_render_buffer)
             }
             else if attachment_info.backing_type == 0 {
-                make_attachment(&pass.frame_buffer, attachment_info.type, attachment_info.internal_backing_type, lod = attachment_info.lod, is_renderbuffer = is_renderbuffer)
+                make_attachment(&pass.frame_buffer, attachment_info.type, attachment_info.internal_backing_type, lod = attachment_info.lod, is_render_buffer = is_render_buffer)
             }
             else if attachment_info.internal_backing_type == 0 {
-                make_attachment(&pass.frame_buffer, attachment_info.type, backing_type = attachment_info.backing_type, lod = attachment_info.lod, is_renderbuffer = is_renderbuffer)
+                make_attachment(&pass.frame_buffer, attachment_info.type, backing_type = attachment_info.backing_type, lod = attachment_info.lod, is_render_buffer = is_render_buffer)
             }
             else {
-                make_attachment(&pass.frame_buffer, attachment_info.type, attachment_info.internal_backing_type, attachment_info.backing_type, attachment_info.lod, is_renderbuffer = is_renderbuffer)
+                make_attachment(&pass.frame_buffer, attachment_info.type, attachment_info.internal_backing_type, attachment_info.backing_type, attachment_info.lod, is_render_buffer = is_render_buffer)
             }
         }
+        */
 
         append(&pipeline.passes, pass)
     }

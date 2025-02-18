@@ -3,7 +3,6 @@ package render
 import gl "vendor:OpenGL"
 
 import dbg "../debug"
-import "../shader"
 import "../utils"
 
 import "core:reflect"
