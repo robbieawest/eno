@@ -195,7 +195,7 @@ draw_framebuffer_to_screen :: proc(frame_buffer: ^FrameBuffer, attachment_index:
             gl.ReadBuffer(attachment.id)  // Id not validated
             gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, 0)
 
-            gl.BlitFramebuffer(0, 0, w, h, 0, 0, w, h,  gl.COLOR_ATTACHMENT0, interpolation) // todo figure this out
+            gl.BlitFramebuffer(0, 0, w, h, 0, 0, w, h,  gl.COLOR_ATTACHMENT0, interpolation)  // This could be smarter
         case Texture:
             // todo
     }
@@ -215,7 +215,8 @@ make_attachment :: proc(
     frame_buffer: ^FrameBuffer,
     type: AttachmentType,
     internal_backing_type: u32 = gl.RGBA,
-    backing_type: u32 = gl.FLOAT,
+    texture_backing_type: u32 = gl.FLOAT,
+    texture_format: u32 = gl.RGBA,
     lod: i32 = 0,
     is_renderbuffer := false
 ) -> (ok: bool) {
@@ -253,8 +254,8 @@ make_attachment :: proc(
         }
         attachment.data = render_buffer
     }
-    else { // todo fix backing types
-        texture := make_texture(internal_type = internal_backing_type, w = frame_buffer.w, h = frame_buffer.h, type = backing_type, lod = lod)
+    else {
+        texture := make_texture(internal_type = internal_backing_type, w = frame_buffer.w, h = frame_buffer.h, format = texture_format, type = texture_backing_type, lod = lod)
         gl.TexParameteri(gl.FRAMEBUFFER, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
         gl.TexParameteri(gl.FRAMEBUFFER, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 
