@@ -3,7 +3,10 @@ package gpu
 import "../model"
 import dbg "../debug"
 
+import "core:strings"
 import "core:reflect"
+import "core:fmt"
+import "core:io"
 
 // Defines procedures for building shaders from multiple blocks of input/output
 // Be careful when using these procedures if reading a shader from a file and not parsing that shader
@@ -69,4 +72,25 @@ convert_component_type_to_glsl_type :: proc(component_type: model.MeshComponentT
 
     ok = true
     return
+}
+
+
+generate_glsl_struct :: proc(type: typeid, allocator := context.allocator) -> (glsl_struct: ShaderStruct) {
+
+    if !reflect.is_struct(type_info_of(type)) {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Gotten type which does not represent a struct")
+        return
+    }
+
+    name_builder := strings.builder_make(allocator)
+    _, io_err := reflect.write_typeid(&name_builder, type); if io_err != io.Error.None {
+        dbg.debug_point(dbg.LogLevel.ERROR, "IO Error when generating GLSL struct name")
+        return
+    }
+    glsl_struct.name = strings.to_string(name_builder)
+
+    field_infos := reflect.struct_fields_zipped(type)
+    for field in field_infos {
+        // todo write code for converting typeid to glsl data type
+    }
 }
