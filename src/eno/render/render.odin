@@ -3,6 +3,8 @@ package render
 import "../ecs"
 import "../model"
 
+import glm "core:math/linalg/glsl"
+
 
 
 /*
@@ -49,8 +51,28 @@ render :: proc(pipeline: RenderPipeline, scene: ^ecs.Scene) {
 }
 
 
-LightSource :: struct {
+LightSourceInformation :: struct {
+    enabled: bool,
+    intensity: f32,
+    colour: glm.vec4
+}
 
+PointLight :: struct {
+    light_information: LightSourceInformation,
+    attenuation: f32
+}
+
+DirectionalLight :: struct {
+    light_information: LightSourceInformation,
+    direction: glm.vec3
+}
+
+// Cone shaped light
+SpotLight :: struct {
+    light_information: LightSourceInformation,
+    inner_cone_angle: f32,
+    outer_cone_angle: f32,
+    attenuation: f32
 }
 
 
