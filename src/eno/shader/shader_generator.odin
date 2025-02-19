@@ -7,6 +7,7 @@ import "core:strings"
 import "core:reflect"
 import "core:fmt"
 import "core:io"
+import "base:runtime"
 
 // Defines procedures for building shaders from multiple blocks of input/output
 // Be careful when using these procedures if reading a shader from a file and not parsing that shader
@@ -75,12 +76,18 @@ convert_component_type_to_glsl_type :: proc(component_type: model.MeshComponentT
 }
 
 
-generate_glsl_struct :: proc(type: typeid, allocator := context.allocator) -> (glsl_struct: ShaderStruct) {
+generate_glsl_struct :: proc(type: typeid, allocator := context.allocator) -> (glsl_struct: ShaderStruct, ok: bool) {
 
     if !reflect.is_struct(type_info_of(type)) {
         dbg.debug_point(dbg.LogLevel.ERROR, "Gotten type which does not represent a struct")
         return
     }
+
+    return _generate_glsl_struct_recurse(type, allocator)
+}
+
+@(private)
+_generate_glsl_struct_recurse :: proc(type: typeid, allocator := context.allocator) -> (glsl_struct: ShaderStruct, ok: bool) {
 
     name_builder := strings.builder_make(allocator)
     _, io_err := reflect.write_typeid(&name_builder, type); if io_err != io.Error.None {
@@ -90,7 +97,23 @@ generate_glsl_struct :: proc(type: typeid, allocator := context.allocator) -> (g
     glsl_struct.name = strings.to_string(name_builder)
 
     field_infos := reflect.struct_fields_zipped(type)
+    glsl_fields := make([dynamic]glsl_type_name_pair, 0, len(field_infos))
+
     for field in field_infos {
-        // todo write code for converting typeid to glsl data type
+        glsl_type: ExtendedGLSLType
+
+        #partial switch _ in field.type.variant {
+        case runtime.Type_Info_Struct:
+            glsl_type = _generate_glsl_struct_recurse(field.type.id) or_return
+        case:
+            glsl_type = typeid_to_glsl_type(field.type.id) or_return
+        }
+
+        type_name_pair: glsl_type_name_pair = { glsl_type, field.name }
+        append(&glsl_fields, type_name_pair)
     }
+
+    glsl_struct.fields = glsl_fields[:]
+    ok = true
+    return
 }

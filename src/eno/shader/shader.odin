@@ -12,12 +12,13 @@ import "core:fmt"
 import "core:reflect"
 import "core:slice"
 import "core:os"
+import glm "core:math/linalg/glsl"
 
 /*
     File for everything shaders
     Todo:
         Support for const glsl types
-        Control for shader version when building scripts
+        Control for shader version
 */
 
 
@@ -25,7 +26,7 @@ import "core:os"
 // Defines a generalized shader structure which then compiles using the given render API
 
 ExtendedGLSLType :: union {
-    ^ShaderStruct,
+    ShaderStruct,
     GLSLDataType
 }
 
@@ -344,9 +345,38 @@ GLSLDataType :: enum {
     sampler2DShadow
 }
 
+typeid_to_glsl_type :: proc(type: typeid) -> (glsl_type: GLSLDataType, ok: bool) {
+    switch type {
+        case int, i32: glsl_type =.int
+        case uint, u32: glsl_type = .uint
+        case f32: glsl_type = .float
+        case f64: glsl_type = .double
+        case bool: glsl_type =.bool
+        case glm.vec2: glsl_type = .vec2
+        case glm.vec3: glsl_type = .vec3
+        case glm.vec4: glsl_type = .vec4
+        case glm.mat2: glsl_type = .mat2
+        case glm.mat3: glsl_type = .mat3
+        case glm.mat4: glsl_type = .mat4
+        case glm.mat2x3: glsl_type = .mat2x3
+        case glm.mat2x4: glsl_type = .mat2x4
+        case glm.mat3x2: glsl_type = .mat3x2
+        case glm.mat3x4: glsl_type = .mat3x4
+        case glm.mat4x3: glsl_type = .mat4x3
+        case glm.mat4x2: glsl_type = .mat4x2
+        case:
+            dbg.debug_point(dbg.LogLevel.ERROR, "Unconvertable GLSL type: %v", type)
+            return
+    }
+
+    ok = true
+    return
+}
+
+
 extended_glsl_type_to_string :: proc(type: ExtendedGLSLType, caller_location := #caller_location) -> (result: string) {
 
-    struct_type, struct_ok := type.(^ShaderStruct)
+    struct_type, struct_ok := type.(ShaderStruct)
     if struct_ok do return struct_type.name
 
     glsl_type, type_is_glsl := type.(GLSLDataType)
