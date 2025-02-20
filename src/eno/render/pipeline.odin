@@ -4,12 +4,14 @@ import gl "vendor:OpenGL"
 
 import dbg "../debug"
 import "../utils"
+import mutils "../utils/math_utils"
 
 import "core:reflect"
 import "core:strings"
 import "core:slice"
 import "core:math"
 import "base:intrinsics"
+import "core:math/big"
 
 RenderPipeline :: struct {
     passes: [dynamic]RenderPass
@@ -178,8 +180,9 @@ RenderType :: enum {
 
 RenderMask :: bit_set[RenderType; u32]
 
-render_mask_to_gl_buffer_mask :: proc(type: RenderMask) -> u32 {
-    return u32(math.pow_f32(2, cast(f32)(transmute(u32)type)))
+render_mask_to_gl_buffer_mask :: proc(type: RenderMask) -> (mask: u32) {
+    return mutils.pow_u32(2, transmute(u32)type)
+    //return u32(math.pow_f32(2, cast(f32)(transmute(u32)type)))
 }
 
 ColourMask :: RenderMask{ .COLOUR }

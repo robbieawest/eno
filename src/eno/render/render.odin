@@ -2,6 +2,7 @@ package render
 
 import "../ecs"
 import "../model"
+import "../shader"
 
 import glm "core:math/linalg/glsl"
 
@@ -89,10 +90,16 @@ MaterialModel :: enum {
     Creates a lighting shader based on vertex attribute info, a material, a lighting model and a material model
 */
 create_forward_lighting_shader :: proc(
-    attribute_info: model.VertexLayout,
-    material: model.Material,
+    attribute_infos: model.VertexLayout,
+    material: model.MaterialPropertiesInfos,
     lighting_model: LightingModel,
     material_model: MaterialModel
-) {
+) -> (vertex: shader.ShaderInfo, frag: shader.ShaderInfo, ok: bool) {
 
+    for attribute_info in attribute_infos {
+      //  vertex.
+    }
+
+    ok = true
+    return
 }
