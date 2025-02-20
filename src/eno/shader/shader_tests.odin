@@ -11,7 +11,7 @@ import "core:fmt"
 shader_creation_test :: proc(t: ^testing.T) {
 
     shader: ShaderInfo
-    add_layout(&shader,
+    add_binding(&shader,
         { 0, .BOUND_INPUT, .vec3, "a_position"},
         { 1, .BOUND_INPUT, .vec4, "a_colour"}
     )
@@ -36,7 +36,7 @@ shader_creation_test :: proc(t: ^testing.T) {
 @(test)
 build_shader_source_test :: proc(t: ^testing.T) {
     shader: ShaderInfo
-    add_layout(&shader,
+    add_binding(&shader,
         { 0, .BOUND_INPUT, .vec3, "a_position"},
         { 1, .BOUND_INPUT, .vec4, "a_colour"}
     )
