@@ -89,10 +89,10 @@ destroy_shader_info :: proc(shader: ^ShaderInfo) {
 
 // Procs to handle shader fields
 
-add_binding :: proc(shader: ^ShaderInfo, binding: ..ShaderBinding) -> (ok: bool) {
+add_bindings :: proc(shader: ^ShaderInfo, binding: ..ShaderBinding) -> (ok: bool) {
     n, err := append_elems(&shader.bindings, ..binding)
     if n != len(binding) || err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader layout")
+        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader bindings")
         return
     }
 

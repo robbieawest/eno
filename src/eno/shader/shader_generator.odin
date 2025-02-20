@@ -2,12 +2,14 @@ package gpu
 
 import "../model"
 import dbg "../debug"
+import "../utils"
 
 import "core:strings"
 import "core:reflect"
 import "core:fmt"
 import "core:io"
 import "base:runtime"
+import "core:slice"
 
 // Defines procedures for building shaders from multiple blocks of input/output
 // Be careful when using these procedures if reading a shader from a file and not parsing that shader
@@ -17,41 +19,60 @@ import "base:runtime"
 
 */
 shader_layout_from_mesh :: proc(shader: ^ShaderInfo, mesh: model.Mesh) -> (ok: bool) {
-    return shader_layout_from_mesh_layout(shader, mesh.layout)
+    return shader_bindings_from_mesh_layout(shader, mesh.layout)
 }
 
-shader_layout_from_mesh_layout :: proc(shader: ^ShaderInfo, layout: model.VertexLayout) -> (ok: bool) {
+shader_bindings_from_mesh_layout :: proc(shader: ^ShaderInfo, layout: model.VertexLayout) -> (ok: bool) {
     n_Attributes := len(layout)
     new_layout := make([dynamic]ShaderBinding, n_Attributes)
 
     for i: uint = 0; i < uint(n_Attributes); i += 1 {
-        glsl_type: GLSLDataType
+        glsl_type := glsl_type_from_attribute(layout[i]) or_return
 
-        switch layout[i].element_type {
-        case .invalid:
-            dbg.debug_point(dbg.LogLevel.ERROR, "Invalid attribute element type")
-            return
-        case .scalar: glsl_type = convert_component_type_to_glsl_type(layout[i].data_type) or_return
-        case .vec2: glsl_type = .vec2
-        case .vec3: glsl_type = .vec3
-        case .vec4: glsl_type = .vec4
-        case .mat2: glsl_type = .mat2
-        case .mat3: glsl_type = .mat3
-        case .mat4: glsl_type = .mat4
-        }
+        name := parse_attribute_name(layout[i]) or_return
+        defer delete(name)
 
-        name := layout[i].name
-        if len(name) == 0 {
-            name, ok = reflect.enum_name_from_value(layout[i].type)
-            if !ok {
-                dbg.debug_point(dbg.LogLevel.ERROR, "Could not get layout name")
-                return
-            }
-        }
-        new_layout[i] = ShaderBinding{ i, .BOUND_INPUT, glsl_type, name }
+        new_layout[i] = ShaderBinding{ i, .BOUND_INPUT, glsl_type, utils.concat("a_", name) }
     }
 
     shader.bindings = new_layout
+    ok = true
+    return
+}
+
+/*
+    Allocates new name
+*/
+parse_attribute_name :: proc(attribute_info: model.MeshAttributeInfo, allocator := context.allocator) -> (name: string, ok: bool) {
+    if len(attribute_info.name) == 0 {
+        reflected_name, reflect_ok := reflect.enum_name_from_value(attribute_info.type)
+        if !reflect_ok {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Could not get layout name")
+            return
+        }
+
+        name := strings.clone(reflected_name, allocator)
+    }
+
+    ok = true
+    return
+}
+
+glsl_type_from_attribute :: proc(attribute_info: model.MeshAttributeInfo) -> (glsl_type: GLSLDataType, ok: bool) {
+
+    switch attribute_info.element_type {
+    case .invalid:
+        dbg.debug_point(dbg.LogLevel.ERROR, "Invalid attribute element type")
+        return
+    case .scalar: glsl_type = convert_component_type_to_glsl_type(attribute_info.data_type) or_return
+    case .vec2: glsl_type = .vec2
+    case .vec3: glsl_type = .vec3
+    case .vec4: glsl_type = .vec4
+    case .mat2: glsl_type = .mat2
+    case .mat3: glsl_type = .mat3
+    case .mat4: glsl_type = .mat4
+    }
+
     ok = true
     return
 }

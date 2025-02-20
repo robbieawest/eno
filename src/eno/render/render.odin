@@ -5,6 +5,7 @@ import "../model"
 import "../shader"
 
 import glm "core:math/linalg/glsl"
+import "core:strings"
 
 
 
@@ -93,13 +94,32 @@ create_forward_lighting_shader :: proc(
     attribute_infos: model.VertexLayout,
     material: model.MaterialPropertiesInfos,
     lighting_model: LightingModel,
-    material_model: MaterialModel
+    material_model: MaterialModel,
+    allocator := context.allocator
 ) -> (vertex: shader.ShaderInfo, frag: shader.ShaderInfo, ok: bool) {
 
+    // Add input bindings
+    shader.shader_bindings_from_mesh_layout(&vertex, attribute_infos) or_return
+
+    /// todo lights ssbo
+
+    // Add shader input/output for both vertex and fragment
     for attribute_info in attribute_infos {
-      //  vertex.
+        input_pair := shader.glsl_type_name_pair{ shader.glsl_type_from_attribute(attribute_info) or_return, attribute_info.name}
+        shader.add_output(&vertex, input_pair)
+        shader.add_input(&frag, { input_pair.type, strings.clone(input_pair.name, allocator)})
     }
+
+    // Add vertex MVP uniforms
+    shader.add_uniforms(&vertex, { .mat4, MODEL_MATRIX_UNIFORM })
+    shader.add_uniforms(&vertex, { .mat4, VIEW_MATRIX_UNIFORM })
+    shader.add_uniforms(&vertex, { .mat4, PROJECTION_MATRIX_UNIFORM })
 
     ok = true
     return
 }
+
+MODEL_MATRIX_UNIFORM :: "m_Model"
+VIEW_MATRIX_UNIFORM :: "m_View"
+PROJECTION_MATRIX_UNIFORM :: "m_Projection"
+NORMAL_MATRIX_UNIFORM :: "m_Normal"

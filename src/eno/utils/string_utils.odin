@@ -132,8 +132,8 @@ substring_test :: proc(t: ^testing.T) {
 }
 
 
-concat :: proc(string_inp: ..string) -> string {
-    builder := strings.builder_make()
+concat :: proc(string_inp: ..string, allocator := context.allocator) -> string {
+    builder := strings.builder_make(0, 10, allocator)
 
     for str in string_inp do strings.write_string(&builder, str)
 
