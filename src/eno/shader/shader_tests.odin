@@ -12,8 +12,8 @@ shader_creation_test :: proc(t: ^testing.T) {
 
     shader: ShaderInfo
     add_layout(&shader,
-        { 0, .vec3, "a_position"},
-        { 1, .vec4, "a_colour"}
+        { 0, .BOUND_INPUT, .vec3, "a_position"},
+        { 1, .BOUND_INPUT, .vec4, "a_colour"}
     )
 
     add_output(&shader, { .vec4, "v_colour"})
@@ -37,8 +37,8 @@ shader_creation_test :: proc(t: ^testing.T) {
 build_shader_source_test :: proc(t: ^testing.T) {
     shader: ShaderInfo
     add_layout(&shader,
-        { 0, .vec3, "a_position"},
-        { 1, .vec4, "a_colour"}
+        { 0, .BOUND_INPUT, .vec3, "a_position"},
+        { 1, .BOUND_INPUT, .vec4, "a_colour"}
     )
 
     add_output(&shader, { .vec4, "v_colour"})

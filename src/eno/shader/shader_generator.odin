@@ -22,7 +22,7 @@ shader_layout_from_mesh :: proc(shader: ^ShaderInfo, mesh: model.Mesh) -> (ok: b
 
 shader_layout_from_mesh_layout :: proc(shader: ^ShaderInfo, layout: model.VertexLayout) -> (ok: bool) {
     n_Attributes := len(layout)
-    new_layout := make([dynamic]ShaderLayout, n_Attributes)
+    new_layout := make([dynamic]ShaderBinding, n_Attributes)
 
     for i: uint = 0; i < uint(n_Attributes); i += 1 {
         glsl_type: GLSLDataType
@@ -48,10 +48,10 @@ shader_layout_from_mesh_layout :: proc(shader: ^ShaderInfo, layout: model.Vertex
                 return
             }
         }
-        new_layout[i] = ShaderLayout{ i, glsl_type, name }
+        new_layout[i] = ShaderBinding{ i, .BOUND_INPUT, glsl_type, name }
     }
 
-    shader.layout = new_layout
+    shader.bindings = new_layout
     ok = true
     return
 }

@@ -51,7 +51,7 @@ express_shader_test :: proc(t: ^testing.T) {
     defer dbg.destroy_debug_stack()
     
     vertex_shader: ^ShaderInfo = init_shader(
-                []ShaderLayout {
+                []ShaderBinding {
                     { 0, .vec3, "a_position"},
                     { 1, .vec4, "a_colour"}
                 }

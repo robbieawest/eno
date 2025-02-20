@@ -36,10 +36,11 @@ glsl_type_name_pair :: struct{
 }
 
 
-ShaderLayout :: struct {
+ShaderBinding :: struct {
     location: uint,
-    type: ExtendedGLSLType,
-    name: string
+    type: enum{ BOUND_INPUT, BOUND_OUTPUT },
+    data_type: ExtendedGLSLType,
+    name: string,
 }
 
 
@@ -67,7 +68,7 @@ init_shader_function :: proc(ret_type: ExtendedGLSLType, label: string, source: 
 
 
 ShaderInfo :: struct {
-    layout: [dynamic]ShaderLayout,
+    bindings: [dynamic]ShaderBinding,
     input: [dynamic]ShaderInput,
     output: [dynamic]ShaderOutput,
     uniforms: [dynamic]ShaderUniform,
@@ -77,7 +78,7 @@ ShaderInfo :: struct {
 
 @(private)
 destroy_shader_info :: proc(shader: ^ShaderInfo) {
-    delete(shader.layout)
+    delete(shader.bindings)
     delete(shader.input)
     delete(shader.output)
     delete(shader.uniforms)
@@ -88,8 +89,8 @@ destroy_shader_info :: proc(shader: ^ShaderInfo) {
 
 // Procs to handle shader fields
 
-add_layout :: proc(shader: ^ShaderInfo, layout: ..ShaderLayout) -> (ok: bool) {
-    n, err := append_elems(&shader.layout, ..layout)
+add_layout :: proc(shader: ^ShaderInfo, layout: ..ShaderBinding) -> (ok: bool) {
+    n, err := append_elems(&shader.bindings, ..layout)
     if n != len(layout) || err != mem.Allocator_Error.None {
         dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader layout")
         return
@@ -252,8 +253,8 @@ build_shader_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (shade
 
 
     strings.write_string(&builder, "#version 430 core\n")
-    for layout in shader_info.layout {
-        fmt.sbprintfln(&builder, "layout (location = %d) in %s %s;", layout.location, extended_glsl_type_to_string(layout.type), layout.name)
+    for layout in shader_info.bindings {
+        fmt.sbprintfln(&builder, "layout (location = %d) in %s %s;", layout.location, extended_glsl_type_to_string(layout.data_type), layout.name)
     }
 
     for output in shader_info.output {
