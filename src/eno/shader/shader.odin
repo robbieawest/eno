@@ -76,7 +76,6 @@ ShaderInfo :: struct {
     functions: [dynamic]ShaderFunction
 }
 
-@(private)
 destroy_shader_info :: proc(shader: ^ShaderInfo) {
     delete(shader.bindings)
     delete(shader.input)

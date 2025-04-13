@@ -94,7 +94,7 @@ MaterialModel :: enum {
 */
 create_forward_lighting_shader :: proc(
     attribute_infos: model.VertexLayout,
-    material: model.MaterialPropertiesInfos,
+    material_infos: model.MaterialPropertiesInfos,
     lighting_model: LightingModel,
     material_model: MaterialModel,
     allocator := context.allocator
@@ -119,11 +119,11 @@ create_forward_lighting_shader :: proc(
             if input_pair.name == "position" && type == .vec3 {
                 // todo pass this into glsl_type_from_attribute
                 prefixed_name := utils.concat("a_", input_pair.name); defer delete(prefixed_name)
-                assign_to = fmt.aprintf("vec3(%s * vec4(%s, 1.0));", MODEL_MATRIX_UNIFORM, prefixed_name)
+                assign_to = fmt.aprintf("vec3(%s * vec4(%s, 1.0))", MODEL_MATRIX_UNIFORM, prefixed_name)
             }
             else if input_pair.name == "normal" && type == .vec3 {
                 prefixed_name := utils.concat("a_", input_pair.name); defer delete(prefixed_name)
-                assign_to = fmt.aprintf("%s = %s * %s;", input_pair.name, NORMAL_MATRIX_UNIFORM, prefixed_name)
+                assign_to = fmt.aprintf("%s * %s", NORMAL_MATRIX_UNIFORM, prefixed_name)
             }
         }
 
