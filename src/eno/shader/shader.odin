@@ -24,11 +24,24 @@ import glm "core:math/linalg/glsl"
 
 
 // Defines a generalized shader structure which then compiles using the given render API
-
+// Pointers to avoid cyclical references
 ExtendedGLSLType :: union {
-    ShaderStruct,
-    GLSLDataType
+    ^ShaderStruct,  // References a shader struct, therefore no ownership assumed
+    GLSLDataType,
+    ^GLSLFixedArray,  // Assumes ownership
+    ^GLSLVariableArray  // Assumes ownership
 }
+
+
+GLSLFixedArray :: struct {
+    size: uint,
+    type: ExtendedGLSLType
+}
+
+GLSLVariableArray :: struct {
+    type: ExtendedGLSLType
+}
+
 
 glsl_type_name_pair :: struct{
     type: ExtendedGLSLType,
@@ -37,8 +50,7 @@ glsl_type_name_pair :: struct{
 
 
 ShaderBinding :: struct {
-    location: uint,
-    type: enum{ BOUND_INPUT, BOUND_OUTPUT },
+    type: enum{ INPUT, OUTPUT, BUFFER },
     data_type: ExtendedGLSLType,
     name: string,
 }
@@ -52,6 +64,8 @@ ShaderStruct :: struct {
     name: string,
     fields: []ShaderStructField
 }; ShaderStructField :: glsl_type_name_pair
+
+ShaderStructReference :: string
 
 
 ShaderFunction :: struct {
@@ -77,6 +91,7 @@ ShaderInfo :: struct {
 }
 
 destroy_shader_info :: proc(shader: ^ShaderInfo) {
+    // Todo delete fields......
     delete(shader.bindings)
     delete(shader.input)
     delete(shader.output)
@@ -152,6 +167,26 @@ add_functions :: proc(shader: ^ShaderInfo, functions: ..ShaderFunction) -> (ok: 
 
     ok = true
     return
+}
+
+add_ssbo_of_list_type :: proc{ add_ssbo_of_fixed_list_type, add_ssbo_of_dynamic_list_type }
+
+add_ssbo_of_fixed_list_type :: proc(shader: ^ShaderInfo, type: ExtendedGLSLType, $N: int) {
+
+}
+
+// Clones name string
+// Standard is to use ssbo_name as the name of the binding, and ssbo_name + _struct as the name of the struct that the ssbo references
+add_ssbo_of_dynamic_list_type :: proc(shader: ^ShaderInfo, ssbo_name: string, type: ExtendedGLSLType) {
+    fields := make([]ShaderStructField, 1)
+    name := strings.clone(ssbo_name)
+    struct_name := utils.concat(name, "_struct")
+
+    list_type := new(GLSLVariableArray)
+    list_type.type = type
+
+    fields[0] = ShaderStructField{ list_type, "data" }
+    add_structs(shader, ShaderStruct{ })
 }
 
 //
@@ -252,8 +287,8 @@ build_shader_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (shade
 
 
     strings.write_string(&builder, "#version 430 core\n")
-    for layout in shader_info.bindings {
-        fmt.sbprintfln(&builder, "layout (location = %d) in %s %s;", layout.location, extended_glsl_type_to_string(layout.data_type), layout.name)
+    for layout, i in shader_info.bindings {
+        fmt.sbprintfln(&builder, "layout (location = %d) in %s %s;", i, extended_glsl_type_to_string(layout.data_type), layout.name)
     }
 
     for output in shader_info.output {
@@ -376,7 +411,7 @@ typeid_to_glsl_type :: proc(type: typeid) -> (glsl_type: GLSLDataType, ok: bool)
 
 extended_glsl_type_to_string :: proc(type: ExtendedGLSLType, caller_location := #caller_location) -> (result: string) {
 
-    struct_type, struct_ok := type.(ShaderStruct)
+    struct_type, struct_ok := type.(^ShaderStruct)
     if struct_ok do return struct_type.name
 
     glsl_type, type_is_glsl := type.(GLSLDataType)

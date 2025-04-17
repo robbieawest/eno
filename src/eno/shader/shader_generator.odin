@@ -32,7 +32,7 @@ shader_bindings_from_mesh_layout :: proc(shader: ^ShaderInfo, layout: model.Vert
         name := parse_attribute_name(layout[i]) or_return
         defer delete(name)
 
-        new_layout[i] = ShaderBinding{ i, .BOUND_INPUT, glsl_type, utils.concat("a_", name) }
+        new_layout[i] = ShaderBinding{ i, .INPUT, glsl_type, utils.concat("a_", name) }
     }
 
     shader.bindings = new_layout
