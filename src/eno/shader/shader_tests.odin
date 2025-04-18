@@ -11,12 +11,12 @@ import "core:fmt"
 shader_creation_test :: proc(t: ^testing.T) {
 
     shader: ShaderInfo
-    add_bindings(&shader,
-        { 0, .BOUND_INPUT, .vec3, "a_position"},
-        { 1, .BOUND_INPUT, .vec4, "a_colour"}
+    add_layouts(&shader,
+        { .INPUT, { .vec3, "a_position" }},
+        { .INPUT, { .vec4, "a_colour" }},
+        { .OUTPUT, { .vec4, "v_colour" }},
     )
 
-    add_output(&shader, { .vec4, "v_colour"})
     add_uniforms(&shader, { .mat4, "u_transform"})
     add_functions(&shader,
         {
@@ -28,7 +28,7 @@ shader_creation_test :: proc(t: ^testing.T) {
             false
         }
     )
-    defer destroy_shader_info(&shader)
+    defer destroy_shader_info(shader)
 
     log.infof("shader out: %#v", shader)
 }

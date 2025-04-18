@@ -121,7 +121,7 @@ _generate_glsl_struct_recurse :: proc(type: typeid, allocator := context.allocat
     glsl_fields := make([dynamic]glsl_type_name_pair, 0, len(field_infos))
 
     for field in field_infos {
-        glsl_type: ExtendedGLSLType
+        glsl_type: GLSLType
 
         #partial switch _ in field.type.variant {
         case runtime.Type_Info_Struct:

@@ -6,6 +6,7 @@ import dbg "../debug"
 import "../utils"
 import futils "../file_utils"
 
+import "base:runtime"
 import "core:strings"
 import "core:mem"
 import "core:fmt"
@@ -24,88 +25,148 @@ import glm "core:math/linalg/glsl"
 
 
 // Defines a generalized shader structure which then compiles using the given render API
-// Pointers to avoid cyclical references
-ExtendedGLSLType :: union {
+GLSLType :: union #no_nil {
     ^ShaderStruct,  // References a shader struct, therefore no ownership assumed
+    GLSLDataType,
+}
+
+ExtendedGLSLType :: union #no_nil {
+    ^ShaderStruct,
     GLSLDataType,
     ^GLSLFixedArray,  // Assumes ownership
     ^GLSLVariableArray  // Assumes ownership
 }
 
+destroy_extended_glsl_type :: proc(type: ExtendedGLSLType) {
+    #partial switch v in type {
+        case ^GLSLFixedArray: free(v)
+        case ^GLSLVariableArray: free(v)
+    }
+}
+
 
 GLSLFixedArray :: struct {
     size: uint,
-    type: ExtendedGLSLType
+    type: GLSLType
 }
 
 GLSLVariableArray :: struct {
-    type: ExtendedGLSLType
+    type: GLSLType
 }
 
 
-glsl_type_name_pair :: struct{
+glsl_type_name_pair :: struct {
+    type: GLSLType,
+    name: string  // Assumes ownership
+}
+
+destroy_glsl_type_name_pair :: proc(pair: glsl_type_name_pair) {
+    delete(pair.name)
+}
+
+
+extended_glsl_type_name_pair :: struct {
     type: ExtendedGLSLType,
     name: string
 }
 
-
-ShaderBinding :: struct {
-    type: enum{ INPUT, OUTPUT, BUFFER },
-    data_type: ExtendedGLSLType,
-    name: string,
+destroy_extended_glsl_type_name_pair :: proc(pair: extended_glsl_type_name_pair) {
+    delete(pair.name)
+    destroy_extended_glsl_type(pair.type)
 }
 
 
-ShaderInput :: glsl_type_name_pair
-ShaderOutput :: glsl_type_name_pair
+ShaderBinding :: struct {
+    type: enum{ UBO, SSBO },
+    pair: glsl_type_name_pair
+}
+
+destroy_shader_binding :: proc(binding: ShaderBinding) {
+    destroy_glsl_type_name_pair(binding.pair)
+}
+
 ShaderUniform :: glsl_type_name_pair
 
 ShaderStruct :: struct {
-    name: string,
+    name: string,  // Asssumes ownership
     fields: []ShaderStructField
-}; ShaderStructField :: glsl_type_name_pair
+}; ShaderStructField :: extended_glsl_type_name_pair
 
-ShaderStructReference :: string
+destroy_shader_struct :: proc(shader_struct: ShaderStruct) {
+    delete(shader_struct.name)
+    for field in shader_struct.fields do destroy_extended_glsl_type_name_pair(field)
+}
 
 
 ShaderFunction :: struct {
-    return_type: ExtendedGLSLType,
-    arguments: []ShaderFunctionArgument,
-    label: string,
-    source: string,
+    return_type: GLSLType,
+    arguments: []ShaderFunctionArgument,  // Assumes ownership
+    label: string,  // Assumes ownership
+    source: string,  // Assumes ownership
     is_typed_source: bool,
 }; ShaderFunctionArgument :: glsl_type_name_pair
 
-init_shader_function :: proc(ret_type: ExtendedGLSLType, label: string, source: string, is_typed_source: bool, arguments: ..ShaderFunctionArgument) -> (function: ShaderFunction) {
+init_shader_function :: proc(ret_type: GLSLType, label: string, source: string, is_typed_source: bool, arguments: ..ShaderFunctionArgument) -> (function: ShaderFunction) {
     return { ret_type, arguments, label, source, is_typed_source }
+}
+
+destroy_shader_function :: proc(function: ShaderFunction) {
+    delete(function.source)
+    delete(function.label)
+    for arg in function.arguments do destroy_glsl_type_name_pair(arg)
+    delete(function.arguments)
+}
+
+
+ShaderLayout :: struct {
+    layout_type: enum{ INPUT, OUTPUT },
+    pair: glsl_type_name_pair
+}
+
+destroy_shader_layout :: proc(layout: ShaderLayout) {
+    destroy_glsl_type_name_pair(layout.pair)
 }
 
 
 ShaderInfo :: struct {
     bindings: [dynamic]ShaderBinding,
-    input: [dynamic]ShaderInput,
-    output: [dynamic]ShaderOutput,
+    layouts: [dynamic]ShaderLayout,
     uniforms: [dynamic]ShaderUniform,
     structs: [dynamic]ShaderStruct,
     functions: [dynamic]ShaderFunction
 }
 
-destroy_shader_info :: proc(shader: ^ShaderInfo) {
-    // Todo delete fields......
+destroy_shader_info :: proc(shader: ShaderInfo) {
+    for binding in shader.bindings do destroy_shader_binding(binding)
     delete(shader.bindings)
-    delete(shader.input)
-    delete(shader.output)
+
+    for layout in shader.layouts do destroy_shader_layout(layout)
+    delete(shader.layouts)
+
+    for uniform in shader.uniforms do destroy_glsl_type_name_pair(uniform)
     delete(shader.uniforms)
+
+    for shader_struct in shader.structs do destroy_shader_struct(shader_struct)
     delete(shader.structs)
+
+    for function in shader.functions do destroy_shader_function(function)
     delete(shader.functions)
 }
 
-
 // Procs to handle shader fields
 
-add_bindings :: proc(shader: ^ShaderInfo, binding: ..ShaderBinding) -> (ok: bool) {
-    n, err := append_elems(&shader.bindings, ..binding)
-    if n != len(binding) || err != mem.Allocator_Error.None {
+add_bindings :: proc(shader: ^ShaderInfo, bindings: ..ShaderBinding) -> (ok: bool) {
+    for binding in bindings {
+        for exist_binding in shader.bindings {
+            if strings.compare(binding.pair.name, exist_binding.pair.name) == 0 {
+                dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate binding name: %s", binding.pair.name)
+                return
+            }
+        }
+    }
+
+    n, err := append_elems(&shader.bindings, ..bindings)
+    if n != len(bindings) || err != mem.Allocator_Error.None {
         dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader bindings")
         return
     }
@@ -114,21 +175,19 @@ add_bindings :: proc(shader: ^ShaderInfo, binding: ..ShaderBinding) -> (ok: bool
     return
 }
 
-add_input :: proc(shader: ^ShaderInfo, input: ..ShaderInput) -> (ok: bool) {
-    n, err := append_elems(&shader.input, ..input)
-    if n != len(input) || err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader input")
-        return
+add_layouts :: proc(shader: ^ShaderInfo, layouts: ..ShaderLayout) -> (ok: bool) {
+    for layout in layouts {
+        for exist_layout in shader.layouts {
+            if strings.compare(layout.pair.name, exist_layout.pair.name) == 0 {
+                dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate layout name: %s", layout.pair.name)
+                return
+            }
+        }
     }
 
-    ok = true
-    return
-}
-
-add_output :: proc(shader: ^ShaderInfo, output: ..ShaderOutput) -> (ok: bool) {
-    n, err := append_elems(&shader.output, ..output)
-    if n != len(output) || err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader output")
+    n, err := append_elems(&shader.layouts, ..layouts)
+    if n != len(layouts) || err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader layout")
         return
     }
 
@@ -137,6 +196,15 @@ add_output :: proc(shader: ^ShaderInfo, output: ..ShaderOutput) -> (ok: bool) {
 }
 
 add_uniforms :: proc(shader: ^ShaderInfo, uniforms: ..ShaderUniform) -> (ok: bool) {
+    for uniform in uniforms {
+        for exist_uniform in shader.uniforms {
+            if strings.compare(uniform.name, exist_uniform.name) == 0 {
+                dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate uniform name: %s", uniform.name)
+                return
+            }
+        }
+    }
+
     n, err := append_elems(&shader.uniforms, ..uniforms)
     if n != len(uniforms) || err != mem.Allocator_Error.None {
         dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader uniforms")
@@ -148,6 +216,15 @@ add_uniforms :: proc(shader: ^ShaderInfo, uniforms: ..ShaderUniform) -> (ok: boo
 }
 
 add_structs :: proc(shader: ^ShaderInfo, structs: ..ShaderStruct) -> (ok: bool) {
+    for shader_struct in structs {
+        for exist_structs in shader.structs {
+            if strings.compare(shader_struct.name, exist_structs.name) == 0 {
+                dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate struct name: %s", shader_struct.name)
+                return
+            }
+        }
+    }
+
     n, err := append_elems(&shader.structs, ..structs)
     if n != len(structs) || err != mem.Allocator_Error.None {
         dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader structs")
@@ -158,7 +235,21 @@ add_structs :: proc(shader: ^ShaderInfo, structs: ..ShaderStruct) -> (ok: bool) 
     return
 }
 
+
 add_functions :: proc(shader: ^ShaderInfo, functions: ..ShaderFunction) -> (ok: bool) {
+    for &function in functions{
+        for exist_function in shader.functions {
+            if strings.compare(function.label, exist_function.label) == 0 {
+                dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate function label: %s", function.label)
+                return
+            }
+        }
+
+        function.label = strings.clone(function.label)  // Create ownership
+        function.source = strings.clone(function.source)
+    }
+
+
     n, err := append_elems(&shader.functions, ..functions)
     if n != len(functions) || err != mem.Allocator_Error.None {
         dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader functions")
@@ -169,15 +260,14 @@ add_functions :: proc(shader: ^ShaderInfo, functions: ..ShaderFunction) -> (ok: 
     return
 }
 
-add_ssbo_of_list_type :: proc{ add_ssbo_of_fixed_list_type, add_ssbo_of_dynamic_list_type }
+add_ssbo_of_list_type :: proc{ add_ssbo_of_fixed_list_type, add_ssbo_of_variable_list_type }
 
-add_ssbo_of_fixed_list_type :: proc(shader: ^ShaderInfo, type: ExtendedGLSLType, $N: int) {
+add_ssbo_of_fixed_list_type :: proc(shader: ^ShaderInfo, type: GLSLType, $N: int) {
 
 }
 
-// Clones name string
 // Standard is to use ssbo_name as the name of the binding, and ssbo_name + _struct as the name of the struct that the ssbo references
-add_ssbo_of_dynamic_list_type :: proc(shader: ^ShaderInfo, ssbo_name: string, type: ExtendedGLSLType) {
+add_ssbo_of_variable_list_type :: proc(shader: ^ShaderInfo, ssbo_name: string, type: GLSLType) {
     fields := make([]ShaderStructField, 1)
     name := strings.clone(ssbo_name)
     struct_name := utils.concat(name, "_struct")
@@ -221,7 +311,7 @@ ShaderSource :: struct {
 
 destroy_shader_source :: proc(source: ^ShaderSource) {
     delete(source.string_source)
-    destroy_shader_info(&source.shader_info)
+    destroy_shader_info(source.shader_info)
 }
 
 
@@ -287,26 +377,28 @@ build_shader_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (shade
 
 
     strings.write_string(&builder, "#version 430 core\n")
-    for layout, i in shader_info.bindings {
-        fmt.sbprintfln(&builder, "layout (location = %d) in %s %s;", i, extended_glsl_type_to_string(layout.data_type), layout.name)
+    for binding, i in shader_info.bindings {
+        binding_type := binding.type == .SSBO ? "buffer" : "uniform"
+        s_type := glsl_type_to_string(binding.pair.type); defer delete(s_type)
+        fmt.sbprintfln(&builder, "layout (std430, binding = %d) %s %s %s;", i, binding_type, s_type, binding.pair.name)
     }
 
-    for output in shader_info.output {
-        fmt.sbprintfln(&builder, "out %s %s;", extended_glsl_type_to_string(output.type), output.name)
-    }
-
-    for input in shader_info.input {
-        fmt.sbprintfln(&builder, "in %s %s;", extended_glsl_type_to_string(input.type), input.name)
+    for layout, i in shader_info.layouts {
+        layout_type := layout.layout_type == .INPUT ? "in" : "out"
+        s_type := glsl_type_to_string(layout.pair.type); defer delete(s_type)
+        fmt.sbprintfln(&builder, "layout (std430, location = %d) %s %s %s;", layout_type, s_type, layout.pair.name)
     }
 
     for uniform in shader_info.uniforms {
-        fmt.sbprintfln(&builder, "uniform %s %s;", extended_glsl_type_to_string(uniform.type), uniform.name)
+        s_type := glsl_type_to_string(uniform.type); defer delete(s_type)
+        fmt.sbprintfln(&builder, "uniform %s %s;", s_type, uniform.name)
     }
 
     for struct_definition in shader_info.structs {
         fmt.sbprintfln(&builder, "struct %s {{", struct_definition.name)
         for field in struct_definition.fields {
-            fmt.sbprintfln(&builder, "\t%s %s;", extended_glsl_type_to_string(field.type), field.name)
+            s_type := extended_glsl_type_to_string(field.type); defer delete(s_type)
+            fmt.sbprintfln(&builder, "\t%s %s;", s_type, field.name)
         }
         fmt.sbprintfln(&builder, "}};")
         strings.write_string(&builder, "\n")
@@ -316,9 +408,11 @@ build_shader_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (shade
         strings.write_string(&builder, "\n")
         if function.is_typed_source do strings.write_string(&builder, function.source)
         else {
-            fmt.sbprintf(&builder, "%s %s(", extended_glsl_type_to_string(function.return_type), function.label)
+            s_type := glsl_type_to_string(function.return_type); defer delete(s_type)
+            fmt.sbprintf(&builder, "%s %s(", s_type, function.label)
             for argument, i in function.arguments {
-                fmt.sbprintf(&builder, "%s %s", extended_glsl_type_to_string(argument.type), argument.name)
+                s_arg_type := glsl_type_to_string(argument.type); defer delete(s_type)
+                fmt.sbprintf(&builder, "%s %s", s_arg_type, argument.name)
                 if i != len(function.arguments) - 1 do strings.write_string(&builder, ",")
             }
             fmt.sbprintf(&builder, ") {{\n%s\n}}", function.source)
@@ -409,33 +503,76 @@ typeid_to_glsl_type :: proc(type: typeid) -> (glsl_type: GLSLDataType, ok: bool)
 }
 
 
-extended_glsl_type_to_string :: proc(type: ExtendedGLSLType, caller_location := #caller_location) -> (result: string) {
+/*
+    Returns allocation ownership, caller is responsible for the deallocation
+*/
+glsl_type_to_string :: proc(type: GLSLType, loc := #caller_location) -> (result: string) {
 
-    struct_type, struct_ok := type.(^ShaderStruct)
-    if struct_ok do return struct_type.name
-
-    glsl_type, type_is_glsl := type.(GLSLDataType)
-    if type_is_glsl {
-        result, type_is_glsl = reflect.enum_name_from_value(glsl_type)
-        if !type_is_glsl {
-            dbg.debug_point(dbg.LogLevel.ERROR, "GLSL type is not valid")
-            return "*INVALID TYPE*"
-        }
-
-        return result
-    }
-    else {
-        dbg.debug_point(dbg.LogLevel.ERROR, "GLSL type given as nil")
-        return "*INVALID TYPE*"
+    switch v in type {
+        case ^ShaderStruct:
+            result = shader_struct_to_str(v, loc)
+        case GLSLDataType:
+            result = glsl_data_type_to_str(v, loc)
     }
 
     return
 }
 
+
+/*
+    Returns allocation ownership, caller is responsible for the deallocation
+*/
+extended_glsl_type_to_string :: proc(type: ExtendedGLSLType, loc := #caller_location) -> (result: string) {
+
+    switch v in type {
+        case ^ShaderStruct:
+            result = shader_struct_to_str(v, loc)
+        case GLSLDataType:
+            result = glsl_data_type_to_str(v, loc)
+        case ^GLSLFixedArray:
+            s_type := glsl_type_to_string(v.type, loc); defer delete(s_type)
+            result = fmt.aprintf("%s[%d]", s_type, v.size)  // This allocates
+        case ^GLSLVariableArray:
+            s_type := glsl_type_to_string(v.type, loc); defer delete(s_type)
+            result = utils.concat(s_type, "[]")  // This allocates
+    }
+
+    return
+}
+
+@(private)
+glsl_data_type_to_str :: proc(type: GLSLDataType, loc: runtime.Source_Code_Location) -> (result: string) {
+    s_type, invalid_enum := reflect.enum_name_from_value(type); if !invalid_enum {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Internal invalid enum error", loc=loc)
+        result = strings.clone("*INTERNAL ERROR*")  // Ignore err
+    }
+
+    err: mem.Allocator_Error
+    result, err = strings.clone(result); if err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate type as string", loc=loc)
+        result = strings.clone("*FAILED TO ALLOCATE*")  // Ignore err
+    }
+
+    return
+}
+
+@(private)
+shader_struct_to_str :: proc(shader_struct: ^ShaderStruct, loc: runtime.Source_Code_Location) -> (result: string) {
+    err: mem.Allocator_Error
+    result, err = strings.clone(shader_struct.name); if err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate type as string", loc=loc)
+        result = strings.clone("*FAILED TO ALLOCATE*")  // Ignore err
+    }
+
+    return
+}
+
+
 //
 
 // shader gpu control - uniforms, expressing, etc.
 
+@(deprecated="Should not be provided here")
 express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Expressing shader")
 
