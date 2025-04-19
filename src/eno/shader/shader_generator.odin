@@ -19,12 +19,12 @@ import "core:slice"
 
 */
 shader_layout_from_mesh :: proc(shader: ^ShaderInfo, mesh: model.Mesh) -> (ok: bool) {
-    return shader_bindings_from_mesh_layout(shader, mesh.layout)
+    return shader_layout_from_mesh_layout(shader, mesh.layout)
 }
 
-shader_bindings_from_mesh_layout :: proc(shader: ^ShaderInfo, layout: model.VertexLayout) -> (ok: bool) {
+shader_layout_from_mesh_layout :: proc(shader: ^ShaderInfo, layout: model.VertexLayout) -> (ok: bool) {
     n_Attributes := len(layout)
-    new_layout := make([dynamic]ShaderBinding, n_Attributes)
+    new_layout := make([dynamic]ShaderLayout, n_Attributes)
 
     for i: uint = 0; i < uint(n_Attributes); i += 1 {
         glsl_type := glsl_type_from_attribute(layout[i]) or_return
@@ -32,10 +32,10 @@ shader_bindings_from_mesh_layout :: proc(shader: ^ShaderInfo, layout: model.Vert
         name := parse_attribute_name(layout[i]) or_return
         defer delete(name)
 
-        new_layout[i] = ShaderBinding{ i, .INPUT, glsl_type, utils.concat("a_", name) }
+        new_layout[i] = ShaderLayout{ .INPUT, { glsl_type, utils.concat("a_", name) } }
     }
 
-    shader.bindings = new_layout
+    shader.layouts = new_layout
     ok = true
     return
 }
@@ -97,6 +97,8 @@ convert_component_type_to_glsl_type :: proc(component_type: model.MeshComponentT
 }
 
 
+/* Todo write proper interface for typeid -> ShaderStuct later
+
 generate_glsl_struct :: proc(type: typeid, allocator := context.allocator) -> (glsl_struct: ShaderStruct, ok: bool) {
 
     if !reflect.is_struct(type_info_of(type)) {
@@ -108,7 +110,9 @@ generate_glsl_struct :: proc(type: typeid, allocator := context.allocator) -> (g
 }
 
 @(private)
-_generate_glsl_struct_recurse :: proc(type: typeid, allocator := context.allocator) -> (glsl_struct: ShaderStruct, ok: bool) {
+_generate_glsl_struct_recurse :: proc(type: typeid, allocator := context.allocator) -> (glsl_struct: ^ShaderStruct, ok: bool) {
+
+    glsl_struct = new(ShaderStruct)
 
     name_builder := strings.builder_make(allocator)
     _, io_err := reflect.write_typeid(&name_builder, type); if io_err != io.Error.None {
@@ -118,19 +122,23 @@ _generate_glsl_struct_recurse :: proc(type: typeid, allocator := context.allocat
     glsl_struct.name = strings.to_string(name_builder)
 
     field_infos := reflect.struct_fields_zipped(type)
-    glsl_fields := make([dynamic]glsl_type_name_pair, 0, len(field_infos))
+    glsl_fields := make([dynamic]extended_glsl_type_name_pair, 0, len(field_infos))
 
     for field in field_infos {
-        glsl_type: GLSLType
+        glsl_type: ExtendedGLSLType
 
         #partial switch _ in field.type.variant {
         case runtime.Type_Info_Struct:
             glsl_type = _generate_glsl_struct_recurse(field.type.id) or_return
+        case runtime.Type_Info_Array:
+            reflect.s
+            field.type.flags
+            glsl_type = GLSLFixedArray{ }
         case:
             glsl_type = typeid_to_glsl_type(field.type.id) or_return
         }
 
-        type_name_pair: glsl_type_name_pair = { glsl_type, field.name }
+        type_name_pair: extended_glsl_type_name_pair = { glsl_type, field.name }
         append(&glsl_fields, type_name_pair)
     }
 
@@ -138,3 +146,5 @@ _generate_glsl_struct_recurse :: proc(type: typeid, allocator := context.allocat
     ok = true
     return
 }
+
+*/

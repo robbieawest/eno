@@ -36,22 +36,22 @@ shader_creation_test :: proc(t: ^testing.T) {
 @(test)
 build_shader_source_test :: proc(t: ^testing.T) {
     shader: ShaderInfo
-    add_bindings(&shader,
-        { 0, .BOUND_INPUT, .vec3, "a_position"},
-        { 1, .BOUND_INPUT, .vec4, "a_colour"}
+    add_layouts(&shader,
+    { .INPUT, { .vec3, "a_position" }},
+    { .INPUT, { .vec4, "a_colour" }},
+    { .OUTPUT, { .vec4, "v_colour" }},
     )
 
-    add_output(&shader, { .vec4, "v_colour"})
     add_uniforms(&shader, { .mat4, "u_transform"})
     add_functions(&shader,
-        {
-            .void,
-            []ShaderFunctionArgument {},
-            "main",
-            `    gl_Position = u_transform * vec4(a_position, 1.0);
-    v_colour = a_colour;`,
-            false
-        }
+    {
+        .void,
+        []ShaderFunctionArgument {},
+        "main",
+        `    gl_Position = u_transform * vec4(a_position, 1.0);
+v_colour = a_colour;`,
+        false
+    }
     )
 
     shader_source, ok := build_shader_source(shader, .VERTEX)

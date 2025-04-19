@@ -75,9 +75,9 @@ destroy_extended_glsl_type_name_pair :: proc(pair: extended_glsl_type_name_pair)
     destroy_extended_glsl_type(pair.type)
 }
 
-
+BindingType :: enum{ UBO, SSBO }
 ShaderBinding :: struct {
-    type: enum{ UBO, SSBO },
+    binding_type: BindingType,
     pair: glsl_type_name_pair
 }
 
@@ -117,9 +117,9 @@ destroy_shader_function :: proc(function: ShaderFunction) {
     delete(function.arguments)
 }
 
-
+LayoutType :: enum{ INPUT, OUTPUT }
 ShaderLayout :: struct {
-    layout_type: enum{ INPUT, OUTPUT },
+    layout_type: LayoutType,
     pair: glsl_type_name_pair
 }
 
@@ -153,112 +153,191 @@ destroy_shader_info :: proc(shader: ShaderInfo) {
     delete(shader.functions)
 }
 
-// Procs to handle shader fields
+// Procs to handle shader fields, these deeply take ownership of input
 
 add_bindings :: proc(shader: ^ShaderInfo, bindings: ..ShaderBinding) -> (ok: bool) {
-    for binding in bindings {
-        for exist_binding in shader.bindings {
-            if strings.compare(binding.pair.name, exist_binding.pair.name) == 0 {
-                dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate binding name: %s", binding.pair.name)
-                return
-            }
-        }
+    err := reserve(&shader.bindings, len(bindings)); if err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate bindings")
+        return
     }
 
-    n, err := append_elems(&shader.bindings, ..bindings)
-    if n != len(bindings) || err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader bindings")
-        return
+    for binding in bindings {
+        err = add_binding(shader, binding); if err != mem.Allocator_Error.None {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate bindings")
+            return
+        }
     }
 
     ok = true
     return
 }
+
+@(private)
+add_binding :: proc(shader: ^ShaderInfo, new_binding: ShaderBinding) -> (err: mem.Allocator_Error) {
+    for binding in shader.bindings {
+        if strings.compare(binding.pair.name, new_binding.pair.name) == 0 {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate binding name: %s", binding.pair.name)
+            return
+        }
+    }
+
+    _ = append(&shader.bindings, ShaderBinding{
+            new_binding.binding_type,
+            { new_binding.pair.type, strings.clone(new_binding.pair.name) }
+        }
+    ) or_return
+
+    return
+}
+
 
 add_layouts :: proc(shader: ^ShaderInfo, layouts: ..ShaderLayout) -> (ok: bool) {
-    for layout in layouts {
-        for exist_layout in shader.layouts {
-            if strings.compare(layout.pair.name, exist_layout.pair.name) == 0 {
-                dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate layout name: %s", layout.pair.name)
-                return
-            }
-        }
+    err := reserve(&shader.layouts, len(layouts)); if err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate layouts")
+        return
     }
 
-    n, err := append_elems(&shader.layouts, ..layouts)
-    if n != len(layouts) || err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader layout")
-        return
+    for layout in layouts {
+        err = add_layout(shader, layout); if err != mem.Allocator_Error.None {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate layouts")
+            return
+        }
     }
 
     ok = true
     return
 }
+
+@(private)
+add_layout :: proc(shader: ^ShaderInfo, new_layout: ShaderLayout) -> (err: mem.Allocator_Error) {
+    for layout in shader.layouts {
+        if strings.compare(layout.pair.name, new_layout.pair.name) == 0 {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate layout name: %s", layout.pair.name)
+            return
+        }
+    }
+
+    _ = append(&shader.layouts, ShaderLayout{
+        new_layout.layout_type,
+        { new_layout.pair.type, strings.clone(new_layout.pair.name) }
+    }
+    ) or_return
+
+    return
+}
+
 
 add_uniforms :: proc(shader: ^ShaderInfo, uniforms: ..ShaderUniform) -> (ok: bool) {
-    for uniform in uniforms {
-        for exist_uniform in shader.uniforms {
-            if strings.compare(uniform.name, exist_uniform.name) == 0 {
-                dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate uniform name: %s", uniform.name)
-                return
-            }
-        }
+    err := reserve(&shader.uniforms, len(uniforms)); if err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate uniforms")
+        return
     }
 
-    n, err := append_elems(&shader.uniforms, ..uniforms)
-    if n != len(uniforms) || err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader uniforms")
-        return
+    for uniform in uniforms {
+        err = add_uniform(shader, uniform); if err != mem.Allocator_Error.None {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate uniforms")
+            return
+        }
     }
 
     ok = true
     return
 }
 
-add_structs :: proc(shader: ^ShaderInfo, structs: ..ShaderStruct) -> (ok: bool) {
-    for shader_struct in structs {
-        for exist_structs in shader.structs {
-            if strings.compare(shader_struct.name, exist_structs.name) == 0 {
-                dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate struct name: %s", shader_struct.name)
-                return
-            }
+@(private)
+add_uniform :: proc(shader: ^ShaderInfo, new_uniform: ShaderUniform) -> (err: mem.Allocator_Error) {
+    for uniform in shader.uniforms {
+        if strings.compare(uniform.name, new_uniform.name) == 0 {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate uniform name: %s", uniform.name)
+            return
         }
     }
 
-    n, err := append_elems(&shader.structs, ..structs)
-    if n != len(structs) || err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader structs")
+    _ = append(&shader.uniforms, ShaderUniform{ new_uniform.type, strings.clone(new_uniform.name) }
+    ) or_return
+
+    return
+}
+
+
+add_structs :: proc(shader: ^ShaderInfo, structs: ..ShaderStruct) -> (ok: bool) {
+    err := reserve(&shader.structs, len(structs)); if err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate structs")
         return
     }
 
+    for shader_struct in structs {
+        err = add_struct(shader, shader_struct); if err != mem.Allocator_Error.None {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate structs")
+            return
+        }
+    }
+
     ok = true
+    return
+}
+
+@(private)
+add_struct :: proc(shader: ^ShaderInfo, new_struct: ShaderStruct) -> (err: mem.Allocator_Error) {
+    new_struct := new_struct
+
+    for shader_struct in shader.structs {
+        if strings.compare(shader_struct.name, new_struct.name) == 0 {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate struct name: %s", shader_struct.name)
+            return
+        }
+    }
+
+    new_struct.name = strings.clone(new_struct.name)
+    for &struct_field in new_struct.fields {
+        struct_field.name = struct_field.name
+    }
+
+    _ = append(&shader.structs, new_struct) or_return
+
     return
 }
 
 
 add_functions :: proc(shader: ^ShaderInfo, functions: ..ShaderFunction) -> (ok: bool) {
-    for &function in functions{
-        for exist_function in shader.functions {
-            if strings.compare(function.label, exist_function.label) == 0 {
-                dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate function label: %s", function.label)
-                return
-            }
-        }
-
-        function.label = strings.clone(function.label)  // Create ownership
-        function.source = strings.clone(function.source)
+    err := reserve(&shader.functions, len(functions)); if err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate functions")
+        return
     }
 
-
-    n, err := append_elems(&shader.functions, ..functions)
-    if n != len(functions) || err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate shader functions")
-        return
+    for function in functions {
+        err = add_function(shader, function); if err != mem.Allocator_Error.None {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate functions")
+            return
+        }
     }
 
     ok = true
     return
 }
+
+@(private)
+add_function :: proc(shader: ^ShaderInfo, new_function: ShaderFunction) -> (err: mem.Allocator_Error) {
+    new_function := new_function
+
+    for function in shader.functions {
+        if strings.compare(function.label, new_function.label) == 0 {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate function label: %s", function.label)
+            return
+        }
+    }
+
+    new_function.label = strings.clone(new_function.label)
+    new_function.source = strings.clone(new_function.source)
+    for &argument in new_function.arguments {
+        argument.name = strings.clone(argument.name)
+    }
+
+    _ = append(&shader.functions, new_function) or_return
+
+    return
+}
+
 
 add_ssbo_of_list_type :: proc{ add_ssbo_of_fixed_list_type, add_ssbo_of_variable_list_type }
 
@@ -378,7 +457,7 @@ build_shader_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (shade
 
     strings.write_string(&builder, "#version 430 core\n")
     for binding, i in shader_info.bindings {
-        binding_type := binding.type == .SSBO ? "buffer" : "uniform"
+        binding_type := binding.binding_type == .SSBO ? "buffer" : "uniform"
         s_type := glsl_type_to_string(binding.pair.type); defer delete(s_type)
         fmt.sbprintfln(&builder, "layout (std430, binding = %d) %s %s %s;", i, binding_type, s_type, binding.pair.name)
     }

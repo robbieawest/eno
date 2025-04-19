@@ -101,7 +101,7 @@ create_forward_lighting_shader :: proc(
 ) -> (vertex: shader.ShaderInfo, frag: shader.ShaderInfo, ok: bool) {
 
     // Add input bindings
-    shader.shader_bindings_from_mesh_layout(&vertex, attribute_infos) or_return
+    shader.shader_layout_from_mesh_layout(&vertex, attribute_infos) or_return
 
     /// todo lights ssbo
     //shader.add_ssbo()
