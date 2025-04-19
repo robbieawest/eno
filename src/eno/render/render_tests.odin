@@ -27,6 +27,6 @@ forward_lighting_shader_test :: proc(t: ^testing.T) {
     log.infof("Vertex: %#v", vertex)
     log.infof("Frag: %#v", frag)
 
-   shader.destroy_shader_info(&vertex)
-    shader.destroy_shader_info(&frag)
+    shader.destroy_shader_info(vertex)
+    shader.destroy_shader_info(frag)
 }

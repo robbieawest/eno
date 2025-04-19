@@ -105,18 +105,20 @@ create_forward_lighting_shader :: proc(
 
     /// todo lights ssbo
     //shader.add_ssbo()
-    shader.add_bindings(&vertex, shader.ShaderBinding{ .BUFFER, })
+    // shader.add_bindings(&vertex, shader.ShaderBinding{ .BUFFER, })
 
 
     vertex_main_source_builder := strings.builder_make(allocator)
+    defer strings.builder_destroy(&vertex_main_source_builder)
 
     // Add shader input/output for both vertex and fragment
     for attribute_info in attribute_infos {
         input_pair := shader.glsl_type_name_pair{ shader.glsl_type_from_attribute(attribute_info) or_return, attribute_info.name}
-        shader.add_output(&vertex, input_pair)
-        shader.add_input(&frag, { input_pair.type, strings.clone(input_pair.name, allocator)})
+        shader.add_layouts(&vertex, { .OUTPUT, input_pair })
+        shader.add_layouts(&frag, { .INPUT, input_pair })
 
-        assign_to := input_pair.name
+        assign_to: string
+
         if type, type_ok := input_pair.type.(shader.GLSLDataType); type_ok {
             // todo change usage of "position" and "normal" and make a standard for model loading and attribute names, with custom names as well
             if input_pair.name == "position" && type == .vec3 {
@@ -129,8 +131,10 @@ create_forward_lighting_shader :: proc(
                 assign_to = fmt.aprintf("%s * %s", NORMAL_MATRIX_UNIFORM, prefixed_name)
             }
         }
+        if assign_to == "" do assign_to = strings.clone(attribute_info.name)
 
         fmt.sbprintfln(&vertex_main_source_builder, "%s = %s;", input_pair.name, assign_to)
+        delete(assign_to)
     }
 
     // Add vertex MVP uniforms
