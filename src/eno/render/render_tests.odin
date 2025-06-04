@@ -24,9 +24,15 @@ forward_lighting_shader_test :: proc(t: ^testing.T) {
     vertex, frag, ok := create_forward_lighting_shader(layout, material_infos, lighting_model, material_model)
     testing.expect(t, ok)
 
-    log.infof("Vertex: %#v", vertex)
-    log.infof("Frag: %#v", frag)
+    s_vertex: shader.Shader; s_frag: shader.Shader;
+    defer { shader.destroy_shader(&s_vertex); shader.destroy_shader(&s_frag) }
 
-    shader.destroy_shader_info(vertex)
-    shader.destroy_shader_info(frag)
+    s_vertex, ok = shader.build_shader_source(vertex, .VERTEX)
+    testing.expect(t, ok)
+
+    s_frag, ok = shader.build_shader_source(frag, .FRAGMENT)
+    testing.expect(t, ok)
+
+    log.infof("Vertex: %#v", s_vertex.source.string_source)
+    log.infof("Frag: %#v", s_frag.source.string_source)
 }

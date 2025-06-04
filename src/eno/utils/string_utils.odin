@@ -12,7 +12,7 @@ import "core:fmt"
 
 // Quite a few of these were made for json conversion, which as a whole is deprecated
 
-
+/*
 //type_checking for conversion
 @(deprecated="Used for deprecated package")
 is_string :: proc(s: string) -> bool {
@@ -130,6 +130,7 @@ substring_test :: proc(t: ^testing.T) {
 
     log.infof("s2: %v", s2)
 }
+*/
 
 
 concat :: proc(string_inp: ..string, allocator := context.allocator) -> string {
@@ -159,7 +160,7 @@ concat_cstr :: proc(string_inp: ..cstring) -> cstring {
     return strings.to_cstring(&builder)
 }
 
-
+/*
 MAX_KEY_BYTES :: 256
 @(deprecated="Ass procedure, use string_from_builder instead")
 to_string_no_alloc :: proc(b: strings.Builder) -> (result: string, err: mem.Allocator_Error)  {
@@ -172,3 +173,4 @@ to_string_no_alloc :: proc(b: strings.Builder) -> (result: string, err: mem.Allo
 
     return string(stack_bytes[:]), err
 }
+*/

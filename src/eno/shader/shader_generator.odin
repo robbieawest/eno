@@ -24,7 +24,7 @@ shader_layout_from_mesh :: proc(shader: ^ShaderInfo, mesh: model.Mesh) -> (ok: b
 
 shader_layout_from_mesh_layout :: proc(shader: ^ShaderInfo, layout: model.VertexLayout) -> (ok: bool) {
     n_Attributes := len(layout)
-    new_layout := make([dynamic]ShaderLayout, n_Attributes)
+    new_inputs := make([dynamic]glsl_type_name_pair, n_Attributes)
 
     for i: uint = 0; i < uint(n_Attributes); i += 1 {
         glsl_type := glsl_type_from_attribute(layout[i]) or_return
@@ -32,10 +32,10 @@ shader_layout_from_mesh_layout :: proc(shader: ^ShaderInfo, layout: model.Vertex
         name := parse_attribute_name(layout[i]) or_return
         defer delete(name)
 
-        new_layout[i] = ShaderLayout{ .INPUT, { glsl_type, utils.concat("a_", name) } }
+        new_inputs[i] = glsl_type_name_pair{ glsl_type, utils.concat("a_", name) }
     }
 
-    shader.layouts = new_layout
+    add_layouts_of_type(shader, .INPUT, ..new_inputs[:])
     ok = true
     return
 }
@@ -51,8 +51,8 @@ parse_attribute_name :: proc(attribute_info: model.MeshAttributeInfo, allocator 
             return
         }
 
-        name := strings.clone(reflected_name, allocator)
-    }
+        name = strings.clone(reflected_name, allocator)
+    } else do name = strings.clone(attribute_info.name)
 
     ok = true
     return

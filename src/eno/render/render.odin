@@ -103,9 +103,7 @@ create_forward_lighting_shader :: proc(
     // Add input bindings
     shader.shader_layout_from_mesh_layout(&vertex, attribute_infos) or_return
 
-    /// todo lights ssbo
-    //shader.add_ssbo()
-    // shader.add_bindings(&vertex, shader.ShaderBinding{ .BUFFER, })
+    // shader.add_ssbo_of_list_type(&frag, "lights_ssbo", ) // todo setup lights
 
 
     vertex_main_source_builder := strings.builder_make(allocator)

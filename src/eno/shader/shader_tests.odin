@@ -11,11 +11,11 @@ import "core:fmt"
 shader_creation_test :: proc(t: ^testing.T) {
 
     shader: ShaderInfo
-    add_layouts(&shader,
-        { .INPUT, { .vec3, "a_position" }},
-        { .INPUT, { .vec4, "a_colour" }},
-        { .OUTPUT, { .vec4, "v_colour" }},
+    add_layouts_of_type(&shader, .INPUT,
+        { .vec3, "a_position" },
+        { .vec4, "a_colour" },
     )
+    add_layouts_of_type(&shader, .OUTPUT, { .vec4, "v_colour" })
 
     add_uniforms(&shader, { .mat4, "u_transform"})
     add_functions(&shader,
@@ -36,11 +36,12 @@ shader_creation_test :: proc(t: ^testing.T) {
 @(test)
 build_shader_source_test :: proc(t: ^testing.T) {
     shader: ShaderInfo
-    add_layouts(&shader,
-    { .INPUT, { .vec3, "a_position" }},
-    { .INPUT, { .vec4, "a_colour" }},
-    { .OUTPUT, { .vec4, "v_colour" }},
+    add_layouts_of_type(&shader, .INPUT,
+    { .vec3, "a_position" },
+    { .vec4, "a_colour" },
     )
+    add_layouts_of_type(&shader, .OUTPUT, { .vec4, "v_colour" })
+
 
     add_uniforms(&shader, { .mat4, "u_transform"})
     add_functions(&shader,

@@ -75,15 +75,6 @@ destroy_extended_glsl_type_name_pair :: proc(pair: extended_glsl_type_name_pair)
     destroy_extended_glsl_type(pair.type)
 }
 
-BindingType :: enum{ UBO, SSBO }
-ShaderBinding :: struct {
-    binding_type: BindingType,
-    pair: glsl_type_name_pair
-}
-
-destroy_shader_binding :: proc(binding: ShaderBinding) {
-    destroy_glsl_type_name_pair(binding.pair)
-}
 
 ShaderUniform :: glsl_type_name_pair
 
@@ -119,29 +110,29 @@ destroy_shader_function :: proc(function: ShaderFunction) {
 
 LayoutType :: enum{ INPUT, OUTPUT }
 ShaderLayout :: struct {
-    layout_type: LayoutType,
-    pair: glsl_type_name_pair
+    inputs: [dynamic]glsl_type_name_pair,
+    outputs: [dynamic]glsl_type_name_pair
 }
 
-destroy_shader_layout :: proc(layout: ShaderLayout) {
-    destroy_glsl_type_name_pair(layout.pair)
+destroy_shader_layouts :: proc(layout: ShaderLayout) {
+    for input in layout.inputs do destroy_glsl_type_name_pair(input)
+    for output in layout.outputs do destroy_glsl_type_name_pair(output)
+    delete(layout.inputs)
+    delete(layout.outputs)
 }
 
 
 ShaderInfo :: struct {
-    bindings: [dynamic]ShaderBinding,
-    layouts: [dynamic]ShaderLayout,
+    bindings: ShaderBindings,
+    layout: ShaderLayout,
     uniforms: [dynamic]ShaderUniform,
     structs: [dynamic]ShaderStruct,
     functions: [dynamic]ShaderFunction
 }
 
 destroy_shader_info :: proc(shader: ShaderInfo) {
-    for binding in shader.bindings do destroy_shader_binding(binding)
-    delete(shader.bindings)
-
-    for layout in shader.layouts do destroy_shader_layout(layout)
-    delete(shader.layouts)
+    destroy_shader_bindings(shader.bindings)
+    destroy_shader_layouts(shader.layout)
 
     for uniform in shader.uniforms do destroy_glsl_type_name_pair(uniform)
     delete(shader.uniforms)
@@ -153,79 +144,78 @@ destroy_shader_info :: proc(shader: ShaderInfo) {
     delete(shader.functions)
 }
 
+// Only supporting UBOs and SSBOs for now
+BindingType :: enum{ UBO, SSBO }
+ShaderBindings :: struct {
+    uniform_buffer_objects: [dynamic]glsl_type_name_pair,
+    shader_storage_buffer_objects: [dynamic]glsl_type_name_pair,
+}
+
+destroy_shader_bindings :: proc(binding: ShaderBindings) {
+    for ubo in binding.uniform_buffer_objects do destroy_glsl_type_name_pair(ubo)
+    for ssbo in binding.shader_storage_buffer_objects do destroy_glsl_type_name_pair(ssbo)
+    delete(binding.uniform_buffer_objects)
+    delete(binding.shader_storage_buffer_objects)
+}
+
+
 // Procs to handle shader fields, these deeply take ownership of input
 
-add_bindings :: proc(shader: ^ShaderInfo, bindings: ..ShaderBinding) -> (ok: bool) {
-    err := reserve(&shader.bindings, len(bindings)); if err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate bindings")
+add_bindings_of_type :: proc(shader: ^ShaderInfo, type: BindingType, bindings: ..glsl_type_name_pair) -> (ok: bool) {
+
+    exist_bindings: ^[dynamic]glsl_type_name_pair
+    switch type {
+        case .UBO: exist_bindings = &shader.bindings.uniform_buffer_objects
+        case .SSBO: exist_bindings = &shader.bindings.shader_storage_buffer_objects
+    }
+
+    err := reserve(exist_bindings, len(bindings)); if err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate memory for bindings")
         return
     }
 
     for binding in bindings {
-        err = add_binding(shader, binding); if err != mem.Allocator_Error.None {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate bindings")
-            return
+        for exist_binding in exist_bindings {
+            if strings.compare(binding.name, exist_binding.name) != 0 {
+                dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate binding name: %s", binding.name)
+                return
+            }
         }
+
+        append(exist_bindings, glsl_type_name_pair{ binding.type, strings.clone(binding.name) })
     }
 
     ok = true
     return
 }
 
-@(private)
-add_binding :: proc(shader: ^ShaderInfo, new_binding: ShaderBinding) -> (err: mem.Allocator_Error) {
-    for binding in shader.bindings {
-        if strings.compare(binding.pair.name, new_binding.pair.name) == 0 {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate binding name: %s", binding.pair.name)
-            return
-        }
+add_layouts_of_type :: proc(shader: ^ShaderInfo, type: LayoutType, layouts: ..glsl_type_name_pair) -> (ok: bool) {
+
+    exist_layouts: ^[dynamic]glsl_type_name_pair
+    switch type {
+    case .INPUT: exist_layouts = &shader.layout.inputs
+    case .OUTPUT: exist_layouts = &shader.layout.outputs
     }
 
-    _ = append(&shader.bindings, ShaderBinding{
-            new_binding.binding_type,
-            { new_binding.pair.type, strings.clone(new_binding.pair.name) }
-        }
-    ) or_return
-
-    return
-}
-
-
-add_layouts :: proc(shader: ^ShaderInfo, layouts: ..ShaderLayout) -> (ok: bool) {
-    err := reserve(&shader.layouts, len(layouts)); if err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate layouts")
+    err := reserve(exist_layouts, len(layouts)); if err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate memory for new layout")
         return
     }
 
     for layout in layouts {
-        err = add_layout(shader, layout); if err != mem.Allocator_Error.None {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate layouts")
-            return
+        for exist_layout in exist_layouts {
+            if strings.compare(layout.name, exist_layout.name) != 0 {
+                dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate layout name: %s", layout.name)
+                return
+            }
         }
+
+        append(exist_layouts, glsl_type_name_pair{ layout.type, strings.clone(layout.name) })
     }
 
     ok = true
     return
 }
-
-@(private)
-add_layout :: proc(shader: ^ShaderInfo, new_layout: ShaderLayout) -> (err: mem.Allocator_Error) {
-    for layout in shader.layouts {
-        if strings.compare(layout.pair.name, new_layout.pair.name) == 0 {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate layout name: %s", layout.pair.name)
-            return
-        }
-    }
-
-    _ = append(&shader.layouts, ShaderLayout{
-        new_layout.layout_type,
-        { new_layout.pair.type, strings.clone(new_layout.pair.name) }
-    }
-    ) or_return
-
-    return
-}
-
 
 add_uniforms :: proc(shader: ^ShaderInfo, uniforms: ..ShaderUniform) -> (ok: bool) {
     err := reserve(&shader.uniforms, len(uniforms)); if err != mem.Allocator_Error.None {
@@ -341,7 +331,7 @@ add_function :: proc(shader: ^ShaderInfo, new_function: ShaderFunction) -> (err:
 
 add_ssbo_of_list_type :: proc{ add_ssbo_of_fixed_list_type, add_ssbo_of_variable_list_type }
 
-add_ssbo_of_fixed_list_type :: proc(shader: ^ShaderInfo, type: GLSLType, $N: int) {
+add_ssbo_of_fixed_list_type :: proc(shader: ^ShaderInfo, ssbo_name: string, type: GLSLType, $N: int) {
 
 }
 
@@ -444,7 +434,6 @@ conv_gl_shader_type :: proc(type: ShaderType) -> gl.Shader_Type {  // Likely cou
 /*
     Builds/Deserializes the source as a single string with newlines
     Uses glsl version 430 core
-    Todo: Control for versioning
 */
 build_shader_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (shader: Shader, ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Building Shader Source")
@@ -454,18 +443,26 @@ build_shader_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (shade
         return shader, ok
     }
 
-
     strings.write_string(&builder, "#version 430 core\n")
-    for binding, i in shader_info.bindings {
-        binding_type := binding.binding_type == .SSBO ? "buffer" : "uniform"
-        s_type := glsl_type_to_string(binding.pair.type); defer delete(s_type)
-        fmt.sbprintfln(&builder, "layout (std430, binding = %d) %s %s %s;", i, binding_type, s_type, binding.pair.name)
+
+    for ssbo, i in shader_info.bindings.shader_storage_buffer_objects {
+        s_type := glsl_type_to_string(ssbo.type); defer delete(s_type)
+        fmt.sbprintfln(&builder, "layout (std430, binding = %d) buffer %s %s;", i, s_type, ssbo.name)
     }
 
-    for layout, i in shader_info.layouts {
-        layout_type := layout.layout_type == .INPUT ? "in" : "out"
-        s_type := glsl_type_to_string(layout.pair.type); defer delete(s_type)
-        fmt.sbprintfln(&builder, "layout (std430, location = %d) %s %s %s;", layout_type, s_type, layout.pair.name)
+    for ubo, i in shader_info.bindings.uniform_buffer_objects {
+        s_type := glsl_type_to_string(ubo.type); defer delete(s_type)
+        fmt.sbprintfln(&builder, "layout (std430, binding = %d) uniform %s %s;", i, s_type, ubo.name)
+    }
+
+    for input, i in shader_info.layout.inputs {
+        s_type := glsl_type_to_string(input.type); defer delete(s_type)
+        fmt.sbprintfln(&builder, "layout (std430, location = %d) in %s %s;", i, s_type, input.name)
+    }
+
+    for output, i in shader_info.layout.outputs {
+        s_type := glsl_type_to_string(output.type); defer delete(s_type)
+        fmt.sbprintfln(&builder, "layout (std430, location = %d) out %s %s;", i, s_type, output.name)
     }
 
     for uniform in shader_info.uniforms {
