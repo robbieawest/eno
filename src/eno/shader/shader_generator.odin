@@ -35,7 +35,7 @@ shader_layout_from_mesh_layout :: proc(shader: ^ShaderInfo, layout: model.Vertex
         new_inputs[i] = GLSLPair{ glsl_type, utils.concat("a_", name) }
     }
 
-    add_layouts_of_type(shader, .INPUT, ..new_inputs[:])
+    add_inputs(shader, ..new_inputs[:])
     ok = true
     return
 }

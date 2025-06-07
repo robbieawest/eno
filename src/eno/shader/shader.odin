@@ -161,8 +161,7 @@ ShaderFunction :: struct {
     return_type: GLSLType,
     arguments: []GLSLPair,
     label: string,
-    source: FunctionSource,
-    source_has_signature: bool,
+    source: FunctionSource
 };
 
 FunctionSource :: []string
@@ -175,12 +174,16 @@ make_function_source :: proc(lines: []string) -> FunctionSource {
 }
 copy_function_source :: make_function_source
 
-make_shader_function :: proc(ret_type: GLSLType, label: string, source: FunctionSource, is_typed_source: bool, arguments: ..GLSLPair) -> (function: ShaderFunction) {
-    return { ret_type, arguments, label, source, is_typed_source }
+make_shader_function :: proc(ret_type: GLSLType, label: string, source: FunctionSource, arguments: ..GLSLPair) -> (function: ShaderFunction) {
+    return copy_shader_function(ShaderFunction{ ret_type, arguments, label, source })
 }
 
 copy_shader_function :: proc(func: ShaderFunction) -> ShaderFunction {
-    return { func.return_type, slice.clone(func.arguments), strings.clone(func.label), copy_function_source(func.source), func.source_has_signature }
+    new_arguments := make([]GLSLPair, len(func.arguments))
+    for i := 0; i < len(func.arguments); i += 1 {
+        new_arguments[i] = copy_glsl_pair(func.arguments[i])
+    }
+    return { func.return_type, new_arguments, strings.clone(func.label), copy_function_source(func.source) }
 }
 
 destroy_shader_function :: proc(function: ShaderFunction) {
@@ -191,7 +194,6 @@ destroy_shader_function :: proc(function: ShaderFunction) {
 }
 
 //
-
 
 
 // Shader Bindings
@@ -388,7 +390,7 @@ add_functions :: proc(shader: ^ShaderInfo, functions: ..ShaderFunction) -> (ok: 
     }
 
     for function in functions {
-        err = add_function(shader, function); if err != mem.Allocator_Error.None {
+        ok = add_function(shader, function); if !ok {
             dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate functions")
             return
         }
@@ -399,9 +401,7 @@ add_functions :: proc(shader: ^ShaderInfo, functions: ..ShaderFunction) -> (ok: 
 }
 
 @(private)
-add_function :: proc(shader: ^ShaderInfo, new_function: ShaderFunction) -> (err: mem.Allocator_Error) {
-    new_function := new_function
-
+add_function :: proc(shader: ^ShaderInfo, new_function: ShaderFunction) -> (ok: bool) {
     for function in shader.functions {
         if strings.compare(function.label, new_function.label) == 0 {
             dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate function label: %s", function.label)
@@ -409,35 +409,8 @@ add_function :: proc(shader: ^ShaderInfo, new_function: ShaderFunction) -> (err:
         }
     }
 
-    new_function.label = strings.clone(new_function.label)
-    new_function.source = strings.clone(new_function.source)
-    for &argument in new_function.arguments {
-        argument.name = strings.clone(argument.name)
-    }
-
-    _ = append(&shader.functions, new_function) or_return
-
-    return
-}
-
-
-add_ssbo_of_list_type :: proc{ add_ssbo_of_fixed_list_type, add_ssbo_of_variable_list_type }
-
-add_ssbo_of_fixed_list_type :: proc(shader: ^ShaderInfo, ssbo_name: string, type: GLSLType, $N: int) {
-
-}
-
-// Standard is to use ssbo_name as the name of the binding, and ssbo_name + _struct as the name of the struct that the ssbo references
-add_ssbo_of_variable_list_type :: proc(shader: ^ShaderInfo, ssbo_name: string, type: GLSLType) {
-    fields := make([]ShaderStructField, 1)
-    name := strings.clone(ssbo_name)
-    struct_name := utils.concat(name, "_struct")
-
-    list_type := new(GLSLVariableArray)
-    list_type.type = type
-
-    fields[0] = ShaderStructField{ list_type, "data" }
-    add_structs(shader, ShaderStruct{ })
+    _, err := append(&shader.functions, new_function)
+    return err == mem.Allocator_Error.None
 }
 
 //
@@ -574,17 +547,21 @@ build_shader_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (shade
 
     for function in shader_info.functions {
         strings.write_string(&builder, "\n")
-        if function.source_has_signature do strings.write_string(&builder, function.source)
-        else {
-            s_type := glsl_type_to_string(function.return_type); defer delete(s_type)
-            fmt.sbprintf(&builder, "%s %s(", s_type, function.label)
-            for argument, i in function.arguments {
-                s_arg_type := glsl_type_to_string(argument.type); defer delete(s_type)
-                fmt.sbprintf(&builder, "%s %s", s_arg_type, argument.name)
-                if i != len(function.arguments) - 1 do strings.write_string(&builder, ",")
-            }
-            fmt.sbprintf(&builder, ") {{\n%s\n}}", function.source)
+        s_type := glsl_type_to_string(function.return_type); defer delete(s_type)
+
+
+        fmt.sbprintf(&builder, "%s %s(", s_type, function.label)
+        for argument, i in function.arguments {
+            s_arg_type := glsl_type_to_string(argument.type); defer delete(s_type)
+            fmt.sbprintf(&builder, "%s %s", s_arg_type, argument.name)
+            if i != len(function.arguments) - 1 do strings.write_string(&builder, ",")
         }
+
+        fmt.sbprintf(&builder, ") {{\n")
+        for line in function.source {
+            fmt.sbprintf(&builder, "\t%s\n")
+        }
+        fmt.sbprintf(&builder, "\n}}")
     }
 
 

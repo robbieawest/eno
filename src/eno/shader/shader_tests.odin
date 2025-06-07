@@ -10,25 +10,24 @@ import "core:fmt"
 @(test)
 shader_creation_test :: proc(t: ^testing.T) {
 
-    shader: ShaderInfo
-    add_layouts_of_type(&shader, .INPUT,
+    shader: ShaderInfo; defer destroy_shader_info(shader)
+
+    add_inputs(&shader,
         { .vec3, "a_position" },
         { .vec4, "a_colour" },
     )
-    add_layouts_of_type(&shader, .OUTPUT, { .vec4, "v_colour" })
+    add_outputs(&shader, { .vec4, "v_colour" })
 
     add_uniforms(&shader, { .mat4, "u_transform"})
-    add_functions(&shader,
-        {
-            .void,
-            []ShaderFunctionArgument {},
-            "main",
-            `    gl_Position = u_transform * vec4(a_position, 1.0);
-    v_colour = a_colour;`,
-            false
+
+    main_func := make_shader_function(.void, "main",
+        []string {
+            "gl_Position = u_transform * vec4(a_position, 1.0);",
+            "v_colour = a_colour"
         }
     )
-    defer destroy_shader_info(shader)
+    add_functions(&shader, main_func)
+
 
     log.infof("shader out: %#v", shader)
 }
@@ -36,24 +35,22 @@ shader_creation_test :: proc(t: ^testing.T) {
 @(test)
 build_shader_source_test :: proc(t: ^testing.T) {
     shader: ShaderInfo
-    add_layouts_of_type(&shader, .INPUT,
+    add_inputs(&shader,
     { .vec3, "a_position" },
     { .vec4, "a_colour" },
     )
-    add_layouts_of_type(&shader, .OUTPUT, { .vec4, "v_colour" })
-
+    add_outputs(&shader, { .vec4, "v_colour" })
 
     add_uniforms(&shader, { .mat4, "u_transform"})
-    add_functions(&shader,
-    {
-        .void,
-        []ShaderFunctionArgument {},
-        "main",
-        `    gl_Position = u_transform * vec4(a_position, 1.0);
-v_colour = a_colour;`,
-        false
+
+    main_func := make_shader_function(.void, "main",
+    []string {
+        "gl_Position = u_transform * vec4(a_position, 1.0);",
+        "v_colour = a_colour"
     }
     )
+    add_functions(&shader, main_func)
+
 
     shader_source, ok := build_shader_source(shader, .VERTEX)
     defer destroy_shader(&shader_source)
