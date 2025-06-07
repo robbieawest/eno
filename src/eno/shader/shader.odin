@@ -238,7 +238,7 @@ shader_buffer_object_to_str :: proc(obj: ShaderBufferObject) -> (result: string)
 
 destroy_shader_buffer_object :: proc(obj: ShaderBufferObject) {
     delete(obj.name)
-    for field in obj.fields do destroy_extended_glsl_type_name_pair(field)
+    for field in obj.fields do destroy_glsl_pair(field)
     delete(obj.fields)
 }
 
@@ -273,35 +273,43 @@ add_bindings_of_type :: proc(shader: ^ShaderInfo, type: BindingType, buffer_obje
     return
 }
 
-add_layouts_of_type :: proc(shader: ^ShaderInfo, type: LayoutType, layouts: ..GLSLPair) -> (ok: bool) {
 
-    exist_layouts: ^[dynamic]GLSLPair
-    switch type {
-    case .INPUT: exist_layouts = &shader.layout.inputs
-    case .OUTPUT: exist_layouts = &shader.layout.outputs
-    }
+add_inputs :: proc(shader: ^ShaderInfo, inputs: ..GLSLPair) -> (ok: bool) {
+    return add_io(shader, true, ..inputs)
+}
 
-    err := reserve(exist_layouts, len(layouts)); if err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate memory for new layout")
+add_outputs :: proc(shader: ^ShaderInfo, inputs: ..GLSLPair) -> (ok: bool) {
+    return add_io(shader, false, ..inputs)
+}
+
+@(private)
+add_io :: proc(shader: ^ShaderInfo, is_input: bool, ios: ..GLSLPair) -> (ok: bool) {
+
+    exist_ios := is_input ? &shader.inputs : &shader.outputs
+
+    err := reserve(exist_ios, len(ios)); if err != mem.Allocator_Error.None {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate memory for new inputs")
         return
     }
 
-    for layout in layouts {
-        for exist_layout in exist_layouts {
-            if strings.compare(layout.name, exist_layout.name) == 0 {
-                dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate layout name: %s", layout.name)
+    for io in ios {
+        for exist_ios in exist_ios {
+            if strings.compare(io.name, exist_ios  .name) == 0 {
+                if is_input do dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate input name: %s", io.name)
+                else do dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate output name: %s", io.name)
                 return
             }
         }
 
-        append(exist_layouts, GLSLPair{ layout.type, strings.clone(layout.name) })
+        append(exist_ios, GLSLPair{ io.type, strings.clone(io.name) })
     }
 
     ok = true
     return
 }
 
-add_uniforms :: proc(shader: ^ShaderInfo, uniforms: ..ShaderUniform) -> (ok: bool) {
+
+add_uniforms :: proc(shader: ^ShaderInfo, uniforms: ..GLSLPair) -> (ok: bool) {
     err := reserve(&shader.uniforms, len(uniforms)); if err != mem.Allocator_Error.None {
         dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate uniforms")
         return
@@ -319,7 +327,7 @@ add_uniforms :: proc(shader: ^ShaderInfo, uniforms: ..ShaderUniform) -> (ok: boo
 }
 
 @(private)
-add_uniform :: proc(shader: ^ShaderInfo, new_uniform: ShaderUniform) -> (err: mem.Allocator_Error) {
+add_uniform :: proc(shader: ^ShaderInfo, new_uniform: GLSLPair) -> (err: mem.Allocator_Error) {
     for uniform in shader.uniforms {
         if strings.compare(uniform.name, new_uniform.name) == 0 {
             dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate uniform name: %s", uniform.name)
@@ -327,7 +335,7 @@ add_uniform :: proc(shader: ^ShaderInfo, new_uniform: ShaderUniform) -> (err: me
         }
     }
 
-    _ = append(&shader.uniforms, ShaderUniform{ new_uniform.type, strings.clone(new_uniform.name) }
+    _ = append(&shader.uniforms, GLSLPair{ new_uniform.type, strings.clone(new_uniform.name) }
     ) or_return
 
     return
@@ -539,12 +547,12 @@ build_shader_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (shade
         fmt.sbprintfln(&builder, "layout (std430, binding = %d) uniform %s", buf_str)
     }
 
-    for input, i in shader_info.layout.inputs {
+    for input, i in shader_info.inputs {
         s_type := glsl_type_to_string(input.type); defer delete(s_type)
         fmt.sbprintfln(&builder, "layout (std430, location = %d) in %s %s;", i, s_type, input.name)
     }
 
-    for output, i in shader_info.layout.outputs {
+    for output, i in shader_info.outputs {
         s_type := glsl_type_to_string(output.type); defer delete(s_type)
         fmt.sbprintfln(&builder, "layout (std430, location = %d) out %s %s;", i, s_type, output.name)
     }
