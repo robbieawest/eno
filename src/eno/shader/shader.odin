@@ -55,86 +55,72 @@ GLSLVariableArray :: struct {
 }
 
 
-glsl_type_name_pair :: struct {
+GLSLPair :: struct {
     type: GLSLType,
     name: string  // Assumes ownership
 }
 
-destroy_glsl_type_name_pair :: proc(pair: glsl_type_name_pair) {
+
+copy_glsl_pair :: proc(pair: GLSLPair) -> GLSLPair {
+    return GLSLPair{ pair.type, strings.clone(pair.name) }
+}
+
+destroy_glsl_pair :: proc{ destroy_glsl_pair_norm, destroy_glsl_pair_extended }
+
+@(private)
+destroy_glsl_pair_norm :: proc(pair: GLSLPair) {
     delete(pair.name)
 }
 
 
-extended_glsl_type_name_pair :: struct {
+ExtendedGLSLPair :: struct {
     type: ExtendedGLSLType,
     name: string
 }
 
-destroy_extended_glsl_type_name_pair :: proc(pair: extended_glsl_type_name_pair) {
+copy_extended_glsl_pair :: proc(pair: ExtendedGLSLPair) -> ExtendedGLSLPair {
+    return ExtendedGLSLPair{ pair.type, strings.clone(pair.name) }
+}
+
+@(private)
+destroy_glsl_pair_extended :: proc(pair: ExtendedGLSLPair) {
     delete(pair.name)
     destroy_extended_glsl_type(pair.type)
 }
 
 
-ShaderUniform :: glsl_type_name_pair
-
-ShaderStruct :: struct {
-    name: string,  // Asssumes ownership
-    fields: []ShaderStructField
-}; ShaderStructField :: extended_glsl_type_name_pair
-
-destroy_shader_struct :: proc(shader_struct: ShaderStruct) {
-    delete(shader_struct.name)
-    for field in shader_struct.fields do destroy_extended_glsl_type_name_pair(field)
-}
-
-
-ShaderFunction :: struct {
-    return_type: GLSLType,
-    arguments: []ShaderFunctionArgument,  // Assumes ownership
-    label: string,  // Assumes ownership
-    source: string,  // Assumes ownership
-    is_typed_source: bool,
-}; ShaderFunctionArgument :: glsl_type_name_pair
-
-init_shader_function :: proc(ret_type: GLSLType, label: string, source: string, is_typed_source: bool, arguments: ..ShaderFunctionArgument) -> (function: ShaderFunction) {
-    return { ret_type, arguments, label, source, is_typed_source }
-}
-
-destroy_shader_function :: proc(function: ShaderFunction) {
-    delete(function.source)
-    delete(function.label)
-    for arg in function.arguments do destroy_glsl_type_name_pair(arg)
-    delete(function.arguments)
-}
-
-LayoutType :: enum{ INPUT, OUTPUT }
-ShaderLayout :: struct {
-    inputs: [dynamic]glsl_type_name_pair,
-    outputs: [dynamic]glsl_type_name_pair
-}
-
-destroy_shader_layouts :: proc(layout: ShaderLayout) {
-    for input in layout.inputs do destroy_glsl_type_name_pair(input)
-    for output in layout.outputs do destroy_glsl_type_name_pair(output)
-    delete(layout.inputs)
-    delete(layout.outputs)
-}
-
+// Shader Info
 
 ShaderInfo :: struct {
     bindings: ShaderBindings,
-    layout: ShaderLayout,
-    uniforms: [dynamic]ShaderUniform,
+    inputs: [dynamic]GLSLPair,
+    outputs: [dynamic]GLSLPair,
+    uniforms: [dynamic]GLSLPair,
     structs: [dynamic]ShaderStruct,
     functions: [dynamic]ShaderFunction
 }
 
+make_shader_info :: proc() -> ShaderInfo {
+    return {
+        ShaderBindings{ make([dynamic]ShaderBufferObject), make([dynamic]ShaderBufferObject) },
+        make([dynamic]GLSLPair),
+        make([dynamic]GLSLPair),
+        make([dynamic]GLSLPair),
+        make([dynamic]ShaderStruct),
+        make([dynamic]ShaderFunction)
+    }
+}
+
 destroy_shader_info :: proc(shader: ShaderInfo) {
     destroy_shader_bindings(shader.bindings)
-    destroy_shader_layouts(shader.layout)
 
-    for uniform in shader.uniforms do destroy_glsl_type_name_pair(uniform)
+    for input in shader.inputs do destroy_glsl_pair(input)
+    delete(shader.inputs)
+
+    for output in shader.outputs do destroy_glsl_pair(output)
+    delete(shader.outputs)
+
+    for uniform in shader.uniforms do destroy_glsl_pair(uniform)
     delete(shader.uniforms)
 
     for shader_struct in shader.structs do destroy_shader_struct(shader_struct)
@@ -144,54 +130,152 @@ destroy_shader_info :: proc(shader: ShaderInfo) {
     delete(shader.functions)
 }
 
+//
+
+ShaderStruct :: struct {
+    name: string,  // Asssumes ownership
+    fields: []ExtendedGLSLPair
+};
+
+make_shader_struct :: proc(name: string, fields: []ExtendedGLSLPair) -> ShaderStruct {
+    new_fields := make([]ExtendedGLSLPair, len(fields))
+    for i := 0; i < len(fields); i += 1 {
+        new_fields[i] = copy_extended_glsl_pair(fields[i])
+    }
+    return ShaderStruct{ name, new_fields }
+}
+
+copy_shader_struct :: proc(shader_struct: ShaderStruct) -> ShaderStruct {
+    return make_shader_struct(shader_struct.name, shader_struct.fields)
+}
+
+destroy_shader_struct :: proc(shader_struct: ShaderStruct) {
+    delete(shader_struct.name)
+    for field in shader_struct.fields do destroy_glsl_pair(field)
+}
+
+
+// Shader Functions
+
+ShaderFunction :: struct {
+    return_type: GLSLType,
+    arguments: []GLSLPair,
+    label: string,
+    source: FunctionSource,
+    source_has_signature: bool,
+};
+
+FunctionSource :: []string
+make_function_source :: proc(lines: []string) -> FunctionSource {
+    new_lines := make([]string, len(lines))
+    for i := 0; i < len(lines); i += 1 {
+        new_lines[i] = strings.clone(lines[i])
+    }
+    return new_lines
+}
+copy_function_source :: make_function_source
+
+make_shader_function :: proc(ret_type: GLSLType, label: string, source: FunctionSource, is_typed_source: bool, arguments: ..GLSLPair) -> (function: ShaderFunction) {
+    return { ret_type, arguments, label, source, is_typed_source }
+}
+
+copy_shader_function :: proc(func: ShaderFunction) -> ShaderFunction {
+    return { func.return_type, slice.clone(func.arguments), strings.clone(func.label), copy_function_source(func.source), func.source_has_signature }
+}
+
+destroy_shader_function :: proc(function: ShaderFunction) {
+    delete(function.source)
+    delete(function.label)
+    for arg in function.arguments do destroy_glsl_pair(arg)
+    delete(function.arguments)
+}
+
+//
+
+
+
+// Shader Bindings
+
 // Only supporting UBOs and SSBOs for now
 BindingType :: enum{ UBO, SSBO }
 ShaderBindings :: struct {
-    uniform_buffer_objects: [dynamic]glsl_type_name_pair,
-    shader_storage_buffer_objects: [dynamic]glsl_type_name_pair,
+    uniform_buffer_objects: [dynamic]ShaderBufferObject,
+    shader_storage_buffer_objects: [dynamic]ShaderBufferObject,
 }
 
 destroy_shader_bindings :: proc(binding: ShaderBindings) {
-    for ubo in binding.uniform_buffer_objects do destroy_glsl_type_name_pair(ubo)
-    for ssbo in binding.shader_storage_buffer_objects do destroy_glsl_type_name_pair(ssbo)
+    for ubo in binding.uniform_buffer_objects do destroy_shader_buffer_object(ubo)
+    for ssbo in binding.shader_storage_buffer_objects do destroy_shader_buffer_object(ssbo)
     delete(binding.uniform_buffer_objects)
     delete(binding.shader_storage_buffer_objects)
+}
+
+ShaderBufferObject :: struct {
+    name: string,
+    fields: []ExtendedGLSLPair
+}
+
+copy_shader_buffer_object :: proc(obj: ShaderBufferObject) -> ShaderBufferObject {
+    new_fields := make([]ExtendedGLSLPair, len(obj.fields))
+    for i := 0; i < len(obj.fields); i += 1 {
+        new_fields[i] = ExtendedGLSLPair{ obj.fields[i].type, strings.clone(obj.fields[i].name) }
+    }
+    return ShaderBufferObject{ strings.clone(obj.name), new_fields }
+}
+
+shader_buffer_object_to_str :: proc(obj: ShaderBufferObject) -> (result: string) {
+    builder := strings.builder_make()
+    fmt.sbprintf(&builder, "%s {\n", obj.name)
+
+    for field in obj.fields {
+        s_type := extended_glsl_type_to_string(field.type); defer delete(s_type)
+        fmt.sbprintf(&builder, "\t%s %s;", s_type, field.name)
+    }
+
+    strings.write_string(&builder, "}\n")
+    return strings.to_string(builder)
+}
+
+destroy_shader_buffer_object :: proc(obj: ShaderBufferObject) {
+    delete(obj.name)
+    for field in obj.fields do destroy_extended_glsl_type_name_pair(field)
+    delete(obj.fields)
 }
 
 
 // Procs to handle shader fields, these deeply take ownership of input
 
-add_bindings_of_type :: proc(shader: ^ShaderInfo, type: BindingType, bindings: ..glsl_type_name_pair) -> (ok: bool) {
+add_bindings_of_type :: proc(shader: ^ShaderInfo, type: BindingType, buffer_objects: ..ShaderBufferObject) -> (ok: bool) {
 
-    exist_bindings: ^[dynamic]glsl_type_name_pair
+    exist_objects: ^[dynamic]ShaderBufferObject
     switch type {
-        case .UBO: exist_bindings = &shader.bindings.uniform_buffer_objects
-        case .SSBO: exist_bindings = &shader.bindings.shader_storage_buffer_objects
+        case .UBO: exist_objects = &shader.bindings.uniform_buffer_objects
+        case .SSBO: exist_objects = &shader.bindings.shader_storage_buffer_objects
     }
 
-    err := reserve(exist_bindings, len(bindings)); if err != mem.Allocator_Error.None {
+    err := reserve(exist_objects, len(buffer_objects)); if err != mem.Allocator_Error.None {
         dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate memory for bindings")
         return
     }
 
-    for binding in bindings {
-        for exist_binding in exist_bindings {
-            if strings.compare(binding.name, exist_binding.name) != 0 {
-                dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate binding name: %s", binding.name)
+    for buffer_object in buffer_objects {
+        for exist_object in exist_objects {
+            if strings.compare(buffer_object.name, exist_object.name) == 0 {
+                dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate binding name: %s", buffer_object.name)
                 return
             }
         }
 
-        append(exist_bindings, glsl_type_name_pair{ binding.type, strings.clone(binding.name) })
+        append(exist_objects, copy_shader_buffer_object(buffer_object))
     }
 
     ok = true
     return
 }
 
-add_layouts_of_type :: proc(shader: ^ShaderInfo, type: LayoutType, layouts: ..glsl_type_name_pair) -> (ok: bool) {
+add_layouts_of_type :: proc(shader: ^ShaderInfo, type: LayoutType, layouts: ..GLSLPair) -> (ok: bool) {
 
-    exist_layouts: ^[dynamic]glsl_type_name_pair
+    exist_layouts: ^[dynamic]GLSLPair
     switch type {
     case .INPUT: exist_layouts = &shader.layout.inputs
     case .OUTPUT: exist_layouts = &shader.layout.outputs
@@ -204,13 +288,13 @@ add_layouts_of_type :: proc(shader: ^ShaderInfo, type: LayoutType, layouts: ..gl
 
     for layout in layouts {
         for exist_layout in exist_layouts {
-            if strings.compare(layout.name, exist_layout.name) != 0 {
+            if strings.compare(layout.name, exist_layout.name) == 0 {
                 dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate layout name: %s", layout.name)
                 return
             }
         }
 
-        append(exist_layouts, glsl_type_name_pair{ layout.type, strings.clone(layout.name) })
+        append(exist_layouts, GLSLPair{ layout.type, strings.clone(layout.name) })
     }
 
     ok = true
@@ -446,13 +530,13 @@ build_shader_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (shade
     strings.write_string(&builder, "#version 430 core\n")
 
     for ssbo, i in shader_info.bindings.shader_storage_buffer_objects {
-        s_type := glsl_type_to_string(ssbo.type); defer delete(s_type)
-        fmt.sbprintfln(&builder, "layout (std430, binding = %d) buffer %s %s;", i, s_type, ssbo.name)
+        buf_str := shader_buffer_object_to_str(ssbo); defer delete(buf_str)
+        fmt.sbprintfln(&builder, "layout (std430, binding = %d) buffer %s", buf_str)
     }
 
     for ubo, i in shader_info.bindings.uniform_buffer_objects {
-        s_type := glsl_type_to_string(ubo.type); defer delete(s_type)
-        fmt.sbprintfln(&builder, "layout (std430, binding = %d) uniform %s %s;", i, s_type, ubo.name)
+        buf_str := shader_buffer_object_to_str(ubo); defer delete(buf_str)
+        fmt.sbprintfln(&builder, "layout (std430, binding = %d) uniform %s", buf_str)
     }
 
     for input, i in shader_info.layout.inputs {
@@ -482,7 +566,7 @@ build_shader_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (shade
 
     for function in shader_info.functions {
         strings.write_string(&builder, "\n")
-        if function.is_typed_source do strings.write_string(&builder, function.source)
+        if function.source_has_signature do strings.write_string(&builder, function.source)
         else {
             s_type := glsl_type_to_string(function.return_type); defer delete(s_type)
             fmt.sbprintf(&builder, "%s %s(", s_type, function.label)
@@ -624,7 +708,7 @@ glsl_data_type_to_str :: proc(type: GLSLDataType, loc: runtime.Source_Code_Locat
     }
 
     err: mem.Allocator_Error
-    result, err = strings.clone(result); if err != mem.Allocator_Error.None {
+    result, err = strings.clone(s_type); if err != mem.Allocator_Error.None {
         dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate type as string", loc=loc)
         result = strings.clone("*FAILED TO ALLOCATE*")  // Ignore err
     }

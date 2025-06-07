@@ -103,7 +103,9 @@ create_forward_lighting_shader :: proc(
     // Add input bindings
     shader.shader_layout_from_mesh_layout(&vertex, attribute_infos) or_return
 
-    // shader.add_ssbo_of_list_type(&frag, "lights_ssbo", ) // todo setup lights
+    light_struct := shader.ShaderStruct{ }
+
+    //shader.add_ssbo_of_list_type(&frag, "lights_ssbo", )
 
 
     vertex_main_source_builder := strings.builder_make(allocator)
@@ -111,9 +113,9 @@ create_forward_lighting_shader :: proc(
 
     // Add shader input/output for both vertex and fragment
     for attribute_info in attribute_infos {
-        input_pair := shader.glsl_type_name_pair{ shader.glsl_type_from_attribute(attribute_info) or_return, attribute_info.name}
-        shader.add_layouts(&vertex, { .OUTPUT, input_pair })
-        shader.add_layouts(&frag, { .INPUT, input_pair })
+        input_pair := shader.GLSLPair{ shader.glsl_type_from_attribute(attribute_info) or_return, attribute_info.name}
+        shader.add_layouts_of_type(&vertex, .OUTPUT, input_pair)
+        shader.add_layouts_of_type(&frag, .INPUT, input_pair)
 
         assign_to: string
 
@@ -149,7 +151,7 @@ create_forward_lighting_shader :: proc(
     shader.add_functions(&vertex, {
         return_type = shader.GLSLDataType.void,
         label = "main",
-        is_typed_source = true,
+        is_typed_source = false,
         source = strings.to_string(vertex_main_source_builder)
     })
 

@@ -33,6 +33,9 @@ forward_lighting_shader_test :: proc(t: ^testing.T) {
     s_frag, ok = shader.build_shader_source(frag, .FRAGMENT)
     testing.expect(t, ok)
 
+    log.infof("Vertex: %#v", s_vertex)
+    log.infof("Frag: %#v", s_frag)
+
     log.infof("Vertex: %#v", s_vertex.source.string_source)
     log.infof("Frag: %#v", s_frag.source.string_source)
 }
