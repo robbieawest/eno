@@ -187,6 +187,7 @@ copy_shader_function :: proc(func: ShaderFunction) -> ShaderFunction {
 }
 
 destroy_shader_function :: proc(function: ShaderFunction) {
+    for line in function.source do delete(line)
     delete(function.source)
     delete(function.label)
     for arg in function.arguments do destroy_glsl_pair(arg)
@@ -559,9 +560,9 @@ build_shader_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (shade
 
         fmt.sbprintf(&builder, ") {{\n")
         for line in function.source {
-            fmt.sbprintf(&builder, "\t%s\n")
+            fmt.sbprintf(&builder, "\t%s\n", line)
         }
-        fmt.sbprintf(&builder, "\n}}")
+        fmt.sbprintf(&builder, "}}")
     }
 
 

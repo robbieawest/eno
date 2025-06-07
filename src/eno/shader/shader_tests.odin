@@ -58,7 +58,7 @@ build_shader_source_test :: proc(t: ^testing.T) {
     testing.expect(t, ok, "ok check")
     log.infof("shader source out: %#v", shader_source)
 
-    log.info(shader_source.source)
+    log.info(shader_source.source.string_source)
 }
 
 
