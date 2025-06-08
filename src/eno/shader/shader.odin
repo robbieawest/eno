@@ -88,6 +88,17 @@ destroy_glsl_pair_extended :: proc(pair: ExtendedGLSLPair) {
     destroy_extended_glsl_type(pair.type)
 }
 
+destroy_glsl_pairs :: proc{ destroy_glsl_pairs_norm, destroy_glsl_pairs_extended }
+
+destroy_glsl_pairs_norm :: proc(pairs: []GLSLPair) {
+    for pair in pairs do destroy_glsl_pair_norm(pair)
+    delete(pairs)
+}
+
+destroy_glsl_pairs_extended :: proc(pairs: []ExtendedGLSLPair) {
+    for pair in pairs do destroy_glsl_pair_extended(pair)
+    delete(pairs)
+}
 
 // Shader Info
 
@@ -114,14 +125,9 @@ make_shader_info :: proc() -> ShaderInfo {
 destroy_shader_info :: proc(shader: ShaderInfo) {
     destroy_shader_bindings(shader.bindings)
 
-    for input in shader.inputs do destroy_glsl_pair(input)
-    delete(shader.inputs)
-
-    for output in shader.outputs do destroy_glsl_pair(output)
-    delete(shader.outputs)
-
-    for uniform in shader.uniforms do destroy_glsl_pair(uniform)
-    delete(shader.uniforms)
+    destroy_glsl_pairs(shader.inputs[:])
+    destroy_glsl_pairs(shader.outputs[:])
+    destroy_glsl_pairs(shader.uniforms[:])
 
     for shader_struct in shader.structs do destroy_shader_struct(shader_struct)
     delete(shader.structs)
@@ -151,7 +157,7 @@ copy_shader_struct :: proc(shader_struct: ShaderStruct) -> ShaderStruct {
 
 destroy_shader_struct :: proc(shader_struct: ShaderStruct) {
     delete(shader_struct.name)
-    for field in shader_struct.fields do destroy_glsl_pair(field)
+    destroy_glsl_pairs(shader_struct.fields)
 }
 
 
@@ -174,6 +180,11 @@ make_function_source :: proc(lines: []string) -> FunctionSource {
 }
 copy_function_source :: make_function_source
 
+destroy_function_source :: proc(source: FunctionSource) {
+    for line in source do delete(line)
+    delete(source)
+}
+
 make_shader_function :: proc(ret_type: GLSLType, label: string, source: FunctionSource, arguments: ..GLSLPair) -> (function: ShaderFunction) {
     return copy_shader_function(ShaderFunction{ ret_type, arguments, label, source })
 }
@@ -187,11 +198,9 @@ copy_shader_function :: proc(func: ShaderFunction) -> ShaderFunction {
 }
 
 destroy_shader_function :: proc(function: ShaderFunction) {
-    for line in function.source do delete(line)
-    delete(function.source)
+    destroy_function_source(function.source)
     delete(function.label)
-    for arg in function.arguments do destroy_glsl_pair(arg)
-    delete(function.arguments)
+    destroy_glsl_pairs(function.arguments)
 }
 
 //
@@ -241,8 +250,7 @@ shader_buffer_object_to_str :: proc(obj: ShaderBufferObject) -> (result: string)
 
 destroy_shader_buffer_object :: proc(obj: ShaderBufferObject) {
     delete(obj.name)
-    for field in obj.fields do destroy_glsl_pair(field)
-    delete(obj.fields)
+    destroy_glsl_pairs(obj.fields)
 }
 
 
@@ -433,8 +441,8 @@ Shader :: struct {
     source: ShaderSource
 }
 
-destroy_shader :: proc(shader: ^Shader) {
-    destroy_shader_source(&shader.source)
+destroy_shader :: proc(shader: Shader) {
+    destroy_shader_source(shader.source)
 }
 
 
@@ -444,7 +452,7 @@ ShaderSource :: struct {
     string_source: string
 }
 
-destroy_shader_source :: proc(source: ^ShaderSource) {
+destroy_shader_source :: proc(source: ShaderSource) {
     delete(source.string_source)
     destroy_shader_info(source.shader_info)
 }
@@ -466,9 +474,9 @@ init_shader_program:: proc(shader_sources: []Shader) -> (program: ShaderProgram)
     return
 }
 
-destroy_shader_program :: proc(program: ^ShaderProgram) {
+destroy_shader_program :: proc(program: ShaderProgram) {
     dbg.debug_point()
-    for &shader in program.shaders do destroy_shader(&shader)
+    for shader in program.shaders do destroy_shader(shader)
     delete(program.shaders)
 }
 

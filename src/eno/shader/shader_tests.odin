@@ -53,7 +53,7 @@ build_shader_source_test :: proc(t: ^testing.T) {
 
 
     shader_source, ok := build_shader_source(shader, .VERTEX)
-    defer destroy_shader(&shader_source)
+    defer destroy_shader(shader_source)
 
     testing.expect(t, ok, "ok check")
     log.infof("shader source out: %#v", shader_source)
@@ -65,7 +65,7 @@ build_shader_source_test :: proc(t: ^testing.T) {
 @(test)
 shader_read_test :: proc(t: ^testing.T) {
     program, ok := read_shader_source({ ShaderLanguage = .GLSL }, "resources/shaders/demo_shader")
-    defer destroy_shader_program(&program)
+    defer destroy_shader_program(program)
 
     testing.expect(t, ok, "ok check")
     nil_maybe: Maybe(u32)

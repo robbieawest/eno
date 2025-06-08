@@ -108,16 +108,17 @@ create_forward_lighting_shader :: proc(
     //shader.add_ssbo_of_list_type(&frag, "lights_ssbo", )
 
 
-    vertex_main_source_builder := strings.builder_make(allocator)
-    defer strings.builder_destroy(&vertex_main_source_builder)
+    vertex_source := make([dynamic]string)
+    defer shader.destroy_function_source(vertex_source[:])
 
     // Add shader input/output for both vertex and fragment
     for attribute_info in attribute_infos {
         input_pair := shader.GLSLPair{ shader.glsl_type_from_attribute(attribute_info) or_return, attribute_info.name}
-        shader.add_layouts_of_type(&vertex, .OUTPUT, input_pair)
-        shader.add_layouts_of_type(&frag, .INPUT, input_pair)
+        shader.add_outputs(&vertex, input_pair)
+        shader.add_inputs(&frag, input_pair)
 
         assign_to: string
+        defer delete(assign_to)
 
         if type, type_ok := input_pair.type.(shader.GLSLDataType); type_ok {
             // todo change usage of "position" and "normal" and make a standard for model loading and attribute names, with custom names as well
@@ -133,8 +134,7 @@ create_forward_lighting_shader :: proc(
         }
         if assign_to == "" do assign_to = strings.clone(attribute_info.name)
 
-        fmt.sbprintfln(&vertex_main_source_builder, "%s = %s;", input_pair.name, assign_to)
-        delete(assign_to)
+        utils.fmt_append(&vertex_source, "%s = %s;", input_pair.name, assign_to)
     }
 
     // Add vertex MVP uniforms
@@ -146,14 +146,10 @@ create_forward_lighting_shader :: proc(
     )
 
     // Add vertex main function
-    fmt.sbprintfln(&vertex_main_source_builder, "gl_Position = %s * %s * vec4(%s, 1.0)", PROJECTION_MATRIX_UNIFORM, VIEW_MATRIX_UNIFORM, "position")
+    utils.fmt_append(&vertex_source, "gl_Position = %s * %s * vec4(%s, 1.0);", PROJECTION_MATRIX_UNIFORM, VIEW_MATRIX_UNIFORM, "position")
 
-    shader.add_functions(&vertex, {
-        return_type = shader.GLSLDataType.void,
-        label = "main",
-        is_typed_source = false,
-        source = strings.to_string(vertex_main_source_builder)
-    })
+    main_func := shader.make_shader_function(.void, "main", vertex_source[:])
+    shader.add_functions(&vertex, main_func)
 
     ok = true
     return

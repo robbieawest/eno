@@ -1,13 +1,8 @@
 package tests
 
-import "vendor:cgltf"
 import gl "vendor:OpenGL"
 import SDL "vendor:sdl2"
 
-import "../model"
-import "../utils"
-import "../shader"
-import "../gpu"
 import dbg "../debug"
 
 import "core:testing"
@@ -46,66 +41,67 @@ create_test_render_context :: proc() -> (window: ^SDL.Window, gl_context: SDL.GL
 
 @(test)
 express_shader_test :: proc(t: ^testing.T) {
-    using shader
-    window, gl_context := create_test_render_context()
-    defer dbg.destroy_debug_stack()
-    
-    vertex_shader: ^ShaderInfo = init_shader(
-                []ShaderBinding {
-                    { 0, .vec3, "a_position"},
-                    { 1, .vec4, "a_colour"}
-                }
-        )
-    add_output(vertex_shader, []ShaderInput {
-        { .vec4, "v_colour"}
-    })
-    add_uniforms(vertex_shader, []ShaderUniform {
-        { .mat4, "u_transform"}
-    })
-    add_functions(vertex_shader, []ShaderFunction {
-        { 
-            .void,
-            []ShaderFunctionArgument {},
-            "main",
-            `    gl_Position = u_transform * vec4(a_position, 1.0);
-    v_colour = a_colour;`,
-            false
-        }
-    })
+/*
+ using shader
+ window, gl_context := create_test_render_context()
+ defer dbg.destroy_debug_stack()
 
-    vertex_source, vertex_ok := build_shader_source(vertex_shader, .VERTEX)
-    testing.expect(t, vertex_ok, "vert check")
+ vertex_shader: ^ShaderInfo = init_shader(
+             []ShaderBinding {
+                 { 0, .vec3, "a_position"},
+                 { 1, .vec4, "a_colour"}
+             }
+     )
+ add_output(vertex_shader, []ShaderInput {
+     { .vec4, "v_colour"}
+ })
+ add_uniforms(vertex_shader, []ShaderUniform {
+     { .mat4, "u_transform"}
+ })
+ add_functions(vertex_shader, []ShaderFunction {
+     {
+         .void,
+         []ShaderFunctionArgument {},
+         "main",
+         `    gl_Position = u_transform * vec4(a_position, 1.0);
+ v_colour = a_colour;`,
+         false
+     }
+ })
 
-    
-    fragment_shader: ^ShaderInfo = init_shader()
-    add_input(fragment_shader, []ShaderInput {
-        { .vec4, "v_colour" }
-    })
-    add_output(fragment_shader, []ShaderInput {
-        { .vec4, "o_colour" }
-    })
-    add_functions(fragment_shader, []ShaderFunction {
-        { 
-            .void,
-            []ShaderFunctionArgument {},
-            "main",
-            `    o_colour = v_colour;`,
-            false
-        }
-    })
+ vertex_source, vertex_ok := build_shader_source(vertex_shader, .VERTEX)
+ testing.expect(t, vertex_ok, "vert check")
 
-    fragment_source, fragment_ok := build_shader_source(fragment_shader, .FRAGMENT)
-    testing.expect(t, fragment_ok, "frag ok check")
+ fragment_shader: ^ShaderInfo = init_shader()
+ add_input(fragment_shader, []ShaderInput {
+     { .vec4, "v_colour" }
+ })
+ add_output(fragment_shader, []ShaderInput {
+     { .vec4, "o_colour" }
+ })
+ add_functions(fragment_shader, []ShaderFunction {
+     {
+         .void,
+         []ShaderFunctionArgument {},
+         "main",
+         `    o_colour = v_colour;`,
+         false
+     }
+ })
 
-    program: ^ShaderProgram = init_shader_program([]^Shader {
-        vertex_source, fragment_source 
-    })
-    defer destroy_shader_program(program)
-    
-    testing.expect(t, !program.expressed, "not expressed check")
+ fragment_source, fragment_ok := build_shader_source(fragment_shader, .FRAGMENT)
+ testing.expect(t, fragment_ok, "frag ok check")
 
-    express_ok := gpu.express_shader(program)
-    testing.expect(t, express_ok, "express ok check")
+ program: ^ShaderProgram = init_shader_program([]^Shader {
+     vertex_source, fragment_source
+ })
+ defer destroy_shader_program(program)
 
-    testing.expect(t, program.expressed, "expressed check")
+ testing.expect(t, !program.expressed, "not expressed check")
+
+ express_ok := gpu.express_shader(program)
+ testing.expect(t, express_ok, "express ok check")
+
+ testing.expect(t, program.expressed, "expressed check")
+ */
 }

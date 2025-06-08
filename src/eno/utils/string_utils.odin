@@ -160,6 +160,11 @@ concat_cstr :: proc(string_inp: ..cstring) -> cstring {
     return strings.to_cstring(&builder)
 }
 
+fmt_append :: proc(arr: ^[dynamic]string, fmt_str: string, args: ..any) {
+    new_str := fmt.aprintf(fmt_str, ..args)
+    append(arr, new_str)
+}
+
 /*
 MAX_KEY_BYTES :: 256
 @(deprecated="Ass procedure, use string_from_builder instead")

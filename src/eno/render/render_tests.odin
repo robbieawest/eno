@@ -25,7 +25,7 @@ forward_lighting_shader_test :: proc(t: ^testing.T) {
     testing.expect(t, ok)
 
     s_vertex: shader.Shader; s_frag: shader.Shader;
-    defer { shader.destroy_shader(&s_vertex); shader.destroy_shader(&s_frag) }
+    defer { shader.destroy_shader(s_vertex); shader.destroy_shader(s_frag) }
 
     s_vertex, ok = shader.build_shader_source(vertex, .VERTEX)
     testing.expect(t, ok)

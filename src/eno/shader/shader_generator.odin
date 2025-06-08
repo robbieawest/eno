@@ -25,6 +25,7 @@ shader_layout_from_mesh :: proc(shader: ^ShaderInfo, mesh: model.Mesh) -> (ok: b
 shader_layout_from_mesh_layout :: proc(shader: ^ShaderInfo, layout: model.VertexLayout) -> (ok: bool) {
     n_Attributes := len(layout)
     new_inputs := make([dynamic]GLSLPair, n_Attributes)
+    defer destroy_glsl_pairs(new_inputs[:])
 
     for i: uint = 0; i < uint(n_Attributes); i += 1 {
         glsl_type := glsl_type_from_attribute(layout[i]) or_return
