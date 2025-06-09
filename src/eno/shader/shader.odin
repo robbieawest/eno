@@ -13,6 +13,7 @@ import "core:fmt"
 import "core:reflect"
 import "core:slice"
 import "core:os"
+import "core:log"
 import glm "core:math/linalg/glsl"
 
 /*
@@ -22,27 +23,29 @@ import glm "core:math/linalg/glsl"
         Control for shader version
 */
 
-
+ShaderStructID :: string
 
 // Defines a generalized shader structure which then compiles using the given render API
 GLSLType :: union #no_nil {
-    ^ShaderStruct,  // References a shader struct, therefore no ownership assumed
+    ShaderStructID,  // References a shader struct, therefore no ownership assumed
     GLSLDataType,
 }
 
 ExtendedGLSLType :: union #no_nil {
-    ^ShaderStruct,
+    ShaderStructID,
     GLSLDataType,
-    ^GLSLFixedArray,  // Assumes ownership
-    ^GLSLVariableArray  // Assumes ownership
+    GLSLFixedArray,
+    GLSLVariableArray
 }
 
+/*
 destroy_extended_glsl_type :: proc(type: ExtendedGLSLType) {
     #partial switch v in type {
-        case ^GLSLFixedArray: free(v)
-        case ^GLSLVariableArray: free(v)
+        case GLSLFixedArray: free(v)
+        case GLSLVariableArray: free(v)
     }
 }
+*/
 
 
 GLSLFixedArray :: struct {
@@ -85,7 +88,7 @@ copy_extended_glsl_pair :: proc(pair: ExtendedGLSLPair) -> ExtendedGLSLPair {
 @(private)
 destroy_glsl_pair_extended :: proc(pair: ExtendedGLSLPair) {
     delete(pair.name)
-    destroy_extended_glsl_type(pair.type)
+    // destroy_extended_glsl_type(pair.type)
 }
 
 destroy_glsl_pairs :: proc{ destroy_glsl_pairs_norm, destroy_glsl_pairs_extended }
@@ -143,16 +146,16 @@ ShaderStruct :: struct {
     fields: []ExtendedGLSLPair
 };
 
-make_shader_struct :: proc(name: string, fields: []ExtendedGLSLPair) -> ShaderStruct {
+make_shader_struct :: proc(name: string, fields: ..ExtendedGLSLPair) -> ShaderStruct {
     new_fields := make([]ExtendedGLSLPair, len(fields))
     for i := 0; i < len(fields); i += 1 {
         new_fields[i] = copy_extended_glsl_pair(fields[i])
     }
-    return ShaderStruct{ name, new_fields }
+    return ShaderStruct{ strings.clone(name), new_fields }
 }
 
 copy_shader_struct :: proc(shader_struct: ShaderStruct) -> ShaderStruct {
-    return make_shader_struct(shader_struct.name, shader_struct.fields)
+    return make_shader_struct(shader_struct.name, ..shader_struct.fields)
 }
 
 destroy_shader_struct :: proc(shader_struct: ShaderStruct) {
@@ -235,17 +238,18 @@ copy_shader_buffer_object :: proc(obj: ShaderBufferObject) -> ShaderBufferObject
     return ShaderBufferObject{ strings.clone(obj.name), new_fields }
 }
 
-shader_buffer_object_to_str :: proc(obj: ShaderBufferObject) -> (result: string) {
+shader_buffer_object_to_str :: proc(shader_info: ShaderInfo, obj: ShaderBufferObject) -> (result: string, ok: bool) {
     builder := strings.builder_make()
-    fmt.sbprintf(&builder, "%s {\n", obj.name)
+    fmt.sbprintf(&builder, "%s {{\n", obj.name)
 
     for field in obj.fields {
-        s_type := extended_glsl_type_to_string(field.type); defer delete(s_type)
+        s_type := extended_glsl_type_to_string(shader_info, field.type) or_return
+        defer delete(s_type)
         fmt.sbprintf(&builder, "\t%s %s;", s_type, field.name)
     }
 
-    strings.write_string(&builder, "}\n")
-    return strings.to_string(builder)
+    strings.write_string(&builder, "\n}")
+    return strings.to_string(builder), true
 }
 
 destroy_shader_buffer_object :: proc(obj: ShaderBufferObject) {
@@ -360,7 +364,7 @@ add_structs :: proc(shader: ^ShaderInfo, structs: ..ShaderStruct) -> (ok: bool) 
     }
 
     for shader_struct in structs {
-        err = add_struct(shader, shader_struct); if err != mem.Allocator_Error.None {
+        ok = add_struct(shader, shader_struct); if !ok {
             dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate structs")
             return
         }
@@ -371,8 +375,7 @@ add_structs :: proc(shader: ^ShaderInfo, structs: ..ShaderStruct) -> (ok: bool) 
 }
 
 @(private)
-add_struct :: proc(shader: ^ShaderInfo, new_struct: ShaderStruct) -> (err: mem.Allocator_Error) {
-    new_struct := new_struct
+add_struct :: proc(shader: ^ShaderInfo, new_struct: ShaderStruct) -> (ok: bool) {
 
     for shader_struct in shader.structs {
         if strings.compare(shader_struct.name, new_struct.name) == 0 {
@@ -381,14 +384,9 @@ add_struct :: proc(shader: ^ShaderInfo, new_struct: ShaderStruct) -> (err: mem.A
         }
     }
 
-    new_struct.name = strings.clone(new_struct.name)
-    for &struct_field in new_struct.fields {
-        struct_field.name = struct_field.name
-    }
+    _, err := append(&shader.structs, new_struct)
 
-    _ = append(&shader.structs, new_struct) or_return
-
-    return
+    return err == .None
 }
 
 
@@ -419,7 +417,7 @@ add_function :: proc(shader: ^ShaderInfo, new_function: ShaderFunction) -> (ok: 
     }
 
     _, err := append(&shader.functions, new_function)
-    return err == mem.Allocator_Error.None
+    return err == .None
 }
 
 //
@@ -518,36 +516,52 @@ build_shader_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (shade
     }
 
     strings.write_string(&builder, "#version 430 core\n")
+    strings.write_string(&builder, "\n")
 
     for ssbo, i in shader_info.bindings.shader_storage_buffer_objects {
-        buf_str := shader_buffer_object_to_str(ssbo); defer delete(buf_str)
-        fmt.sbprintfln(&builder, "layout (std430, binding = %d) buffer %s", buf_str)
+        buf_str := shader_buffer_object_to_str(shader_info, ssbo) or_return
+        defer delete(buf_str)
+        fmt.sbprintfln(&builder, "layout (std430, binding = %d) buffer %s", i, buf_str)
+        strings.write_string(&builder, "\n")
     }
 
     for ubo, i in shader_info.bindings.uniform_buffer_objects {
-        buf_str := shader_buffer_object_to_str(ubo); defer delete(buf_str)
+        buf_str := shader_buffer_object_to_str(shader_info, ubo) or_return
+        defer delete(buf_str)
+
         fmt.sbprintfln(&builder, "layout (std430, binding = %d) uniform %s", buf_str)
+        strings.write_string(&builder, "\n")
     }
 
     for input, i in shader_info.inputs {
-        s_type := glsl_type_to_string(input.type); defer delete(s_type)
+        s_type := glsl_type_to_string(shader_info, input.type) or_return
+        defer delete(s_type)
         fmt.sbprintfln(&builder, "layout (std430, location = %d) in %s %s;", i, s_type, input.name)
     }
 
+    strings.write_string(&builder, "\n")
+
     for output, i in shader_info.outputs {
-        s_type := glsl_type_to_string(output.type); defer delete(s_type)
+        s_type := glsl_type_to_string(shader_info, output.type) or_return
+        defer delete(s_type)
         fmt.sbprintfln(&builder, "layout (std430, location = %d) out %s %s;", i, s_type, output.name)
     }
 
+    strings.write_string(&builder, "\n")
+
     for uniform in shader_info.uniforms {
-        s_type := glsl_type_to_string(uniform.type); defer delete(s_type)
+        s_type := glsl_type_to_string(shader_info, uniform.type) or_return
+        defer delete(s_type)
         fmt.sbprintfln(&builder, "uniform %s %s;", s_type, uniform.name)
     }
+
+    strings.write_string(&builder, "\n")
 
     for struct_definition in shader_info.structs {
         fmt.sbprintfln(&builder, "struct %s {{", struct_definition.name)
         for field in struct_definition.fields {
-            s_type := extended_glsl_type_to_string(field.type); defer delete(s_type)
+            s_type := extended_glsl_type_to_string(shader_info, field.type) or_return
+            defer delete(s_type)
             fmt.sbprintfln(&builder, "\t%s %s;", s_type, field.name)
         }
         fmt.sbprintfln(&builder, "}};")
@@ -556,12 +570,14 @@ build_shader_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (shade
 
     for function in shader_info.functions {
         strings.write_string(&builder, "\n")
-        s_type := glsl_type_to_string(function.return_type); defer delete(s_type)
-
+        s_type := glsl_type_to_string(shader_info, function.return_type) or_return
+        defer delete(s_type)
 
         fmt.sbprintf(&builder, "%s %s(", s_type, function.label)
         for argument, i in function.arguments {
-            s_arg_type := glsl_type_to_string(argument.type); defer delete(s_type)
+            s_arg_type := glsl_type_to_string(shader_info, argument.type) or_return
+            defer delete(s_arg_type)
+
             fmt.sbprintf(&builder, "%s %s", s_arg_type, argument.name)
             if i != len(function.arguments) - 1 do strings.write_string(&builder, ",")
         }
@@ -656,19 +672,35 @@ typeid_to_glsl_type :: proc(type: typeid) -> (glsl_type: GLSLDataType, ok: bool)
     return
 }
 
+@(private)
+shader_struct_id_to_string :: proc(shader_info: ShaderInfo, id: ShaderStructID, loc := #caller_location) -> (result: string, ok: bool) {
+    shader_struct: Maybe(ShaderStruct)
+    for exist_struct in shader_info.structs {
+        if strings.compare(exist_struct.name, id) == 0 {
+            shader_struct = exist_struct
+        }
+    }
+
+    if shader_struct == nil {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Shader struct identifier does not match with a struct in the shader info: %s", id)
+        return
+    }
+    return shader_struct_out_name(shader_struct.(ShaderStruct), loc), true
+}
 
 /*
     Returns allocation ownership, caller is responsible for the deallocation
 */
-glsl_type_to_string :: proc(type: GLSLType, loc := #caller_location) -> (result: string) {
+glsl_type_to_string :: proc(shader_info: ShaderInfo, type: GLSLType, loc := #caller_location) -> (result: string, ok: bool) {
 
     switch v in type {
-        case ^ShaderStruct:
-            result = shader_struct_to_str(v, loc)
+        case ShaderStructID:
+            result = shader_struct_id_to_string(shader_info, v, loc) or_return
         case GLSLDataType:
             result = glsl_data_type_to_str(v, loc)
     }
 
+    ok = true
     return
 }
 
@@ -676,21 +708,25 @@ glsl_type_to_string :: proc(type: GLSLType, loc := #caller_location) -> (result:
 /*
     Returns allocation ownership, caller is responsible for the deallocation
 */
-extended_glsl_type_to_string :: proc(type: ExtendedGLSLType, loc := #caller_location) -> (result: string) {
+extended_glsl_type_to_string :: proc(shader_info: ShaderInfo, type: ExtendedGLSLType, loc := #caller_location) -> (result: string, ok: bool) {
 
     switch v in type {
-        case ^ShaderStruct:
-            result = shader_struct_to_str(v, loc)
+        case ShaderStructID:
+            result = shader_struct_id_to_string(shader_info, v) or_return
         case GLSLDataType:
             result = glsl_data_type_to_str(v, loc)
-        case ^GLSLFixedArray:
-            s_type := glsl_type_to_string(v.type, loc); defer delete(s_type)
+        case GLSLFixedArray:
+            s_type := glsl_type_to_string(shader_info, v.type, loc) or_return
+            defer delete(s_type)
+
             result = fmt.aprintf("%s[%d]", s_type, v.size)  // This allocates
-        case ^GLSLVariableArray:
-            s_type := glsl_type_to_string(v.type, loc); defer delete(s_type)
+        case GLSLVariableArray:
+            s_type := glsl_type_to_string(shader_info, v.type, loc) or_return
+            defer delete(s_type)
             result = utils.concat(s_type, "[]")  // This allocates
     }
 
+    ok = true
     return
 }
 
@@ -711,7 +747,7 @@ glsl_data_type_to_str :: proc(type: GLSLDataType, loc: runtime.Source_Code_Locat
 }
 
 @(private)
-shader_struct_to_str :: proc(shader_struct: ^ShaderStruct, loc: runtime.Source_Code_Location) -> (result: string) {
+shader_struct_out_name :: proc(shader_struct: ShaderStruct, loc: runtime.Source_Code_Location) -> (result: string) {
     err: mem.Allocator_Error
     result, err = strings.clone(shader_struct.name); if err != mem.Allocator_Error.None {
         dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate type as string", loc=loc)

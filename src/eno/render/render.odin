@@ -103,9 +103,20 @@ create_forward_lighting_shader :: proc(
     // Add input bindings
     shader.shader_layout_from_mesh_layout(&vertex, attribute_infos) or_return
 
-    light_struct := shader.ShaderStruct{ }
+    light_struct := shader.make_shader_struct("Light",
+        { shader.GLSLDataType.vec3, "colour", }, { shader.GLSLDataType.vec3, "position" }
+    )
+    shader.add_structs(&frag, light_struct)
 
-    //shader.add_ssbo_of_list_type(&frag, "lights_ssbo", )
+    shader.add_bindings_of_type(&frag, .SSBO, {
+        "lights",
+        []shader.ExtendedGLSLPair{
+            {
+                shader.GLSLVariableArray { "Light" },
+                "lights"
+            }
+        }
+    })
 
 
     vertex_source := make([dynamic]string)
