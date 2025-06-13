@@ -1071,6 +1071,7 @@ handle_shader_read_error :: proc(filepath: string, err: utils.FileError, loc := 
 */
 
 
+@(deprecated="Should be in transfer")
 attach_program :: proc(program: ShaderProgram, loc := #caller_location) {
     if program_id, id_ok := utils.unwrap_maybe(program.id); !id_ok {
         dbg.debug_point(dbg.LogLevel.INFO, "Shader program not yet created")
