@@ -27,10 +27,10 @@ forward_lighting_shader_test :: proc(t: ^testing.T) {
     s_vertex: shader.Shader; s_frag: shader.Shader;
     defer { shader.destroy_shader(s_vertex); shader.destroy_shader(s_frag) }
 
-    s_vertex, ok = shader.build_shader_source(vertex, .VERTEX)
+    s_vertex, ok = shader.supply_shader_source(vertex, .VERTEX)
     testing.expect(t, ok)
 
-    s_frag, ok = shader.build_shader_source(frag, .FRAGMENT)
+    s_frag, ok = shader.supply_shader_source(frag, .FRAGMENT)
     testing.expect(t, ok)
 
     log.infof("Vertex: %#v", s_vertex)

@@ -445,7 +445,7 @@ destroy_shader :: proc(shader: Shader) {
 
 
 ShaderSource :: struct {
-    is_available: bool,
+    is_available_as_string: bool,
     shader_info: ShaderInfo,
     string_source: string
 }
@@ -460,21 +460,30 @@ ShaderIdentifier :: Maybe(u32)
 
 ShaderProgram :: struct {
     id: ShaderIdentifier,
-    shaders: [dynamic]Shader,
+    shaders: map[ShaderType]Shader,  // Although it is possible to add more than one shader of each type, adding support really doesn't mean anything
     uniform_cache: ShaderUniformCache
 }
 
-
-@(private)
-init_shader_program:: proc(shader_sources: []Shader) -> (program: ShaderProgram) {
+// Does not copy incoming shaders
+make_shader_program:: proc(shaders: []Shader) -> (program: ShaderProgram) {
     dbg.debug_point()
-    append_elems(&program.shaders, ..shader_sources)
+    add_shaders_to_program(&program, shaders)
     return
+}
+
+// Does not copy incoming shaders
+add_shaders_to_program :: proc(program: ^ShaderProgram, shaders: []Shader) {
+    dbg.debug_point()
+    for shader in shaders {
+        if shader.type in program.shaders {
+            dbg.debug_point(dbg.LogLevel.WARN, "Shader of existing type attempted to be added to program, ignoring")
+        } else do program.shaders[shader.type] = shader
+    }
 }
 
 destroy_shader_program :: proc(program: ShaderProgram) {
     dbg.debug_point()
-    for shader in program.shaders do destroy_shader(shader)
+    for _, shader in program.shaders do destroy_shader(shader)
     delete(program.shaders)
 }
 
@@ -503,16 +512,26 @@ conv_gl_shader_type :: proc(type: ShaderType) -> gl.Shader_Type {  // Likely cou
     return .NONE
 }
 
+
+// Does not copy incoming shader_info
+build_shader_from_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (shader: Shader, ok: bool) {
+    shader.source.shader_info = shader_info
+    ok = supply_shader_source(&shader)
+    return
+}
+
 /*
     Builds/Deserializes the source as a single string with newlines
     Uses glsl version 430 core
 */
-build_shader_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (shader: Shader, ok: bool) {
+supply_shader_source :: proc(shader: ^Shader) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Building Shader Source")
+    shader_info := shader.source.shader_info
+    type := shader.type
 
     builder, err := strings.builder_make(); if err != mem.Allocator_Error.None {
         dbg.debug_point(dbg.LogLevel.ERROR, "Allocator error while building shader source")
-        return shader, ok
+        return
     }
 
     strings.write_string(&builder, "#version 430 core\n")
@@ -590,10 +609,10 @@ build_shader_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (shade
     }
 
 
-    shader.source = ShaderSource{ true, shader_info, strings.to_string(builder)}
-    shader.type = type
+    shader.source.string_source = strings.to_string(builder)
+    shader.source.is_available_as_string = true
 
-    return shader, true
+    return true
 }
 
 // ToDo support for const
@@ -771,10 +790,12 @@ express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
     shader_ids := make([dynamic]u32, len(program.shaders))
     defer delete(shader_ids)
 
-    for shader, i in program.shaders {
+    i := 0
+    for _, shader in program.shaders {
         dbg.debug_point(dbg.LogLevel.INFO, "Expressing source")
-        if !shader.source.is_available {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Could not express shader %#v, string source has not yet been built", shader)
+        if !shader.source.is_available_as_string || len(shader.source.string_source) == 0 {
+            dbg.debug_point(dbg.LogLevel.INFO, "Shader source was not provided prior to express_shader, building new")
+            supply_shader_source(&shader)
             continue
         }
 
@@ -842,7 +863,7 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
 
         if flags.Parse {
             shader.source.shader_info = parse_shader_source(shader.source.string_source, flags) or_return
-            shader.source.is_available = true
+            shader.source.is_available_as_string = true
         }
 
         ok = true
@@ -898,7 +919,7 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
         dbg.debug_point(dbg.LogLevel.ERROR, "Failed to read any shader file sources")
     }
 
-    program = init_shader_program(shader_sources[:])
+    program = make_shader_program(shader_sources[:])
     if flags.Express {
         express_shader(&program)
     }

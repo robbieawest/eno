@@ -52,7 +52,7 @@ build_shader_source_test :: proc(t: ^testing.T) {
     add_functions(&shader, main_func)
 
 
-    shader_source, ok := build_shader_source(shader, .VERTEX)
+    shader_source, ok := supply_shader_source(shader, .VERTEX)
     defer destroy_shader(shader_source)
 
     testing.expect(t, ok, "ok check")
