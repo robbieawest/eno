@@ -4,6 +4,7 @@ import "../ecs"
 import "../model"
 import "../shader"
 import "../utils"
+import dbg "../debug"
 
 import glm "core:math/linalg/glsl"
 import "core:strings"
@@ -94,7 +95,7 @@ MaterialModel :: enum {
 */
 create_forward_lighting_shader :: proc(
     attribute_infos: model.VertexLayout,
-    material_infos: model.MaterialPropertiesInfos,
+    material: model.Material,
     lighting_model: LightingModel,
     material_model: MaterialModel,
     allocator := context.allocator
@@ -103,6 +104,7 @@ create_forward_lighting_shader :: proc(
     // Add input bindings
     shader.shader_layout_from_mesh_layout(&vertex, attribute_infos) or_return
 
+    //Lights
     light_struct := shader.make_shader_struct("Light",
         { shader.GLSLDataType.vec3, "colour", }, { shader.GLSLDataType.vec3, "position" }
     )
@@ -161,6 +163,35 @@ create_forward_lighting_shader :: proc(
 
     main_func := shader.make_shader_function(.void, "main", vertex_source[:])
     shader.add_functions(&vertex, main_func)
+
+    // Frag uniforms
+    if .NORMAL_TEXTURE not_in material.properties {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Normal map must be available in the material for lighting")
+        return
+    }
+
+    if .PBR_METALLIC_ROUGHNESS not_in material.properties {
+        dbg.debug_point(dbg.LogLevel.ERROR, "PBR Metallic Roughness map must be available in the material for lighting")
+        return
+    }
+
+    uniforms := make([dynamic]shader.GLSLPair); defer shader.destroy_glsl_pairs(uniforms[:])
+
+    append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, model.BASE_COLOR })  // base colour comes from pbrMetallicRoughness
+    append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, model.PBR_METALLIC_ROUGHNESS })
+    append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, model.NORMAL_TEXTURE })
+
+    inc_emissive_texture := .EMISSIVE_TEXTURE in material.properties
+    inc_occlusion_texture := .OCCLUSION_TEXTURE in material.properties
+
+    if inc_emissive_texture {
+        append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, model.EMISSIVE_TEXTURE })
+        append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.vec3, model.EMISSIVE_FACTOR })
+    }
+
+    if inc_occlusion_texture do append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, model.OCCLUSION_TEXTURE })
+
+
 
     ok = true
     return

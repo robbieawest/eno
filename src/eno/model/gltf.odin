@@ -11,10 +11,17 @@ import "core:strings"
 import "core:fmt"
 
 DEFAULT_OPTIONS: cgltf.options
-load_gltf_mesh :: proc(model_name: string) -> (data: ^cgltf.data, result: cgltf.result){
+load_gltf_mesh_primitives :: proc(model_name: string) -> (data: ^cgltf.data, result: cgltf.result){
+    result = .io_error
+
+    if strings.contains_any(model_name, "/\\.") {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Do not include slashes or dots in the model(s) path")
+        return
+    }
+
     model_name := strings.clone_to_cstring(model_name)
     defer delete(model_name)
-    
+
     model_path := fmt.caprintf("resources/models/%s/glTF/%s.gltf", model_name, model_name)
     dbg.debug_point(dbg.LogLevel.INFO, "Reading gltf mesh. Path: \"%s\"", model_path)
 
@@ -22,15 +29,15 @@ load_gltf_mesh :: proc(model_name: string) -> (data: ^cgltf.data, result: cgltf.
 
     if result != .success {
         dbg.debug_point(dbg.LogLevel.ERROR, "Unable to load gltf mesh. Path: \"%s\"", model_path)
-        return nil, result
+        return
     }
     if result = cgltf.load_buffers(DEFAULT_OPTIONS, data, model_path); result != .success {
         dbg.debug_point(dbg.LogLevel.ERROR, "Unable to load default buffers for gltf mesh. Path: \"%s\"", model_path)
-        return nil, result
+        return
     }
     if result = cgltf.validate(data); result != .success {
         dbg.debug_point(dbg.LogLevel.ERROR, "Unable to validate imported data for gltf mesh. Path: \"%s\"", model_path)
-        return nil, result
+        return
     }
     
     return data, .success
@@ -39,7 +46,7 @@ load_gltf_mesh :: proc(model_name: string) -> (data: ^cgltf.data, result: cgltf.
 
 @(test)
 load_model_test :: proc(t: ^testing.T) {
-    data, result := load_gltf_mesh("SciFiHelmet")
+    data, result := load_gltf_mesh_primitives("SciFiHelmet")
     defer cgltf.free(data)
 
     testing.expect_value(t, result, cgltf.result.success)
@@ -52,13 +59,16 @@ load_model_test :: proc(t: ^testing.T) {
 /*
     Gives an eno mesh for each primitive in the cgltf "mesh"
 */
-extract_cgltf_mesh :: proc(mesh: cgltf.mesh) -> (result: []Mesh, ok: bool) {
+extract_model :: proc(mesh: cgltf.mesh) -> (model: Model, ok: bool) {
     //This is assuming all mesh attributes (aside from indices) have the same count (for each primitive/mesh output)
 
-    mesh_data := make([dynamic]Mesh, len(mesh.primitives))
+    meshes := make([dynamic]Mesh, len(mesh.primitives))
 
     for primitive, i in mesh.primitives {
-        mesh_ret := &mesh_data[i]
+        mesh_ret := &meshes[i]
+
+        // Set material properties
+        mesh_ret.material = eno_material_from_cgltf_material(primitive.material^)
 
         // Construct layout
         for attribute in primitive.attributes {
@@ -90,7 +100,7 @@ extract_cgltf_mesh :: proc(mesh: cgltf.mesh) -> (result: []Mesh, ok: bool) {
             count := accessor.count
             if element_count_throughout != 0 && count != element_count_throughout {
                 dbg.debug_point(dbg.LogLevel.ERROR, "Attributes/accessors of mesh primitive must contain the same count/number of elements")
-                return result, false
+                return
             } else if element_count_throughout == 0 {
                 // Initializes vertex data for entire mesh
                 utils.append_n(&mesh_ret.vertex_data, float_stride * u32(count))
@@ -117,7 +127,7 @@ extract_cgltf_mesh :: proc(mesh: cgltf.mesh) -> (result: []Mesh, ok: bool) {
     }
 
     ok = true
-    result = mesh_data[:]
+    model = { meshes }
     return
 }
 
@@ -144,11 +154,6 @@ extract_index_data_from_mesh :: proc(mesh: cgltf.mesh) -> (result: []IndexData, 
     }
 
     return index_data[:], true
-}
-
-
-extract_texture_data_from_mesh :: proc(mesh: cgltf.mesh) {
-  //  mesh.primitives[0].material. todo
 }
 
 
@@ -179,25 +184,25 @@ convert_component_type :: proc(type: cgltf.component_type) -> (ret: MeshComponen
 
 @(test)
 extract_vertex_data_test :: proc(t: ^testing.T) {
-    data, result := load_gltf_mesh("SciFiHelmet")
+    data, result := load_gltf_mesh_primitives("SciFiHelmet")
     defer cgltf.free(data)
 
     //Expected usage is defined here.
     //destroy_mesh does not clean up the vertex_layout, so you must do it yourself if you allocate a VertexLayout
 
 
-    res, ok := extract_cgltf_mesh(data.meshes[0])
-    defer for &mesh in res do destroy_mesh(&mesh)
+    res, ok := extract_model(data.meshes[0])
+    defer for &mesh in res.meshes do destroy_mesh(&mesh)
 
     testing.expect(t, ok, "ok check")
-    testing.expect_value(t, 70074, len(res[0].vertex_data) / 12)
-    log.infof("meshes size: %d, mesh components: %#v, len mesh vertices: %d", len(res), res[0].layout, len(res[0].vertex_data) / 12)
+    testing.expect_value(t, 70074, len(res.meshes[0].vertex_data) / 12)
+    log.infof("meshes size: %d, mesh components: %#v, len mesh vertices: %d", len(res.meshes), res.meshes[0].layout, len(res.meshes[0].vertex_data) / 12)
 }
 
 
 @(test)
 extract_index_data_test :: proc(t: ^testing.T) {
-    data, result := load_gltf_mesh("SciFiHelmet")
+    data, result := load_gltf_mesh_primitives("SciFiHelmet")
 
     res, ok := extract_index_data_from_mesh(data.meshes[0])
     defer for &index_data in res do delete(index_data)
@@ -207,8 +212,8 @@ extract_index_data_test :: proc(t: ^testing.T) {
 }
 
 
-load_and_extract_meshes :: proc(model_name: string) -> (meshes: [dynamic]Mesh, ok: bool) {
-    gltf_data, result := load_gltf_mesh(model_name)
+load_and_extract_meshes :: proc(path: string) -> (meshes: [dynamic]Mesh, ok: bool) {
+    gltf_data, result := load_gltf_mesh_primitives(path)
 
     if result != .success {
         dbg.debug_point(dbg.LogLevel.ERROR, "Unsuccessful attempt at loading model")
@@ -224,18 +229,18 @@ load_and_extract_meshes :: proc(model_name: string) -> (meshes: [dynamic]Mesh, o
     indices_dyna := make([dynamic]IndexData)
     for mesh in gltf_data.meshes {
         indices_got, indices_ok := extract_index_data_from_mesh(mesh); if !indices_ok do return
-        meshes_got, meshes_ok := extract_cgltf_mesh(mesh); if !meshes_ok do return
+        model_got, meshes_ok := extract_model(mesh); if !meshes_ok do return
 
-        if len(indices_got) != len(meshes_got) {
+        if len(indices_got) != len(model_got.meshes) {
             dbg.debug_point(dbg.LogLevel.INFO, "Indices do not match meshes")
             return
         }
 
         for i := 0; i < len(indices_got); i += 1 {
-            meshes_got[i].index_data = indices_got[i]
+            model_got.meshes[i].index_data = indices_got[i]
         }
 
-        append_elems(&meshes_dyna, ..meshes_got)
+        append_elems(&meshes_dyna, ..model_got.meshes[:])
     }
 
 

@@ -2,6 +2,7 @@ package ecs
 
 import dbg "../debug"
 import cam "../camera"
+import "../model"
 
 import "core:mem"
 import "core:slice"
@@ -122,10 +123,18 @@ archetype_get_component_data_from_column :: proc(archetype: ^Archetype, componen
 }
 
 
-scene_add_archetype :: proc(scene: ^Scene, new_label: string, components_allocator: mem.Allocator, component_infos: ..ComponentInfo) -> (ret: ^Archetype, ok: bool) {
-    dbg.debug_point(dbg.LogLevel.INFO, "New archetype in scene: %s", new_label)
+scene_add_default_archetype :: proc(scene: ^Scene, label: string, allocator := context.allocator) -> (ret: ^Archetype, ok: bool) {
+    dbg.debug_point(dbg.LogLevel.INFO, "Adding default archetype of name: %s",  label)
+    return scene_add_archetype(scene, label,
+        make_component_info(model.Model, MODEL_COMPONENT),
+        make_component_info(WorldComponent, WORLD_COMPONENT), allocator = allocator
+    )
+}
 
-    duplicate_archetype := new_label in scene.archetype_label_match
+scene_add_archetype :: proc(scene: ^Scene, label: string, component_infos: ..ComponentInfo, allocator := context.allocator) -> (ret: ^Archetype, ok: bool) {
+    dbg.debug_point(dbg.LogLevel.INFO, "New archetype in scene: %s",  label)
+
+    duplicate_archetype :=  label in scene.archetype_label_match
     if duplicate_archetype {
         dbg.debug_point(dbg.LogLevel.ERROR, "Attempted to create archetype with a duplicate label")
         return
@@ -138,7 +147,7 @@ scene_add_archetype :: proc(scene: ^Scene, new_label: string, components_allocat
     }
     archetype.component_info.component_infos = slice.clone(component_infos)
 
-    archetype.components_allocator = components_allocator 
+    archetype.components_allocator = allocator
     archetype.n_Components = u32(len(component_infos))
     archetype.components = make([dynamic][dynamic]byte, len(component_infos))
 
@@ -149,12 +158,12 @@ scene_add_archetype :: proc(scene: ^Scene, new_label: string, components_allocat
             return
         }
 
-        archetype.components[i] = make([dynamic]byte, 0, ARCHETYPE_INITIAL_ENTITIES_CAPACITTY * component_info.size, components_allocator)
+        archetype.components[i] = make([dynamic]byte, 0, ARCHETYPE_INITIAL_ENTITIES_CAPACITTY * component_info.size, allocator)
 
         archetype.components_label_match[component_info.label] = u32(i)
     }
 
-    scene.archetype_label_match[new_label] = scene.n_Archetypes
+    scene.archetype_label_match[ label] = scene.n_Archetypes
     append(&scene.archetypes, archetype)
     scene.n_Archetypes += 1
     ok = true
