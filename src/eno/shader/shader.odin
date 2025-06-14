@@ -777,42 +777,6 @@ shader_struct_out_name :: proc(shader_struct: ShaderStruct, loc: runtime.Source_
 }
 
 
-//
-
-// shader gpu control - uniforms, expressing, etc.
-
-@(deprecated="Should not be provided here")
-express_shader :: proc(program: ^ShaderProgram) -> (ok: bool) {
-    dbg.debug_point(dbg.LogLevel.INFO, "Expressing shader")
-
-    if program.id != nil do return true
-
-    shader_ids := make([dynamic]u32, len(program.shaders))
-    defer delete(shader_ids)
-
-    i := 0
-    for _, shader in program.shaders {
-        dbg.debug_point(dbg.LogLevel.INFO, "Expressing source")
-        if !shader.source.is_available_as_string || len(shader.source.string_source) == 0 {
-            dbg.debug_point(dbg.LogLevel.INFO, "Shader source was not provided prior to express_shader, building new")
-            supply_shader_source(&shader)
-            continue
-        }
-
-        id, compile_ok := gl.compile_shader_from_source(shader.source.string_source, conv_gl_shader_type(shader.type))
-        if !compile_ok {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Could not compile shader source: %s", shader.source)
-            return ok
-        }
-        shader_ids[i] = id
-    }
-
-    program.id = gl.create_and_link_program(shader_ids[:]) or_return
-    ok = true
-    return
-}
-
-
 /*
     Implementations for shader file reading and parsing
     A shader source does not need to have a valid serialized Shader instance attached to it, it can be a single whole source as well.
@@ -843,32 +807,30 @@ ShadingLanguage :: enum {
     // ...
 }
 
-ShaderReadFlags :: bit_field u8 {
-    Parse: bool     | 1,
-    Express: bool   | 1,
-    ShaderLanguage: ShadingLanguage | 3
-}
 
 ShaderPath :: struct {
     directory: string,
     filename: string
 }
 
-read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (program: ShaderProgram, ok: bool) {
-    // todo turn init_shader_source into an actual procedure with the same functionality
-    _init_shader_source :: proc(source: string, extension: string, flags: ShaderReadFlags) -> (shader: Shader, ok: bool) {
-        shader_type := extension_to_shader_type(extension)
-        source := ShaderSource{ string_source = strings.clone(source)}
-        shader = Shader{ source = source, type = shader_type}
+@(private)
+init_shader_source :: proc(source: string, extension: string) -> (shader: Shader, ok: bool) {
+    shader_type := extension_to_shader_type(extension)
+    source := ShaderSource{ string_source = strings.clone(source)}
+    shader = Shader{ source = source, type = shader_type}
 
-        if flags.Parse {
-            shader.source.shader_info = parse_shader_source(shader.source.string_source, flags) or_return
-            shader.source.is_available_as_string = true
-        }
-
-        ok = true
-        return
+    /*
+    if flags.Parse {
+        shader.source.shader_info = parse_shader_source(shader.source.string_source) or_return
+        shader.source.is_available_as_string = true
     }
+    */
+
+    ok = true
+    return
+}
+
+read_shader_source :: proc(filenames: ..string) -> (program: ShaderProgram, ok: bool) {
 
     shader_sources: [dynamic]Shader
 
@@ -882,7 +844,7 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
                 source, err := futils.read_file_source(filename); defer delete(source);
                 handle_file_read_error(filename, err) or_return
 
-                append(&shader_sources, _init_shader_source(source, extension, flags) or_return)
+                append(&shader_sources, init_shader_source(source, extension) or_return)
             }
             else {
                 dbg.debug_point(dbg.LogLevel.ERROR, "Shader extension not accepted: %s", extension)
@@ -897,7 +859,7 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
 
                 if err == .None {
                     dbg.debug_point(dbg.LogLevel.INFO, "Successfully read file. File path: \"%s\"", full_path)
-                    append(&shader_sources, _init_shader_source(source, extension, flags) or_return)
+                    append(&shader_sources, init_shader_source(source, extension) or_return)
                     file_found = true
                 }
                 else if err == .FileReadError {
@@ -920,9 +882,6 @@ read_shader_source :: proc(flags: ShaderReadFlags, filenames: ..string) -> (prog
     }
 
     program = make_shader_program(shader_sources[:])
-    if flags.Express {
-        express_shader(&program)
-    }
 
     ok = true
     return
@@ -1090,15 +1049,3 @@ handle_shader_read_error :: proc(filepath: string, err: utils.FileError, loc := 
     return
 }
 */
-
-
-@(deprecated="Should be in transfer")
-attach_program :: proc(program: ShaderProgram, loc := #caller_location) {
-    if program_id, id_ok := utils.unwrap_maybe(program.id); !id_ok {
-        dbg.debug_point(dbg.LogLevel.INFO, "Shader program not yet created")
-        return
-    }
-    else{
-        gl.UseProgram(program_id)
-    }
-}

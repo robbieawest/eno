@@ -41,7 +41,7 @@ before_frame :: proc() {
 
     model := helmet_model()
 
-    shader_v :=
+    // shader_v :=
     ok := create_shader_program(&helmet_draw_properties); if !ok do return
 
 

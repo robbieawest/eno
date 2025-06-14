@@ -5,6 +5,7 @@ import gl "vendor:OpenGL"
 import "../model"
 import dbg "../debug"
 import "../shader"
+import "../utils"
 
 GlComponentStates :: enum u32 {
     VAO_TRANSFERRED,
@@ -240,4 +241,45 @@ add_buffer_data_slice :: proc(target: u32, data: $T/[]$E, usage: BufferUsage, da
         gl.BufferSubData(target, data_offset, data_size, raw_data(data))
     }
     gl.BufferData(target, data_size, raw_data(data), buffer_usage_to_glenum(usage))
+}
+
+
+// Shaders
+transfer_shader :: proc(program: ^shader.ShaderProgram) -> (ok: bool) {
+    dbg.debug_point(dbg.LogLevel.INFO, "Expressing shader")
+
+    if program.id != nil do return true
+
+    shader_ids := make([dynamic]u32, len(program.shaders))
+    defer delete(shader_ids)
+
+    i := 0
+    for _, &given_shader in program.shaders {
+        dbg.debug_point(dbg.LogLevel.INFO, "Expressing source")
+        if !given_shader.source.is_available_as_string || len(given_shader.source.string_source) == 0 {
+            dbg.debug_point(dbg.LogLevel.INFO, "Shader source was not provided prior to transfer_shader, building new")
+            shader.supply_shader_source(&given_shader) or_return
+        }
+
+        id, compile_ok := gl.compile_shader_from_source(given_shader.source.string_source, shader.conv_gl_shader_type(given_shader.type))
+        if !compile_ok {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Could not compile shader source: %s", given_shader.source)
+            return ok
+        }
+        shader_ids[i] = id
+    }
+
+    program.id = gl.create_and_link_program(shader_ids[:]) or_return
+    ok = true
+    return
+}
+
+attach_program :: proc(program: shader.ShaderProgram, loc := #caller_location) {
+    if program_id, id_ok := utils.unwrap_maybe(program.id); !id_ok {
+        dbg.debug_point(dbg.LogLevel.INFO, "Shader program not yet created")
+        return
+    }
+    else{
+        gl.UseProgram(program_id)
+    }
 }

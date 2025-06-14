@@ -3,11 +3,13 @@ package gpu
 import "core:strings"
 import "base:intrinsics"
 
+/*
+
 // Implements parsing for GLSL shaders
 // This allows a shader file source to be represented as a Shader in the engine, and for programmers to add/modify the shader dynamically
 // WIP
 
-parse_shader_source :: proc(source: string, flags: ShaderReadFlags) -> (shader: ShaderInfo, ok: bool) {
+parse_shader_source :: proc(source: string) -> (shader: ShaderInfo, ok: bool) {
 /*
     Parsing shader source:
         - get lines
@@ -20,17 +22,11 @@ parse_shader_source :: proc(source: string, flags: ShaderReadFlags) -> (shader: 
     lines: []string = strings.split_lines(source)
     defer delete(lines)
 
-    #partial switch flags.ShaderLanguage {
-    case .GLSL: {
-        tokens := tokenize_shader_source(lines, GLSLTokenType)
-        defer {
-            for token_line in tokens do delete(token_line)
-            delete(tokens)
-        }
+    tokens := tokenize_shader_source(lines, GLSLTokenType)
+    defer {
+        for token_line in tokens do delete(token_line)
+        delete(tokens)
     }
-    }
-
-
 
     return
 }
@@ -64,3 +60,4 @@ tokenize_shader_source :: proc(lines: []string, $TokenType: typeid) -> (tokens: 
 
     return
 }
+*/
