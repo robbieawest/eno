@@ -52,7 +52,7 @@ build_shader_source_test :: proc(t: ^testing.T) {
     add_functions(&shader, main_func)
 
 
-    shader_source, ok := supply_shader_source(shader, .VERTEX)
+    shader_source, ok := build_shader_from_source(shader, .VERTEX)
     defer destroy_shader(shader_source)
 
     testing.expect(t, ok, "ok check")
@@ -64,7 +64,7 @@ build_shader_source_test :: proc(t: ^testing.T) {
 
 @(test)
 shader_read_test :: proc(t: ^testing.T) {
-    program, ok := read_shader_source({ ShaderLanguage = .GLSL }, "resources/shaders/demo_shader")
+    program, ok := read_shader_source("resources/shaders/demo_shader")
     defer destroy_shader_program(program)
 
     testing.expect(t, ok, "ok check")

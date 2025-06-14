@@ -1,10 +1,12 @@
 package utils
 
+import dbg "../debug"
+
 import "core:testing"
 import "core:log"
 import "core:strings"
-import "core:mem"
 import "core:fmt"
+import "core:text/regex"
 
 // Utils package must not depend on any other package
 // If certain functionality needs to be dependent on another package, just make another package
@@ -163,6 +165,44 @@ concat_cstr :: proc(string_inp: ..cstring) -> cstring {
 fmt_append :: proc(arr: ^[dynamic]string, fmt_str: string, args: ..any) {
     new_str := fmt.aprintf(fmt_str, ..args)
     append(arr, new_str)
+}
+
+
+InvalidCharacterMap :: struct {
+    char: rune,
+    ind: int
+}
+
+REGEX_FILEPATH_PATTERN :: "^[a-zA-Z0-9_\\\\/\\.]*$"
+REGEX_ALPHANUM_PATTERN :: "^[a-zA-Z0-9_]*$"
+
+regex_match :: proc{ regex_match_no_flags, regex_match_flags }
+
+regex_match_no_flags :: proc(grammar: string, pattern: string) -> (matched: bool) {
+    return regex_match_flags(grammar, pattern, {})
+}
+
+regex_match_flags :: proc(grammar: string, pattern: string, flags: regex.Flags) -> (matched: bool) {
+
+    regex_match_iterator, err := regex.create_iterator(grammar, pattern, { .No_Capture } + flags)
+    defer regex.destroy_iterator(regex_match_iterator)
+    if err != nil {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not create regex match iterator, defaulting to no match")
+        return
+    }
+
+    _, _, matched = regex.match_iterator(&regex_match_iterator)
+    return
+}
+
+@(test)
+regex_match_test :: proc(t: ^testing.T) {
+
+    matched := regex_match("ABCdaf932903215/\\.", "^[a-zA-Z0-9_\\\\/\\.]*$")
+    testing.expect(t, matched)
+
+    new_matched := regex_match("ABCdaf932903215*&*(*^", "^[a-zA-Z0-9_]*$")
+    testing.expect(t, !new_matched)
 }
 
 /*

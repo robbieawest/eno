@@ -15,8 +15,8 @@ import glm "core:math/linalg/glsl"
 // Game structure is defined here, e.g. defining the game loop, polling events, etc.
 
 // Procedure type definitions
-frame_loop_proc_ :: proc() // For the procedure that executes every frame
-before_loop_proc_ :: proc()
+frame_loop_proc_ :: proc() -> (ok: bool) // For the procedure that executes every frame
+before_loop_proc_ :: proc() -> (ok: bool)
 
 
 GAME_STATE :: enum { NOT_STARTED, RUNNING, HALTED, QUIT }
@@ -41,11 +41,21 @@ run_game :: proc() {
     }
 
     Game.game_state = .RUNNING
-    Game.before_frame()
+
+    before_ok := Game.before_frame()
+    if !before_ok {
+        dbg.debug_point(dbg.LogLevel.ERROR, "False received from before_frame procedure. Terminating")
+        return
+    }
+
     for Game.game_state == .RUNNING {
         control.poll(&Game.controller)
         glutils.frame_setup()
-        Game.every_frame()
+        every_ok := Game.every_frame()
+        if !every_ok {
+            dbg.debug_point(dbg.LogLevel.ERROR, "False received from every_frame procedure. Terminating")
+            return
+        }
     }
 }
 

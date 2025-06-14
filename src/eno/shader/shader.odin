@@ -835,6 +835,12 @@ read_shader_source :: proc(filenames: ..string) -> (program: ShaderProgram, ok: 
     shader_sources: [dynamic]Shader
 
     for filename in filenames {
+        inv_filename := utils.regex_match(filename, utils.REGEX_FILEPATH_PATTERN)
+        if inv_filename {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Filepath contains invalid characters")
+            return
+        }
+
         last_ellipse_location := strings.last_index(filename, ".")
         if last_ellipse_location != -1 && !strings.contains(filename[last_ellipse_location:], "/") {
             // Extension given

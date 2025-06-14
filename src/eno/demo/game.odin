@@ -17,7 +17,7 @@ import glm "core:math/linalg/glsl"
 // Implement your before_frame and every_frame procedures in a file like this
 // APIs for ecs are dogwater right now
 // Certain operations are done around this every frame, look inside game package
-every_frame :: proc() {
+every_frame :: proc() -> (ok: bool) {
 
     // Update camera
     //copied_program := draw_properties.gpu_component.(shader.gl_GPUComponent).program
@@ -27,11 +27,12 @@ every_frame :: proc() {
    // render_old.draw_indexed_entities(game.Game.scene, "helmet_arch", "helmet_entity")
 
     // Swap
-    ok := win.swap_window_bufs(game.Game.window); if !ok do log.errorf("could not swap bufs")
+    ok = win.swap_window_bufs(game.Game.window); if !ok do log.errorf("could not swap bufs")
+    return
 }
 
 
-before_frame :: proc() {
+before_frame :: proc() -> (ok: bool) {
 
     arch, _ := ecs.scene_add_default_archetype(game.Game.scene, "entities")
 
@@ -40,15 +41,13 @@ before_frame :: proc() {
     }
 
     model := helmet_model()
-
-    // shader_v :=
-    ok := create_shader_program(&helmet_draw_properties); if !ok do return
-
-
-    ecs.archetype_add_entity(game.Game.scene, helmet_arch, "helmet_entity",
+    ecs.archetype_add_entity(game.Game.scene, arch, "helmet_entity",
         ecs.make_component_data_untyped_s(&model, ecs.MODEL_COMPONENT),
         ecs.make_component_data_untyped_s(&world_properties, ecs.WORLD_COMPONENT),
     )
+
+    program := shader.read_shader_source("resources/shaders/demo_pbr_shader") or_return
+
 
     // Camera
     ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "helmet_cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
