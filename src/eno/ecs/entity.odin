@@ -65,7 +65,9 @@ Scene :: struct {
 init_scene :: proc() -> (scene: ^Scene) {
     scene = new(Scene)
     scene.allocated = true
-    //scene.archetype_label_match = make(map[string]u32, 0)
+    scene.archetype_label_match = make(map[string]u32)
+    scene.archetypes = make([dynamic]Archetype)
+    scene.cameras = make([dynamic]cam.Camera)
     return
 }
 
@@ -150,6 +152,8 @@ scene_add_archetype :: proc(scene: ^Scene, label: string, component_infos: ..Com
     archetype.components_allocator = allocator
     archetype.n_Components = u32(len(component_infos))
     archetype.components = make([dynamic][dynamic]byte, len(component_infos))
+    archetype.entities = make(map[string]Entity)
+    archetype.components_label_match = make(map[string]u32)
 
     for component_info, i in component_infos {
         duplicate_component := component_info.label in archetype.components_label_match

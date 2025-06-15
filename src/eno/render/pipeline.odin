@@ -8,13 +8,18 @@ import mutils "../utils/math_utils"
 
 import "core:reflect"
 import "core:strings"
-import "core:slice"
-import "core:math"
 import "base:intrinsics"
-import "core:math/big"
+
 
 RenderPipeline :: struct {
     passes: [dynamic]RenderPass
+}
+
+// Default render pipeline has no passes
+make_render_pipeline :: proc(passes: ..RenderPass) -> (ret: RenderPipeline) {
+    ret.passes = make([dynamic]RenderPass, 0, len(passes))
+    append_elems(&ret.passes, ..passes)
+    return
 }
 
 destroy_pipeline :: proc(pipeline: ^RenderPipeline) {
@@ -23,41 +28,16 @@ destroy_pipeline :: proc(pipeline: ^RenderPipeline) {
 }
 
 RenderPass :: struct {
-    frame_buffer: FrameBuffer
+    frame_buffer: FrameBuffer,
+    // Draw calls
+}
+
+make_render_pass :: proc(frame_buffer: FrameBuffer) -> RenderPass {
+    return { frame_buffer }
 }
 
 destroy_render_pass :: proc(render_pass: ^RenderPass) {
     destroy_framebuffer(&render_pass.frame_buffer)
-}
-
-
-ShaderPassInfo :: enum u32 {
-    PBR,
-    DIRECT,
-    CUSTOM,
-}
-ShaderPassInfos :: bit_set[ShaderPassInfo]
-
-DrawInfo :: enum {
-    DRAW_ALL,
-    DRAW_TRANSPARENT_MODELS,  // Only draw models selected to be transparent
-}
-
-PassInfo :: struct {
-    attachments_info: []AttachmentInfo,
-    shader_info: ShaderPassInfos
-}
-
-/*
-    Give 0 for backing_type, lod and internal_backing_type if these are not important to you.
-    Clones given attachments - remember to call destroy_pass_info
-*/
-make_pass_info :: proc(shader_info: ShaderPassInfos, attachments: ..AttachmentInfo) -> PassInfo {
-    return PassInfo{ slice.clone(attachments), shader_info }
-}
-
-destroy_pass_info :: proc(pass_info: ^PassInfo) {
-    delete(pass_info.attachments_info)
 }
 
 
@@ -77,7 +57,7 @@ AttachmentInfo :: struct {
 FrameBuffer :: struct {
     id: Maybe(u32),
     w, h: i32,
-    attachments: [dynamic]Attachment
+    attachments: map[u32]Attachment
 }
 
 
@@ -125,12 +105,12 @@ generate_framebuffer :: proc(w, h: i32) -> (frame_buffer: FrameBuffer, ok: bool)
     frame_buffer.id = id
 
     ok = gl.CheckFramebufferStatus(id) == gl.FRAMEBUFFER_COMPLETE
-    frame_buffer.attachments = make([dynamic]Attachment)
+    frame_buffer.attachments = make(map[u32]Attachment)
     return
 }
 
 destroy_framebuffer :: proc(frame_buffer: ^FrameBuffer) {
-    for &attachment in frame_buffer.attachments do destroy_attachment(&attachment)
+    for _, &attachment in frame_buffer.attachments do destroy_attachment(&attachment)
     delete(frame_buffer.attachments)
     if id, id_ok := frame_buffer.id.?; id_ok do gl.DeleteFramebuffers(1, &id)
 }
@@ -192,18 +172,18 @@ StencilMask :: RenderMask{ .STENCIL }
 /*
     "Draws" framebuffer at the attachment, render mask, interpolation, and w, h to the default framebuffer (sdl back buffer)
 */
-draw_framebuffer_to_screen :: proc(frame_buffer: ^FrameBuffer, attachment_index: int, w, h: i32, interpolation: u32 = gl.NEAREST) {
+draw_framebuffer_to_screen :: proc(frame_buffer: ^FrameBuffer, attachment_id: u32, w, h: i32, interpolation: u32 = gl.NEAREST) {
     frame_buffer_id, id_ok := frame_buffer.id.?
     if !id_ok {
         dbg.debug_point(dbg.LogLevel.ERROR, "Frame buffer not yet created")
         return
     }
-    if attachment_index >= len(frame_buffer.attachments) {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Attachment index: %d out of range for attachments length %d", attachment_index, len(frame_buffer.attachments))
+
+    attachment, attachment_ok := &frame_buffer.attachments[attachment_id]
+    if !attachment_ok {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Attachment ID: %d is invalid or not bound to the framebuffer", attachment_id)
         return
     }
-
-    attachment := &frame_buffer.attachments[attachment_index]
 
     switch data in attachment.data {
         case RenderBuffer:
@@ -281,13 +261,13 @@ make_attachment :: proc(
         attachment.data = texture
     }
 
-    append(&frame_buffer.attachments, attachment)
+    frame_buffer.attachments[gl_attachment_id] = attachment
     ok = true
     return
 }
 
 @(private)
 get_n_attachments :: proc(frame_buffer: ^FrameBuffer,  type: AttachmentType) -> (n: u32) {
-    for attachment in frame_buffer.attachments do n += u32(attachment.type == type)
+    for _, attachment in frame_buffer.attachments do n += u32(attachment.type == type)
     return
 }

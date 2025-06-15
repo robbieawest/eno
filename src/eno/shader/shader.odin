@@ -467,6 +467,8 @@ ShaderProgram :: struct {
 // Does not copy incoming shaders
 make_shader_program:: proc(shaders: []Shader) -> (program: ShaderProgram) {
     dbg.debug_point()
+    program.shaders = make(map[ShaderType]Shader)
+    program.uniform_cache = make(ShaderUniformCache)
     add_shaders_to_program(&program, shaders)
     return
 }

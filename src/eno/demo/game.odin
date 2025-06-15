@@ -57,6 +57,8 @@ before_frame :: proc() -> (ok: bool) {
         game.HOOK_CLOSE_WINDOW(),
         game.HOOKS_CAMERA_MOVEMENT()  // Only can be used after camera added to scene
     )
+
+    return true
 }
 
 
