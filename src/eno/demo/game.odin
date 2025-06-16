@@ -36,7 +36,7 @@ before_frame :: proc() -> (ok: bool) {
 
     arch, _ := ecs.scene_add_default_archetype(game.Game.scene, "entities")
 
-    world_properties := ecs.WorldComponent{
+    world_properties := ecs.WorldComponent {
         scale = { 0.5, 0.5, 0.5 }
     }
 

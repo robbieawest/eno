@@ -15,7 +15,7 @@ TestPositionComponent :: struct {
 @(test)
 serialize_test :: proc(t: ^testing.T) {
     component := TestPositionComponent{ 0.25, 0.58 }; p_Component := &component
-    comp: Component = component_serialize(TestPositionComponent, make_component_data_s(p_Component, "test_label"))
+    comp: ComponentData = serialize_component(TestPositionComponent, make_component_data_s(p_Component, "test_label"))
     defer component_destroy(comp)
 
     log.infof("component: %#v", comp)
@@ -59,7 +59,7 @@ serialize_many_test :: proc(t: ^testing.T) {
     component1 := TestPositionComponent{ 0.32, 59.81 }; p_Component1 := &component1
     component2 := TestPositionComponent{ -0.32, 159.81 }; p_Component2 := &component2
 
-    serialize_ret: []Component = components_serialize(context.allocator, TestPositionComponent,  // Odin bug needs context.allocator
+    serialize_ret: []ComponentData = components_serialize(context.allocator, TestPositionComponent,  // Odin bug needs context.allocator
             make_component_data_s(p_Component, "component 0"),
             make_component_data_s(p_Component1, "component 1"),
             make_component_data_s(p_Component2, "component 2")

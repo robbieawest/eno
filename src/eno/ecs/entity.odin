@@ -114,14 +114,14 @@ archetype_get_component_data :: proc(archetype: ^Archetype, component_label: str
     return comp_data[m:min(n, u32(len(comp_data)))]
 }
 
-archetype_get_component_data_from_column :: proc(archetype: ^Archetype, component_label: string, column: int) -> (component: Component) {
+archetype_get_component_data_from_column :: proc(archetype: ^Archetype, component_label: string, column: int) -> (component: ComponentData) {
 
     component_index := archetype.components_label_match[component_label]
     component_info := archetype.component_info.component_infos[component_index]
     comp_data: ^[dynamic]byte = &archetype.components[component_index]
     into_data := column * int(component_info.size)
 
-    return Component {label = component_label, data = comp_data[into_data:into_data + int(component_info.size)] , type = component_info.type }
+    return ComponentData {label = component_label, data = comp_data[into_data:into_data + int(component_info.size)] , type = component_info.type }
 }
 
 

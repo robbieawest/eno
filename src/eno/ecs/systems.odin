@@ -3,23 +3,66 @@ package ecs
 import dbg "../debug"
 
 
-ComponentQuery :: struct {
-    label: string,
-    type: typeid
+SceneQuery :: struct {
+    return_flat_component_data: bool,
+    archetypes: Maybe([]string),
+    queries: []ArchetypeQuery // Provide as size 1 to do the same query for each archetype
 }
 
-
 ArchetypeQuery :: struct {
+    return_flat_component_data: bool,
     entities: []string,
     components: []ComponentQuery
 }
 
+ComponentQuery :: struct {
+    label: string,
+    data: rawptr
+}
 
-ArchetypeQueryResult :: [dynamic]EntityQueryResult
 
 
-EntityQueryResult :: struct {
-    data: #soa[dynamic]Component
+SceneQueryResult :: map[string]ArchetypeQueryResult  // Maps scene name
+ArchetypeQueryResult :: map[string]EntityQueryResult  // Maps archetype name
+
+InnerArchetypeQueryResult :: union {
+    ComponentQueryResult,
+    EntityQueryResult
+}
+
+ComponentQueryResult :: FlatComponentData
+EntityQueryResult :: map[string]EntityComponentData  // Maps entity name
+
+EntityComponentData :: struct {
+    entity_name: string,
+    component_data: FlatComponentData,  // Component data stored in order by the entity fields/components
+}
+
+
+query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResult, ok: bool) {
+    result = make(SceneQueryResult)
+    if query.archetypes == nil {
+
+        n_archetype_queries := len(query.queries)
+        if n_archetype_queries == 1 {
+            arch_query := query.queries[0]
+            for label, ind in scene.archetype_label_match {
+                result[label] = query_archetype(&scene.archetypes[ind], arch_query) or_return
+            }
+        } else if n_archetype_queries != len(scene.archetypes) {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Must be either one global archetype query, or one archetype query for each archetype in the scene")
+            return
+        } else {
+            i := 0
+            for label, ind in scene.archetype_label_match {
+                result[label] = query_archetype(&scene.archetypes[ind], query.queries[i]) or_return
+                i += 1
+            }
+        }
+    }
+
+    ok = true
+    return
 }
 
 query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result: ArchetypeQueryResult, ok: bool) {
@@ -35,26 +78,18 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
 
     for entity_label in query.entities {
         entity, entity_found := archetype.entities[entity_label]
-        if !entity_found {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Entity not found when querying: %s", entity_label)
-            return
-        }
         append(&entities_to_query, &entity)
     }
 
     
     for component_query in query.components {
         comp_index, component_found := archetype.components_label_match[component_query.label]
-        if !component_found {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Component not found when querying: %s", component_query.label)
-            return
-        }
 
         comp_size := archetype.component_info.component_infos[comp_index].size
 
         entity_query_result: EntityQueryResult
         for entity in entities_to_query {
-            component: Component
+            component: ComponentData
             component.label = component_query.label
             component.type = component_query.type
             component.data = archetype.components[comp_index][entity.archetype_column:entity.archetype_column + comp_size]  // Smells bad
@@ -72,7 +107,7 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
     Queries a single components data from the archetype
     Returns data uncopied as compile typed ComponentData
 */
-query_component_from_archetype :: proc(archetype: ^Archetype, component_label: string, $T: typeid, entity_labels: ..string) -> (ret: []ComponentData(T), ok: bool) #optional_ok {
+query_component_from_archetype :: proc(archetype: ^Archetype, component_label: string, $T: typeid, entity_labels: ..string) -> (ret: []Component(T), ok: bool) #optional_ok {
     if !(component_label in archetype.components_label_match) {
         dbg.debug_point(dbg.LogLevel.ERROR, "Component does not exist: %s", component_label)
         return
@@ -86,7 +121,7 @@ query_component_from_archetype :: proc(archetype: ^Archetype, component_label: s
     Errors handled internally
 */
 @(private)
-query_component_from_archetype_unchecked :: proc(archetype: ^Archetype, component_label: string, $T: typeid, entity_labels: ..string) -> (ret: []ComponentData(T), ok: bool) #optional_ok {
+query_component_from_archetype_unchecked :: proc(archetype: ^Archetype, component_label: string, $T: typeid, entity_labels: ..string) -> (ret: []Component(T), ok: bool) #optional_ok {
 
     // Get component information
     component_index := archetype.components_label_match[component_label]
@@ -97,7 +132,7 @@ query_component_from_archetype_unchecked :: proc(archetype: ^Archetype, componen
         return
     }
 
-    components := make([dynamic]Component, 0)
+    components := make([dynamic]ComponentData, 0)
     defer delete(components)  // No use after free since components are referencing ECS data
 
     if len(entity_labels) == 0 {
@@ -124,6 +159,8 @@ query_component_from_archetype_unchecked :: proc(archetype: ^Archetype, componen
 }
 
 
+// Actions - not sure why these are even needed
+
 /*
 
     Defining an action a procedure which runs for every entity in the archetype, for a specific component. 
@@ -135,7 +172,7 @@ query_component_from_archetype_unchecked :: proc(archetype: ^Archetype, componen
     You could just query, and then iterate and act yourself
 */
 
-Action :: #type proc(component: Component) -> (ok: bool)
+Action :: #type proc(component: ComponentData) -> (ok: bool)
 
 // Single action across all queried entities
 act_on_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, action: Action) -> (ok: bool) {
@@ -191,7 +228,7 @@ act_on_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, action: A
 single_act_for_entities :: proc(archetype: ^Archetype, entities_to_query: [dynamic]^Entity, comp_index: u32, comp_size: u32, comp_label: string, comp_type: typeid, action: Action) -> (ok: bool) {
 
     for entity in entities_to_query {
-        component: Component
+        component: ComponentData
         component.label = comp_label 
         component.type = comp_type
         component.data = archetype.components[comp_index][entity.archetype_column:entity.archetype_column + comp_size]
@@ -204,7 +241,7 @@ single_act_for_entities :: proc(archetype: ^Archetype, entities_to_query: [dynam
 }
 
 
-MultiAction :: #type proc(components: []Component) -> (ok: bool)
+MultiAction :: #type proc(components: []ComponentData) -> (ok: bool)
 
 act_on_archetype_multiple :: proc(archetype: ^Archetype, query: ArchetypeQuery, action: MultiAction) -> (ok: bool) {
     entities_to_query := make([dynamic]^Entity, 0, len(query.entities))
@@ -261,7 +298,7 @@ act_on_archetype_multiple :: proc(archetype: ^Archetype, query: ArchetypeQuery, 
 
 @(private)
 multi_act_for_entities :: proc(archetype: ^Archetype, entities_to_query: [dynamic]^Entity, component_indices: []u32, action: MultiAction) -> (ok: bool) {
-    components := make([]Component, len(component_indices))
+    components := make([]ComponentData, len(component_indices))
     defer delete(components)
 
     for entity in entities_to_query {

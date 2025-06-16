@@ -27,9 +27,9 @@ destroy_pipeline :: proc(pipeline: ^RenderPipeline) {
     delete(pipeline.passes)
 }
 
+// Structure may be too simple
 RenderPass :: struct {
-    frame_buffer: FrameBuffer,
-    // Draw calls
+    frame_buffer: FrameBuffer
 }
 
 make_render_pass :: proc(frame_buffer: FrameBuffer) -> RenderPass {
@@ -53,7 +53,7 @@ AttachmentInfo :: struct {
     internal_backing_type: u32
 }
 
-
+// Todo make sure inner framebuffers only use textures
 FrameBuffer :: struct {
     id: Maybe(u32),
     w, h: i32,
