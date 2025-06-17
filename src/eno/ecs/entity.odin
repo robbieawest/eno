@@ -114,14 +114,14 @@ archetype_get_component_data :: proc(archetype: ^Archetype, component_label: str
     return comp_data[m:min(n, u32(len(comp_data)))]
 }
 
-archetype_get_component_data_from_column :: proc(archetype: ^Archetype, component_label: string, column: int) -> (component: ComponentData) {
+archetype_get_component_data_from_column :: proc(archetype: ^Archetype, component_label: string, column: int) -> (component: ECSComponentData) {
 
     component_index := archetype.components_label_match[component_label]
     component_info := archetype.component_info.component_infos[component_index]
     comp_data: ^[dynamic]byte = &archetype.components[component_index]
     into_data := column * int(component_info.size)
 
-    return ComponentData {label = component_label, data = comp_data[into_data:into_data + int(component_info.size)] , type = component_info.type }
+    return ECSComponentData {label = component_label, data = comp_data[into_data:into_data + int(component_info.size)] , type = component_info.type }
 }
 
 
@@ -175,21 +175,6 @@ scene_add_archetype :: proc(scene: ^Scene, label: string, component_infos: ..Com
     return
 }
 
-/*
-   Adds entities of a single archetype
-   Input is serialized component data
-*/
-
-scene_add_entities :: proc(scene: ^Scene, archetype_label: string, entity_component_data: map[string][]ComponentDataUntyped) -> (ok: bool) {
-    archetype: ^Archetype = scene_get_archetype(scene, archetype_label) or_return
-    for entity_label, component_data in entity_component_data {
-        archetype_add_entity(scene, archetype, entity_label, ..component_data) or_return
-    }
-
-    ok = true
-    return
-}
-
 
 
 @(private)
@@ -215,34 +200,8 @@ archetype_add_entity_checks :: proc(scene: ^Scene, archetype: ^Archetype, entity
 }
 
 
-archetype_add_entity_component_data :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, component_data: []byte) -> (ok: bool) {
-    archetype_add_entity_checks(scene, archetype, entity_label) or_return
-    if u32(len(component_data)) != archetype.component_info.total_size_per_entity {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Component data size mismatch when adding entity", ARCHETYPE_MAX_ENTITIES)
-        return
-    }
-
-    entity: Entity
-    entity.id = scene.n_Entities
-    scene.n_Entities += 1
-
-    entity.archetype_column = archetype.n_Entities
-    archetype.n_Entities += 1
-
-    // Add component data
-    start_of_component: u32 = 0
-    for component_info, i in archetype.component_info.component_infos {
-        end_of_component := start_of_component + component_info.size
-        append_elems(&archetype.components[i], ..component_data[start_of_component:end_of_component])
-        start_of_component += component_info.size
-    }
-
-    ok = true
-    return
-}
-
-
-archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, component_data: ..ComponentDataUntyped) -> (ok: bool) {
+// Add a way with matched form? CBA
+archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, $T: typeid, component_data: ..ComponentData(T)) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Adding archetype entity: %s", entity_label)
     archetype_add_entity_checks(scene, archetype, entity_label) or_return
 
@@ -261,7 +220,7 @@ archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label:
             return
         }
 
-        serialized_component := component_serialize_new(data)
+        serialized_component := serialize_component(data)
         append_elems(&archetype.components[comp_index], ..serialized_component.data)
     }
 

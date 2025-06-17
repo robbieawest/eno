@@ -1,59 +1,44 @@
 package ecs
 
+import dbg "../debug"
+
 import "core:mem"
 import "core:strings"
 
-// todo review naming it sucks
 
 // Serialized
-ComponentData :: struct {
+ECSComponentData :: struct {
     label: string,
     type: typeid,
     data: []byte
 }
 
-FlatComponentsData :: struct {
+destroy_ecs_component_data :: proc(component: ECSComponentData) {
+    delete(component.label)
+    delete(component.data)
+}
+
+ECSMatchedComponentData :: struct {
     component_label_match: map[string]u32,
     component_data: [][]byte
 }
 
 // Deserialized
-Component :: struct ($T: typeid) {
+ComponentData :: struct ($T: typeid) {
     label: string,
     data: ^T
 }
 
-FlatComponents :: struct ($T: typeid) {
+MatchedComponentData :: struct ($T: typeid) {
     component_label_match: map[string]u32,
     component_data: []^$T
 }
 
 
-
-make_component_data :: proc(data_in: ^$T, label: string) -> (component_data: ComponentData) {
-    return ComponentData {
-        label = label,
-        type = T,
-        data = transmute([]byte)data_in
-    }
-}
-
-
-component_destroy :: proc(component: ComponentData) {
-    delete(component.data)
-}
-
-components_destroy :: proc(components_data: $T) where
-    T == []ComponentData ||
-    T == [dynamic]ComponentData
-{
-    for comp in components_data do delete(comp.data)
-    delete(components_data)
-}
-
+// Serialization and deserialization
 
 // Copies everything in input
-serialize_component :: proc(component: Component($T), allocator := context.allocator) -> (ret: ComponentData) {
+serialize_component :: proc(component: ComponentData($T), allocator := context.allocator) -> (ret: ECSComponentData) {
     ret.label = strings.clone(component.label)
 
     ret.data = make([]byte, size_of(T))
@@ -62,8 +47,8 @@ serialize_component :: proc(component: Component($T), allocator := context.alloc
     return
 }
 
-components_serialize :: proc(allocator := context.allocator, $T: typeid, input: ..Component(T)) -> (ret: []ComponentData) {
-    ret = make([]ComponentData, len(input))
+components_serialize :: proc(allocator := context.allocator, $T: typeid, input: ..ComponentData(T)) -> (ret: []ECSComponentData) {
+    ret = make([]ECSComponentData, len(input))
     
     for i := 0; i < len(input); i += 1 {
         ret[i] = serialize_component(input[i])
@@ -71,6 +56,7 @@ components_serialize :: proc(allocator := context.allocator, $T: typeid, input: 
 
     return
 }
+
 
 @(private)
 deserialize_component_bytearr :: proc($T: typeid, bytearr: []byte, copy := false) -> (out: ^T) {
@@ -80,14 +66,16 @@ deserialize_component_bytearr :: proc($T: typeid, bytearr: []byte, copy := false
     return
 }
 
-component_deserialize:: proc($T: typeid, component: ComponentData, copy := false) -> (component_data: Component(T)) {
-    component_data.data = deserialize_component_bytearr(T, component.data)
-    component_data.label = component.label
+component_deserialize:: proc($T: typeid, component: ECSComponentData, copy := false) -> (component_data: ComponentData(T)) {
+    data: ^T = deserialize_component_bytearr(T, component.data)
+    component_data = ComponentData(T){ label = component.label, data = data }
     return
 }
 
-components_deserialize_slice :: proc($T: typeid, components_data: ..ComponentData, copy := false) -> (ret: []Component(T)) {
-    ret = make([]Component(T), len(components_data))
+components_deserialize :: proc{ components_deserialize_slice, components_deserialize_matched }
+
+components_deserialize_slice :: proc($T: typeid, components_data: ..ECSComponentData, copy := false) -> (ret: []ComponentData(T)) {
+    ret = make([]ComponentData(T), len(components_data))
 
     for i := 0; i < len(components_data); i += 1 {
         ret[i] = component_deserialize(T, components_data[i])
@@ -96,7 +84,7 @@ components_deserialize_slice :: proc($T: typeid, components_data: ..ComponentDat
     return
 }
 
-components_deserialize_flat :: proc($T: typeid, components_data: FlatComponentsData, copy := false) -> (ret: FlatComponents(T)) {
+components_deserialize_matched :: proc($T: typeid, components_data: ECSMatchedComponentData, copy := false) -> (ret: MatchedComponentData(T)) {
     ret.component_label_match = components_data.component_label_match
     ret.component_data = make([]^T, len(components_data.component_data))
 

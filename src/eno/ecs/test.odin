@@ -15,8 +15,8 @@ TestPositionComponent :: struct {
 @(test)
 serialize_test :: proc(t: ^testing.T) {
     component := TestPositionComponent{ 0.25, 0.58 }; p_Component := &component
-    comp: ComponentData = serialize_component(TestPositionComponent, make_component_data_s(p_Component, "test_label"))
-    defer component_destroy(comp)
+    comp: ECSComponentData = serialize_component(ComponentData(TestPositionComponent){ "test_label", p_Component })
+    defer destroy_ecs_component_data(comp)
 
     log.infof("component: %#v", comp)
 
@@ -41,8 +41,7 @@ serialize_test :: proc(t: ^testing.T) {
     log.infof("out f1: %f, f2: %f", out_f1, out_f2)
 
     // test deserialization
-    deserialize_ret, deserialize_ok := component_deserialize(TestPositionComponent, comp)
-    testing.expect(t, deserialize_ok, "deserialize ok check")
+    deserialize_ret := component_deserialize(TestPositionComponent, comp)
     log.infof("deserialize ret: %#v", deserialize_ret)
    
     // extract data from any type
@@ -59,10 +58,10 @@ serialize_many_test :: proc(t: ^testing.T) {
     component1 := TestPositionComponent{ 0.32, 59.81 }; p_Component1 := &component1
     component2 := TestPositionComponent{ -0.32, 159.81 }; p_Component2 := &component2
 
-    serialize_ret: []ComponentData = components_serialize(context.allocator, TestPositionComponent,  // Odin bug needs context.allocator
-            make_component_data_s(p_Component, "component 0"),
-            make_component_data_s(p_Component1, "component 1"),
-            make_component_data_s(p_Component2, "component 2")
+    serialize_ret: []ECSComponentData = components_serialize(context.allocator, TestPositionComponent,
+        ComponentData(TestPositionComponent) { "component 0", p_Component },
+        ComponentData(TestPositionComponent) { "component 1", p_Component1 },
+        ComponentData(TestPositionComponent) { "component 2", p_Component2 },
     )
     defer delete(serialize_ret)
     //defer components_destroy(serialize_ret) deleted later, uncomment and bad free
@@ -70,13 +69,15 @@ serialize_many_test :: proc(t: ^testing.T) {
     log.infof("serialize many ret: %#v", serialize_ret)
    
     expected := []TestPositionComponent{component, component1, component2}
-    deserialize_many_ret, deserialize_ok := components_deserialize(TestPositionComponent, ..serialize_ret)
+    deserialize_many_ret := components_deserialize(TestPositionComponent, ..serialize_ret)
     defer {
-        for ret in deserialize_many_ret do free(ret.data)
+        for ret in deserialize_many_ret {
+            free(ret.data)
+            delete(ret.label)
+        }
         delete(deserialize_many_ret)
     }
 
-    testing.expect(t, deserialize_ok, "deserialize many ok check")
     log.infof("deserialize many ret: %#v", deserialize_many_ret)
 
     testing.expect_value(t, len(expected), len(deserialize_many_ret))
@@ -95,16 +96,16 @@ query_archetype_test :: proc(t: ^testing.T) {
     dbg.init_debug_stack()
     defer dbg.destroy_debug_stack()
 
-    scene_add_archetype(scene, "testArchetype", context.allocator, ComponentInfo{ size = size_of(TestPositionComponent), label = "position", type = TestPositionComponent })
+    scene_add_archetype(scene, "testArchetype", ComponentInfo{ size = size_of(TestPositionComponent), label = "position", type = TestPositionComponent })
 
     position := TestPositionComponent { x = 0.25, y = 19.8 }
     archetype, _ := scene_get_archetype(scene, "testArchetype")
-    archetype_add_entity(scene, archetype, "test_entity",
-        make_component_data_untyped_s(&position, "position")
+    archetype_add_entity(scene, archetype, "test_entity", TestPositionComponent,
+        ComponentData(TestPositionComponent){ "position", &position }
     )
 
     comp_data, ok := query_component_from_archetype(archetype, "position", TestPositionComponent, "test_entity")
-    defer delete(comp_data)
+    //defer delete(comp_data)
 
     testing.expect(t, ok)
 
