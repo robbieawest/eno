@@ -1,5 +1,7 @@
 package utils
 
+import dbg "../debug"
+
 import "core:testing"
 import "core:mem"
 
@@ -33,4 +35,25 @@ s_slice := []f32{0.32, 0.12, 0.58}
 
     testing.expect_value(t, len(slice), len(expected_end_slice))
     for i in 0..<len(slice) do testing.expect_value(t, slice[i], expected_end_slice[i])
+}
+
+/*
+    Performs an orderly remove, shuffling items. Does not deallocate memory, only updates the internal length of the array
+*/
+remove_from_dynamic :: proc(arr: ^$T/[dynamic]$E, index: int) -> ( ok: bool) {
+    if index < 0 || index >= len(arr) {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Index %d is out of range of length %d", index, len(arr))
+        return
+    }
+
+    for index := index; index < len(arr) - 1; index += 1 {
+        bit_swap(arr[index], arr[index + 1])  // Bubble up unwanted value
+    }
+    arr[index] = 0  // Default out end space
+
+    raw_arr := transmute(mem.Raw_Dynamic_Array)arr
+    raw_arr.len -= 1
+    arr = transmute([dynamic]$E)raw_arr
+
+    return true
 }

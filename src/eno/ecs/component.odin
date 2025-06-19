@@ -20,7 +20,7 @@ destroy_ecs_component_data :: proc(component: ECSComponentData) {
 
 ECSMatchedComponentData :: struct {
     component_label_match: map[string]u32,
-    component_data: [][]byte
+    component_data: [dynamic][dynamic]byte
 }
 
 // Deserialized
@@ -72,9 +72,8 @@ component_deserialize:: proc($T: typeid, component: ECSComponentData, copy := fa
     return
 }
 
-components_deserialize :: proc{ components_deserialize_slice, components_deserialize_matched }
 
-components_deserialize_slice :: proc($T: typeid, components_data: ..ECSComponentData, copy := false) -> (ret: []ComponentData(T)) {
+components_deserialize :: proc($T: typeid, components_data: ..ECSComponentData, copy := false) -> (ret: []ComponentData(T)) {
     ret = make([]ComponentData(T), len(components_data))
 
     for i := 0; i < len(components_data); i += 1 {
@@ -84,6 +83,7 @@ components_deserialize_slice :: proc($T: typeid, components_data: ..ECSComponent
     return
 }
 
+/*
 components_deserialize_matched :: proc($T: typeid, components_data: ECSMatchedComponentData, copy := false) -> (ret: MatchedComponentData(T)) {
     ret.component_label_match = components_data.component_label_match
     ret.component_data = make([]^T, len(components_data.component_data))
@@ -92,3 +92,4 @@ components_deserialize_matched :: proc($T: typeid, components_data: ECSMatchedCo
         ret.component_data[i] = deserialize_component_bytearr(T, components_data.component_data[i])
     }
 }
+*/

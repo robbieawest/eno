@@ -1,7 +1,10 @@
 package ecs
 
 import dbg "../debug"
+import "../utils"
 
+import "core:mem"
+import "core:strings"
 
 SceneQuery :: struct {
     return_flat_component_data: bool,
@@ -10,29 +13,37 @@ SceneQuery :: struct {
 }
 
 ArchetypeQuery :: struct {
-    return_flat_component_data: bool,
-    entities: []string,
+    entities: []string,  // Ignore for now
     components: []ComponentQuery
 }
 
 ComponentQuery :: struct {
     label: string,
-    data: rawptr
+    include: bool,
+    data: rawptr  // Give as nil to query by existence of label
 }
-
 
 
 SceneQueryResult :: map[string]ArchetypeQueryResult  // Maps scene name
-ArchetypeQueryResult :: map[string]EntityQueryResult  // Maps archetype name
-
-InnerArchetypeQueryResult :: union {
-    ComponentQueryResult,
-    EntityQueryResult
+ArchetypeQueryResult :: struct {
+    entity_map: map[string]Entity,  // Entity struct contains the column to start into the component data
+    component_map: map[string]u32,  // Maps to rows into data
+    data: [dynamic][dynamic][dynamic]byte
 }
 
-ComponentQueryResult :: ECSMatchedComponentData
-EntityQueryResult :: map[string]EntityComponentData  // Maps entity name
 
+delete_archetype_query_result :: proc(result: ArchetypeQueryResult) {
+    for key, _ in result.entity_map do delete(key)
+    delete(result.entity_map)
+
+    for key, _ in result.component_map do delete(key)
+    delete(result.component_map)
+
+    for arr2 in result.data do delete(arr2)
+    delete(result.data)
+}
+
+// ?
 EntityComponentData :: struct {
     entity_name: string,
     component_data: ECSMatchedComponentData,  // Component data stored in order by the entity fields/components
@@ -47,7 +58,7 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResu
         if n_archetype_queries == 1 {
             arch_query := query.queries[0]
             for label, ind in scene.archetype_label_match {
-                result[label] = query_archetype(&scene.archetypes[ind], arch_query) or_return
+                result[label] = query_archetype(&scene.archetypes[ind], arch_query, query.return_flat_component_data) or_return
             }
         } else if n_archetype_queries != len(scene.archetypes) {
             dbg.debug_point(dbg.LogLevel.ERROR, "Must be either one global archetype query, or one archetype query for each archetype in the scene")
@@ -55,7 +66,7 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResu
         } else {
             i := 0
             for label, ind in scene.archetype_label_match {
-                result[label] = query_archetype(&scene.archetypes[ind], query.queries[i]) or_return
+                result[label] = query_archetype(&scene.archetypes[ind], query.queries[i], query.return_flat_component_data) or_return
                 i += 1
             }
         }
@@ -65,39 +76,43 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResu
     return
 }
 
-query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result: ArchetypeQueryResult, ok: bool) {
+query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, return_flat_component_data: bool) -> (result: ArchetypeQueryResult, ok: bool) {
 
-    query_all_entities := len(query.entities) == 0
-    n_query_entities := query_all_entities ? archetype.n_Entities : u32(len(query.entities))
-    
-    query_all_components := len(query.components) == 0
-    n_query_components := query_all_components ? archetype.n_Components : u32(len(query.components))
+    result.data = archetype_get_entity_data(archetype)
+    result.component_map = utils.copy_map(archetype.components_label_match)
+    result.entity_map = utils.copy_map(archetype.entities)
 
-    entities_to_query := make([dynamic]^Entity, n_query_entities)
-    defer delete(entities_to_query)
+    entity_index_to_label_map := make(map[u32]string, len(result.entity_map))
+    for label, entity in result.entity_map do entity_index_to_label_map[entity.archetype_column] = label
 
-    for entity_label in query.entities {
-        entity, entity_found := archetype.entities[entity_label]
-        append(&entities_to_query, &entity)
-    }
+    if len(query.components) == 0 && len(query.entities) == 0 do return result, true
 
-    /*
+    // Filter result
+    entities_to_be_filtered := make([dynamic]Entity)
+
     for component_query in query.components {
-        comp_index, component_found := archetype.components_label_match[component_query.label]
+        comp_ind, comp_exists := archetype.components_label_match[component_query.label]
+        if !comp_exists do return {}, true // Skip archetype
 
-        comp_size := archetype.component_info.component_infos[comp_index].size
+        component_data: [dynamic][dynamic]byte = result.data[comp_ind]
+        if component_query.data != nil {
+            for component, i in component_data {
+                if mem.compare_ptrs(raw_data(component), component_query.data, len(component)) != 0 {
+                    // Does not match at this entity
+                    comp_size := archetype.component_info.component_infos[i].size
 
-        entity_query_result: EntityQueryResult
-        for entity in entities_to_query {
-            component: ECSComponentData
-            component.label = component_query.label
-            component.type = component_query.type
-            component.data = archetype.components[comp_index][entity.archetype_column:entity.archetype_column + comp_size]  // Smells bad
-            append(&entity_query_result.data, component)
+                    // The map chain is to give as much context later when ultimately removing the entities
+                    append(&entities_to_be_filtered, result.entity_map[entity_index_to_label_map[u32(i) * comp_size]])
+                }
+            }
         }
-        append(&result, entity_query_result)
+
+        // Regardless of filter result, remove component from output
+        ordered_remove(&result.data, comp_ind)
+        delete_key(&result.component_map, component_query.label)
     }
-    */
+
+    // todo
 
     ok = true
     return

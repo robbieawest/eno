@@ -18,7 +18,8 @@ ChunkAllocator :: struct {
 
 Entity :: struct {
     id: u32,
-    archetype_column: u32
+    archetype_column: u32,
+    name: string
 }
 
 
@@ -114,14 +115,25 @@ archetype_get_component_data :: proc(archetype: ^Archetype, component_label: str
     return comp_data[m:min(n, u32(len(comp_data)))]
 }
 
-archetype_get_component_data_from_column :: proc(archetype: ^Archetype, component_label: string, column: int) -> (component: ECSComponentData) {
+/*
+    Return all archetype data but instead split by specific entity parts
+    This form is very workable, and is used in querying
+*/
+@(private)
+archetype_get_entity_data :: proc(archetype: ^Archetype) -> (result: [dynamic][dynamic][dynamic]byte) {
+    result = make([dynamic][dynamic][dynamic]byte, len(archetype.components))
+    for i := 0; i < len(archetype.components); i += 1 {
+        comp_data := archetype.components[i]
+        comp_size := int(archetype.component_info.component_infos[i].size)
 
-    component_index := archetype.components_label_match[component_label]
-    component_info := archetype.component_info.component_infos[component_index]
-    comp_data: ^[dynamic]byte = &archetype.components[component_index]
-    into_data := column * int(component_info.size)
-
-    return ECSComponentData {label = component_label, data = comp_data[into_data:into_data + int(component_info.size)] , type = component_info.type }
+        inner_result := make([dynamic][dynamic]byte, len(comp_data) / comp_size)
+        for j := 0; j < len(inner_result); j += 1 {
+            individual_component_start := j * comp_size
+            inner_result[j] = slice.into_dynamic(comp_data[individual_component_start:individual_component_start + comp_size])
+        }
+        result[i] = inner_result
+    }
+    return
 }
 
 
@@ -203,10 +215,12 @@ archetype_add_entity_checks :: proc(scene: ^Scene, archetype: ^Archetype, entity
 // Add a way with matched form? CBA
 archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, $T: typeid, component_data: ..ComponentData(T)) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Adding archetype entity: %s", entity_label)
+    entity_label := strings.clone(entity_label)
     archetype_add_entity_checks(scene, archetype, entity_label) or_return
 
     entity: Entity
     entity.id = scene.n_Entities
+    entity.name = entity_label
     scene.n_Entities += 1
 
     entity.archetype_column = archetype.n_Entities
