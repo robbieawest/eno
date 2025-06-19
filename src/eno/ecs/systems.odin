@@ -98,11 +98,8 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, return_fla
         if component_query.data != nil {
             for component, i in component_data {
                 if mem.compare_ptrs(raw_data(component), component_query.data, len(component)) != 0 {
-                    // Does not match at this entity
-                    comp_size := archetype.component_info.component_infos[i].size
-
                     // The map chain is to give as much context later when ultimately removing the entities
-                    append(&entities_to_be_filtered, result.entity_map[entity_index_to_label_map[u32(i) * comp_size]])
+                    append(&entities_to_be_filtered, result.entity_map[entity_index_to_label_map[u32(i)]])
                 }
             }
         }
@@ -112,7 +109,20 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, return_fla
         delete_key(&result.component_map, component_query.label)
     }
 
-    // todo
+    // Add query entities to filter
+    for entity in query.entities do append(&entities_to_be_filtered, archetype.entities[entity])
+
+    // Finally filter entities out
+
+    // Firstly remove from component data
+    for entity in entities_to_be_filtered {
+        for comp_data in result.data {
+            ordered_remove(&result.data, entity.archetype_column)
+        }
+    }
+
+    // And then decrement all the entity columns so that they are in order of one-increments
+    // This is valid since we just removed everything in between
 
     ok = true
     return
