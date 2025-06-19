@@ -115,20 +115,29 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, return_fla
     // Finally filter entities out
 
     // Firstly remove from component data
-    for entity in entities_to_be_filtered {
-        for comp_data in result.data {
-            ordered_remove(&result.data, entity.archetype_column)
-        }
+    entity_columns := make([dynamic]int, len(entities_to_be_filtered))
+    for i := 0; i < len(entities_to_be_filtered); i += 0 {
+        entity_columns[i] = int(entities_to_be_filtered[i].archetype_column)
+        delete_key(&result.entity_map, entities_to_be_filtered[i].name)
     }
+    utils.remove_from_dynamic(&result.data, ..entity_columns[:])
 
     // And then decrement all the entity columns so that they are in order of one-increments
     // This is valid since we just removed everything in between
+
+    last_column := -1
+    for _, &entity in result.entity_map {
+        if int(entity.archetype_column) > last_column do entity.archetype_column = u32(last_column + 1)
+        last_column = int(entity.archetype_column)
+    }
+
 
     ok = true
     return
 }
 
 
+/*
 /*
     Queries a single components data from the archetype
     Returns data uncopied as compile typed ComponentData
@@ -187,7 +196,6 @@ query_component_from_archetype_unchecked :: proc(archetype: ^Archetype, componen
 
 // Actions - not sure why these are even needed
 
-/*
 
     Defining an action a procedure which runs for every entity in the archetype, for a specific component. 
     This standardises and quickens the process of acting a procedure (without any direct return) to entity component data.

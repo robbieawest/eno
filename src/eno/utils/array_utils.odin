@@ -7,6 +7,7 @@ import "base:intrinsics"
 import "core:testing"
 import "core:mem"
 import "core:slice"
+import "core:log"
 
 // Utils package must not depend on any other package
 // If certain functionality needs to be dependent on another package, just make another package
@@ -47,8 +48,7 @@ s_slice := []f32{0.32, 0.12, 0.58}
 remove_from_dynamic :: proc(arr: ^$T/[dynamic]$E, indices: ..int) -> (ok: bool) {
     indices := slice.clone(indices)
     defer delete(indices)
-    slice.sort(indices)
-
+    slice.reverse_sort(indices)
 
     for index, j in indices {
         if sorted_check_duplicate(indices, j) {
@@ -56,16 +56,12 @@ remove_from_dynamic :: proc(arr: ^$T/[dynamic]$E, indices: ..int) -> (ok: bool) 
             continue
         }
 
-        if index_in_bounds(index, len(arr)) {
+        if !index_in_bounds(index, len(arr)) {
             dbg.debug_point(dbg.LogLevel.ERROR, "Index %d is out of range of length %d", index, len(arr))
             return
         }
 
-        i := 0
-        for i = i; index < len(arr) - 1 - j; i += 1 {
-            bit_swap(&arr[i], &arr[i + 1])  // Bubble up unwanted value
-        }
-        arr[i] = 0  // Default out end space
+        if index < len(arr) - 1 do copy_slice(arr[index:], arr[index+1:])
     }
 
     (transmute(^mem.Raw_Dynamic_Array)arr).len -= len(indices)
@@ -86,8 +82,11 @@ sorted_check_duplicate :: proc(slice: $T/[]$E, #any_int index: int) -> (duplicat
 
 @(test)
 remove_from_dynamic_test :: proc(t: ^testing.T) {
+    dbg.init_debug_stack()
+    defer dbg.destroy_debug_stack()
 
-    arr := make([dynamic]u32, 10)
+    arr := make([dynamic]u32, 0, 10)
+    defer delete(arr)
     append_elems(&arr, 10, 9, 32, 2, 3, 90, 26, 10, 1, 2)
 
     ok := remove_from_dynamic(&arr, 2, 5, 6, 7, 1)
@@ -98,4 +97,5 @@ remove_from_dynamic_test :: proc(t: ^testing.T) {
     testing.expect_value(t, arr[2], 3)
     testing.expect_value(t, arr[3], 1)
     testing.expect_value(t, arr[4], 2)
+    log.infof("arr: %v", arr)
 }
