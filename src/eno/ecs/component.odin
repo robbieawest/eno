@@ -3,8 +3,13 @@ package ecs
 import dbg "../debug"
 
 import "core:mem"
+import "core:slice"
 import "core:strings"
 
+ComponentTemplate :: struct {
+    label: string,
+    type: typeid
+}
 
 // Serialized
 ECSComponentData :: struct {
@@ -13,15 +18,24 @@ ECSComponentData :: struct {
     data: []byte
 }
 
+// Copies everything!
+make_ecs_component_data :: proc{ make_ecs_component_data_raw, make_ecs_component_data_standard }
+
+// Copies everything!
+make_ecs_component_data_raw :: proc(label: string, type: typeid, data: []byte) -> ECSComponentData {
+    return {strings.clone(label), type, slice.clone(data) }
+}
+
+// Copies everything!
+make_ecs_component_data_standard :: proc(template: ComponentTemplate, data: []byte) -> ECSComponentData {
+    return { strings.clone(template.label), template.type, slice.clone(data) }
+}
+
 destroy_ecs_component_data :: proc(component: ECSComponentData) {
     delete(component.label)
     delete(component.data)
 }
 
-ECSMatchedComponentData :: struct {
-    component_label_match: map[string]u32,
-    component_data: [dynamic][dynamic]byte
-}
 
 // Deserialized
 ComponentData :: struct ($T: typeid) {
@@ -37,13 +51,15 @@ MatchedComponentData :: struct ($T: typeid) {
 
 // Serialization and deserialization
 
+serialize_data :: proc(data: ^$T, copy := false) -> []byte {
+    data := transmute([]byte)mem.Raw_Slice{ data, size_of(T) }
+    return copy ? slice.clone(data) : data
+}
+
 // Copies everything in input
 serialize_component :: proc(component: ComponentData($T), allocator := context.allocator) -> (ret: ECSComponentData) {
     ret.label = strings.clone(component.label)
-
-    ret.data = make([]byte, size_of(T))
-    mem.copy(raw_data(ret.data), component.data, size_of(T))
-
+    ret.data = serialize_data(component.data)
     return
 }
 

@@ -72,7 +72,7 @@ shader_read_test :: proc(t: ^testing.T) {
     testing.expect_value(t, nil_maybe, program.id)
     log.infof("%#v", program)
     if len(program.shaders) == 2 {
-        log.infof("%s, %s", program.shaders[0].type, program.shaders[0].source)
-        log.infof("%s, %s", program.shaders[1].type, program.shaders[1].source)
+        log.infof("%s", program.shaders[.FRAGMENT].source)
+        log.infof("%s", program.shaders[.VERTEX].source)
     }
 }

@@ -6,6 +6,7 @@ import "../model"
 
 import "core:mem"
 import "core:slice"
+import "core:strings"
 
 // Todo: look into component/entity deletion and custom allocators
 // Relate it to every type defined in eno
@@ -213,7 +214,7 @@ archetype_add_entity_checks :: proc(scene: ^Scene, archetype: ^Archetype, entity
 
 
 // Add a way with matched form? CBA
-archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, $T: typeid, component_data: ..ComponentData(T)) -> (ok: bool) {
+archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, component_data: ..ECSComponentData) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Adding archetype entity: %s", entity_label)
     entity_label := strings.clone(entity_label)
     archetype_add_entity_checks(scene, archetype, entity_label) or_return
@@ -234,8 +235,7 @@ archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label:
             return
         }
 
-        serialized_component := serialize_component(data)
-        append_elems(&archetype.components[comp_index], ..serialized_component.data)
+        append_elems(&archetype.components[comp_index], ..data.data)
     }
 
     ok = true

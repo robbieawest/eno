@@ -4,15 +4,14 @@ import win "../window"
 import game "../game"
 import "../ecs"
 import "../model"
-import "../render_old"
 import cutils "../camera_utils"
 import cam "../camera"
 import shader "../shader"
+import "../standards"
 
 import "core:log"
 import "core:math/linalg"
 import glm "core:math/linalg/glsl"
-
 
 // Implement your before_frame and every_frame procedures in a file like this
 // APIs for ecs are dogwater right now
@@ -34,17 +33,17 @@ every_frame :: proc() -> (ok: bool) {
 
 before_frame :: proc() -> (ok: bool) {
 
-    arch, _ := ecs.scene_add_default_archetype(game.Game.scene, "entities")
+    arch := ecs.scene_add_default_archetype(game.Game.scene, "entities") or_return
 
-    world_properties := ecs.WorldComponent {
+    world_properties := standards.WorldComponent {
         scale = { 0.5, 0.5, 0.5 }
     }
 
     model := helmet_model()
     ecs.archetype_add_entity(game.Game.scene, arch, "helmet_entity",
-        ecs.make_component_data_untyped_s(&model, ecs.MODEL_COMPONENT),
-        ecs.make_component_data_untyped_s(&world_properties, ecs.WORLD_COMPONENT),
-    )
+        ecs.make_ecs_component_data(standards.MODEL_COMPONENT, ecs.serialize_data(&model)),
+        ecs.make_ecs_component_data(standards.WORLD_COMPONENT, ecs.serialize_data(&world_properties)),
+    ) or_return
 
     program := shader.read_shader_source("resources/shaders/demo_pbr_shader") or_return
 

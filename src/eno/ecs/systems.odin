@@ -43,12 +43,6 @@ delete_archetype_query_result :: proc(result: ArchetypeQueryResult) {
     delete(result.data)
 }
 
-// ?
-EntityComponentData :: struct {
-    entity_name: string,
-    component_data: ECSMatchedComponentData,  // Component data stored in order by the entity fields/components
-}
-
 
 query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResult, ok: bool) {
     result = make(SceneQueryResult)
@@ -58,7 +52,7 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResu
         if n_archetype_queries == 1 {
             arch_query := query.queries[0]
             for label, ind in scene.archetype_label_match {
-                result[label] = query_archetype(&scene.archetypes[ind], arch_query, query.return_flat_component_data) or_return
+                result[label] = query_archetype(&scene.archetypes[ind], arch_query, query.return_flat_component_data)
             }
         } else if n_archetype_queries != len(scene.archetypes) {
             dbg.debug_point(dbg.LogLevel.ERROR, "Must be either one global archetype query, or one archetype query for each archetype in the scene")
@@ -66,7 +60,7 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResu
         } else {
             i := 0
             for label, ind in scene.archetype_label_match {
-                result[label] = query_archetype(&scene.archetypes[ind], query.queries[i], query.return_flat_component_data) or_return
+                result[label] = query_archetype(&scene.archetypes[ind], query.queries[i], query.return_flat_component_data)
                 i += 1
             }
         }
@@ -76,7 +70,7 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResu
     return
 }
 
-query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, return_flat_component_data: bool) -> (result: ArchetypeQueryResult, ok: bool) {
+query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, return_flat_component_data: bool) -> (result: ArchetypeQueryResult) {
 
     result.data = archetype_get_entity_data(archetype)
     result.component_map = utils.copy_map(archetype.components_label_match)
@@ -85,14 +79,14 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, return_fla
     entity_index_to_label_map := make(map[u32]string, len(result.entity_map))
     for label, entity in result.entity_map do entity_index_to_label_map[entity.archetype_column] = label
 
-    if len(query.components) == 0 && len(query.entities) == 0 do return result, true
+    if len(query.components) == 0 && len(query.entities) == 0 do return result
 
     // Filter result
     entities_to_be_filtered := make([dynamic]Entity)
 
     for component_query in query.components {
         comp_ind, comp_exists := archetype.components_label_match[component_query.label]
-        if !comp_exists do return {}, true // Skip archetype
+        if !comp_exists do return {} // Skip archetype
 
         component_data: [dynamic][dynamic]byte = result.data[comp_ind]
         if component_query.data != nil {
@@ -131,8 +125,6 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, return_fla
         last_column = int(entity.archetype_column)
     }
 
-
-    ok = true
     return
 }
 
