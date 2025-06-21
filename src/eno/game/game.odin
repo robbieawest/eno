@@ -8,6 +8,7 @@ import dbg "../debug"
 import control "../control"
 import "../camera"
 import glutils "../utils/gl_utils"
+import "../render"
 
 import "core:os"
 import glm "core:math/linalg/glsl"
@@ -24,10 +25,11 @@ GAME_STATE :: enum { NOT_STARTED, RUNNING, HALTED, QUIT }
 Game: ^EnoGame
 EnoGame :: struct {
     window: win.WindowTarget,
-    scene: ^ecs.Scene, // Defined as a single scene per game, this obviously needs some sort of change, since games do not only have a single scene,
+    scene: ^ecs.Scene, // Defined as a single scene per game
     every_frame: frame_loop_proc_,
     before_frame: before_loop_proc_,
-    game_state: GAME_STATE,
+    state: GAME_STATE,
+    game_data: rawptr, // Use to store arbitrary information, for example render pipelines between before_frame and every_frame calls
     controller: control.Controller
 }
 
@@ -40,7 +42,7 @@ run_game :: proc() {
         return
     }
 
-    Game.game_state = .RUNNING
+    Game.state = .RUNNING
 
     before_ok := Game.before_frame()
     if !before_ok {
@@ -48,7 +50,7 @@ run_game :: proc() {
         return
     }
 
-    for Game.game_state == .RUNNING {
+    for Game.state == .RUNNING {
         control.poll(&Game.controller)
         glutils.frame_setup()
         every_ok := Game.every_frame()
@@ -61,12 +63,12 @@ run_game :: proc() {
 
 
 halt_game :: proc() {
-    Game.game_state = .HALTED
+    Game.state = .HALTED
 }
 
 
 quit_game :: proc() {
-    Game.game_state = .QUIT
+    Game.state = .QUIT
 }
 
 

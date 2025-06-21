@@ -9,18 +9,35 @@ import dbg "../debug"
 import glm "core:math/linalg/glsl"
 import "core:strings"
 import "core:fmt"
+import "../standards"  // todo fix stupid cyclical import
 
-
-render :: proc(pipeline: RenderPipeline, scene: ^ecs.Scene) {
+render :: proc(pipeline: RenderPipeline, scene: ^ecs.Scene) -> (ok: bool) {
     /*
         for later:
             instancing done via InstanceTo ecs component
             batching via combining entities with matching gpu components
     */
 
-    // 1. todo query scene for renderable models - need to add scene querying and a better ecs api..
+    // 1. todo query scene for renderable models
+    isVisibleQueryData := true
+    query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
+        { label = standards.MODEL_COMPONENT.label, include = true },
+        { label = standards.VISIBLE_COMPONENT.label, data = &isVisibleQueryData }
+    }}
+    query_result := ecs.query_scene(scene, query) or_return
+
     // 2. flatten into lots of meshes
+    meshes: [dynamic][]model.Mesh = make([dynamic][]model.Mesh)
+    for _, arch_result in query_result {
+        for comp_label, comp_ind in arch_result.component_map {
+            comp_data := arch_result.data[comp_ind]
+            model_data := ecs.components_deserialize(model.Model)  // todo create version which can supply with flat data, and that which gives only the data, no metadata
+            append(&meshes, model_data.mesh_data) // like this!
+        }
+    }
+
     // 3. get gpu components
+    // 4. deal with programs and light/camera uniforms
 
     //4.
 
@@ -32,6 +49,7 @@ render :: proc(pipeline: RenderPipeline, scene: ^ecs.Scene) {
         // figure it out when the need is there
     }
 
+    return true
 }
 
 
@@ -71,6 +89,7 @@ MaterialModel :: enum {
 
 /*
     Creates a lighting shader based on vertex attribute info, a material, a lighting model and a material model
+    todo unfinished
 */
 create_forward_lighting_shader :: proc(
     attribute_infos: model.VertexLayout,

@@ -5,25 +5,26 @@ import game "../game"
 import "../ecs"
 import "../model"
 import cutils "../camera_utils"
-import cam "../camera"
 import shader "../shader"
 import "../standards"
 
 import "core:log"
-import "core:math/linalg"
 import glm "core:math/linalg/glsl"
+import render "../render"
+
 
 // Implement your before_frame and every_frame procedures in a file like this
-// APIs for ecs are dogwater right now
 // Certain operations are done around this every frame, look inside game package
+
+// programmer-defined to be able to store any data
+// set a pointer to Game.game_Data
+GameData :: struct {
+    render_pipeline: render.RenderPipeline
+}
+
 every_frame :: proc() -> (ok: bool) {
 
-    // Update camera
-    //copied_program := draw_properties.gpu_component.(shader.gl_GPUComponent).program
-    //cutils.update_view(&copied_program)
-
-    // Draw
-   // render_old.draw_indexed_entities(game.Game.scene, "helmet_arch", "helmet_entity")
+    render.render((cast(^GameData)game.Game.game_data).render_pipeline, game.Game.scene)
 
     // Swap
     ok = win.swap_window_bufs(game.Game.window); if !ok do log.errorf("could not swap bufs")
@@ -33,20 +34,26 @@ every_frame :: proc() -> (ok: bool) {
 
 before_frame :: proc() -> (ok: bool) {
 
-    arch := ecs.scene_add_default_archetype(game.Game.scene, "entities") or_return
+    arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
 
     world_properties := standards.WorldComponent {
         scale = { 0.5, 0.5, 0.5 }
     }
 
-    model := helmet_model()
+    model := model.Model{ model.load_and_extract_meshes("SciFiHelmet") or_return }
+
     ecs.archetype_add_entity(game.Game.scene, arch, "helmet_entity",
         ecs.make_ecs_component_data(standards.MODEL_COMPONENT, ecs.serialize_data(&model)),
         ecs.make_ecs_component_data(standards.WORLD_COMPONENT, ecs.serialize_data(&world_properties)),
     ) or_return
 
+    // todo enhance this process with shader pass interfaces
+    // todo figure out where to store shader identifiers in entity data
     program := shader.read_shader_source("resources/shaders/demo_pbr_shader") or_return
 
+    game_data := new(GameData)
+    game_data.render_pipeline = render.RenderPipeline{}  // Default -> Draw directly to default framebuffer
+    game.Game.game_data = game_data
 
     // Camera
     ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "helmet_cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
@@ -58,11 +65,4 @@ before_frame :: proc() -> (ok: bool) {
     )
 
     return true
-}
-
-
-@(private)
-helmet_model :: proc() -> (helmet_model: model.Model) {
-    meshes, ok := model.load_and_extract_meshes("SciFiHelmet"); if !ok do return
-    return model.Model{ meshes }
 }

@@ -13,6 +13,7 @@ WORLD_COMPONENT := ecs.ComponentTemplate{ "World", WorldComponent } // Of type W
 POINT_LIGHT_COMPONENT := ecs.ComponentTemplate{ "PointLight", render.PointLight }   // Of type render.PointLight
 DIRECTIONAL_LIGHT_COMPONENT := ecs.ComponentTemplate{ "DirectionalLight", render.DirectionalLight } // Of type render.DirectionalLight
 SPOT_LIGHT_COMPONENT := ecs.ComponentTemplate{ "SpotLight", render.SpotLight }
+VISIBLE_COMPONENT := ecs.ComponentTemplate{ "IsVisible", bool }
 
 WorldComponent :: struct {
     position: glm.vec3,

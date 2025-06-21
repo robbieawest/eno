@@ -4,12 +4,10 @@ import dbg "../debug"
 import "../utils"
 
 import "core:mem"
-import "core:strings"
 
-SceneQuery :: struct {
-    return_flat_component_data: bool,
-    archetypes: Maybe([]string),
-    queries: []ArchetypeQuery // Provide as size 1 to do the same query for each archetype
+SceneQuery :: union {
+    ArchetypeQuery,  // To use the same query on all archetypes
+    map[string]ArchetypeQuery  // To split by archetype
 }
 
 ArchetypeQuery :: struct {
@@ -46,31 +44,27 @@ delete_archetype_query_result :: proc(result: ArchetypeQueryResult) {
 
 query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResult, ok: bool) {
     result = make(SceneQueryResult)
-    if query.archetypes == nil {
-
-        n_archetype_queries := len(query.queries)
-        if n_archetype_queries == 1 {
-            arch_query := query.queries[0]
+    switch v in query {
+        case ArchetypeQuery:
             for label, ind in scene.archetype_label_match {
-                result[label] = query_archetype(&scene.archetypes[ind], arch_query, query.return_flat_component_data)
+                result[label] = query_archetype(&scene.archetypes[ind], v)
             }
-        } else if n_archetype_queries != len(scene.archetypes) {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Must be either one global archetype query, or one archetype query for each archetype in the scene")
-            return
-        } else {
-            i := 0
-            for label, ind in scene.archetype_label_match {
-                result[label] = query_archetype(&scene.archetypes[ind], query.queries[i], query.return_flat_component_data)
-                i += 1
+        case map[string]ArchetypeQuery:
+            for archetype_label, archetype_query in v {
+                archetype, archetype_exists := scene_get_archetype(scene, archetype_label)
+                if !archetype_exists {
+                    dbg.debug_point(dbg.LogLevel.ERROR, "Archetype label %s does not map to an existing archetype", archetype_label)
+                    return
+                }
+                query_archetype(archetype, archetype_query)
             }
-        }
     }
 
     ok = true
     return
 }
 
-query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, return_flat_component_data: bool) -> (result: ArchetypeQueryResult) {
+query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result: ArchetypeQueryResult) {
 
     result.data = archetype_get_entity_data(archetype)
     result.component_map = utils.copy_map(archetype.components_label_match)
