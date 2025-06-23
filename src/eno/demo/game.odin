@@ -40,14 +40,13 @@ before_frame :: proc() -> (ok: bool) {
         scale = { 0.5, 0.5, 0.5 }
     }
 
-    model := model.Model{ model.load_and_extract_meshes("SciFiHelmet") or_return }
+    helmet_model := model.Model{ model.load_and_extract_meshes("SciFiHelmet") or_return }
 
     ecs.archetype_add_entity(game.Game.scene, arch, "helmet_entity",
-        ecs.make_ecs_component_data(standards.MODEL_COMPONENT, ecs.serialize_data(&model)),
-        ecs.make_ecs_component_data(standards.WORLD_COMPONENT, ecs.serialize_data(&world_properties)),
+        ecs.make_ecs_component_data(model.MODEL_COMPONENT.label, model.MODEL_COMPONENT.type, ecs.serialize_data(&helmet_model)),
+        ecs.make_ecs_component_data(standards.WORLD_COMPONENT.label, standards.WORLD_COMPONENT.type, ecs.serialize_data(&world_properties)),
     ) or_return
 
-    // todo enhance this process with shader pass interfaces
     // todo figure out where to store shader identifiers in entity data
     program := shader.read_shader_source("resources/shaders/demo_pbr_shader") or_return
 

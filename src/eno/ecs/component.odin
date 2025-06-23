@@ -19,17 +19,10 @@ ECSComponentData :: struct {
 }
 
 // Copies everything!
-make_ecs_component_data :: proc{ make_ecs_component_data_raw, make_ecs_component_data_standard }
-
-// Copies everything!
-make_ecs_component_data_raw :: proc(label: string, type: typeid, data: []byte) -> ECSComponentData {
+make_ecs_component_data:: proc(label: string, type: typeid, data: []byte) -> ECSComponentData {
     return {strings.clone(label), type, slice.clone(data) }
 }
 
-// Copies everything!
-make_ecs_component_data_standard :: proc(template: ComponentTemplate, data: []byte) -> ECSComponentData {
-    return { strings.clone(template.label), template.type, slice.clone(data) }
-}
 
 destroy_ecs_component_data :: proc(component: ECSComponentData) {
     delete(component.label)
@@ -88,6 +81,12 @@ component_deserialize:: proc($T: typeid, component: ECSComponentData, copy := fa
     return
 }
 
+components_deserialize_raw :: proc($T: typeid, components_data: $B, copy := false) -> (ret: []^T)
+    where B == [dynamic][dynamic]byte || B == [][]byte {
+    ret = make([]^T, 0, len(components_data))
+    for comp_data in components_data do append(&ret, deserialize_component_bytearr(T, comp_data, copy))
+    return
+}
 
 components_deserialize :: proc($T: typeid, components_data: ..ECSComponentData, copy := false) -> (ret: []ComponentData(T)) {
     ret = make([]ComponentData(T), len(components_data))

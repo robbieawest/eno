@@ -422,7 +422,6 @@ add_function :: proc(shader: ^ShaderInfo, new_function: ShaderFunction) -> (ok: 
 
 //
 
-// If more types are added the ShaderReadFlags must be updated for the bit size
 ShaderType :: enum { // Is just gl.Shader_Type
     NIL,
     LINK,

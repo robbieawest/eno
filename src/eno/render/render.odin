@@ -9,7 +9,13 @@ import dbg "../debug"
 import glm "core:math/linalg/glsl"
 import "core:strings"
 import "core:fmt"
-import "../standards"  // todo fix stupid cyclical import
+import "../standards"
+
+
+POINT_LIGHT_COMPONENT := standards.ComponentTemplate{ "PointLight", PointLight }
+DIRECTIONAL_LIGHT_COMPONENT := standards.ComponentTemplate{ "DirectionalLight", DirectionalLight }
+SPOT_LIGHT_COMPONENT := standards.ComponentTemplate{ "SpotLight", SpotLight }
+
 
 render :: proc(pipeline: RenderPipeline, scene: ^ecs.Scene) -> (ok: bool) {
     /*
@@ -18,21 +24,20 @@ render :: proc(pipeline: RenderPipeline, scene: ^ecs.Scene) -> (ok: bool) {
             batching via combining entities with matching gpu components
     */
 
-    // 1. todo query scene for renderable models
+    // 1. query scene for renderable models
     isVisibleQueryData := true
     query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
-        { label = standards.MODEL_COMPONENT.label, include = true },
+        { label = model.MODEL_COMPONENT.label, include = true },
         { label = standards.VISIBLE_COMPONENT.label, data = &isVisibleQueryData }
     }}
     query_result := ecs.query_scene(scene, query) or_return
 
     // 2. flatten into lots of meshes
-    meshes: [dynamic][]model.Mesh = make([dynamic][]model.Mesh)
+    meshes: [dynamic]model.Mesh = make([dynamic]model.Mesh)
     for _, arch_result in query_result {
         for comp_label, comp_ind in arch_result.component_map {
-            comp_data := arch_result.data[comp_ind]
-            model_data := ecs.components_deserialize(model.Model)  // todo create version which can supply with flat data, and that which gives only the data, no metadata
-            append(&meshes, model_data.mesh_data) // like this!
+            model_data := ecs.components_deserialize_raw(model.Model, arch_result.data[comp_ind])
+            for model in model_data do append_elems(&meshes, ..model.meshes[:])
         }
     }
 

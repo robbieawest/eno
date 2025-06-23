@@ -2,7 +2,11 @@ package model
 
 import "vendor:cgltf"
 
+import "../standards"
+
 import "core:strings"
+
+MODEL_COMPONENT := standards.ComponentTemplate{ "Model", Model }
 
 /*
 VertexLayout :: struct {
@@ -226,3 +230,4 @@ eno_material_from_cgltf_material :: proc(cmat: cgltf.material) -> (material: Mat
 Model :: struct {
     meshes: [dynamic]Mesh,
 }
+
