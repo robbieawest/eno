@@ -1,6 +1,6 @@
 package old
 
-import "../../model"
+import "../../resource"
 import "../../gpu"
 
 

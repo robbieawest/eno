@@ -5,8 +5,6 @@ import gl "vendor:OpenGL"
 import dbg "../debug"
 
 import "core:strings"
-import "core:reflect"
-import glm "core:math/linalg/glsl"
 import "../utils"
 
 // Defines procedures for working with opengl uniforms

@@ -1,6 +1,6 @@
 package render
 
-import "../model"
+import "../resource"
 
 import "core:testing"
 import "core:log"
@@ -9,15 +9,15 @@ import "../shader"
 @(test)
 forward_lighting_shader_test :: proc(t: ^testing.T) {
 
-    layout := make(#soa[dynamic]model.MeshAttributeInfo, 0); defer delete(layout)
+    layout := make(#soa[dynamic]resource.MeshAttributeInfo, 0); defer delete(layout)
     append_soa_elems(&layout,
-        model.MeshAttributeInfo{ .normal, .vec3, .f32, 12, 3, "normal"},
-        model.MeshAttributeInfo{ .position, .vec3, .f32, 12, 3, "position"},
-        model.MeshAttributeInfo{ .tangent, .vec4, .f32, 16, 4, "tangent"},
-        model.MeshAttributeInfo{ .texcoord, .vec2, .f32, 8, 2, "texcoord_0"},  // Not sure how this will be handled...
+        resource.MeshAttributeInfo{ .normal, .vec3, .f32, 12, 3, "normal"},
+        resource.MeshAttributeInfo{ .position, .vec3, .f32, 12, 3, "position"},
+        resource.MeshAttributeInfo{ .tangent, .vec4, .f32, 16, 4, "tangent"},
+        resource.MeshAttributeInfo{ .texcoord, .vec2, .f32, 8, 2, "texcoord_0"},  // Not sure how this will be handled...
     )
 
-    material_infos: model.MaterialPropertiesInfos = { .PBR_METALLIC_ROUGHNESS }
+    material_infos: resource.MaterialPropertiesInfos = { .PBR_METALLIC_ROUGHNESS }
     lighting_model := LightingModel.DIRECT
     material_model := MaterialModel.PBR
 

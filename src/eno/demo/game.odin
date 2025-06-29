@@ -3,7 +3,7 @@ package demo
 import win "../window"
 import game "../game"
 import "../ecs"
-import "../model"
+import "../resource"
 import cutils "../camera_utils"
 import shader "../shader"
 import "../standards"
@@ -40,10 +40,10 @@ before_frame :: proc() -> (ok: bool) {
         scale = { 0.5, 0.5, 0.5 }
     }
 
-    helmet_model := model.Model{ model.load_and_extract_meshes("SciFiHelmet") or_return }
+    helmet_model := resource.Model{ resource.load_and_extract_meshes("SciFiHelmet") or_return }
 
     ecs.archetype_add_entity(game.Game.scene, arch, "helmet_entity",
-        ecs.make_ecs_component_data(model.MODEL_COMPONENT.label, model.MODEL_COMPONENT.type, ecs.serialize_data(&helmet_model)),
+        ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, ecs.serialize_data(&helmet_model)),
         ecs.make_ecs_component_data(standards.WORLD_COMPONENT.label, standards.WORLD_COMPONENT.type, ecs.serialize_data(&world_properties)),
     ) or_return
 

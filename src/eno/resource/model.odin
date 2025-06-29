@@ -1,8 +1,10 @@
-package model
+package resource
 
 import "vendor:cgltf"
+import stbi "vendor:stb/image"
 
 import "../standards"
+import dbg "../debug"
 
 import "core:strings"
 
@@ -148,14 +150,27 @@ MaterialPropertyInfo :: enum {
 
 MaterialPropertiesInfos :: bit_set[MaterialPropertyInfo]
 
+MaterialID :: u32
 Material :: struct {
     name: string,
     properties: map[MaterialPropertyInfo]MaterialProperty,
-    double_sided: bool,  // Not supported in lighting yet
-    unlit: bool  // Not supported in lighting yet
+    double_sided: bool,
+    unlit: bool
 }
 
-PbrMetallicRoughness :: cgltf.pbr_metallic_roughness
+PBRMetallicRoughness :: struct {
+    base_colour: TextureID,
+    metallic_roughness: TextureID,
+    base_colour_factor: [4]f32,
+    metallic_factor: f32,
+    roughness_factor: f32
+}
+
+NormalTexture :: distinct TextureID
+OcclusionTexture :: distinct TextureID
+EmissiveTexture :: distinct TextureID
+
+/*
 PbrSpecularGlossiness :: cgltf.pbr_specular_glossiness
 Clearcoat :: cgltf.clearcoat
 IndexOfRefraction :: cgltf.ior
@@ -167,61 +182,60 @@ EmissiveStrength :: cgltf.emissive_strength
 Iridescence :: cgltf.iridescence
 Anisotropy :: cgltf.anisotropy
 Dispersion :: cgltf.dispersion
-NormalTexture :: distinct cgltf.texture_view
-OcclusionTexture :: distinct cgltf.texture_view
-EmissiveTexture :: distinct cgltf.texture_view
+
 EmissiveFactor :: [3]f32
 AlphaMode :: cgltf.alpha_mode
 AlphaCutoff :: f32
-
+*/
 
 MaterialProperty :: union {
-    PbrMetallicRoughness,
-    PbrSpecularGlossiness,
-    Clearcoat,
-    IndexOfRefraction,
-    Specular,
-    Sheen,
-    Transmission,
-    Volume,
-    EmissiveStrength,
-    Iridescence,
-    Anisotropy,
-    Dispersion,
+    PBRMetallicRoughness,
     NormalTexture,
     OcclusionTexture,
     EmissiveTexture,
-    EmissiveFactor,
-    AlphaMode,
-    AlphaCutoff
 }
 
-
-eno_material_from_cgltf_material :: proc(cmat: cgltf.material) -> (material: Material) {
+// Assumes the resource manager is properly initialized
+eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.material) -> (material: Material, ok: bool) {
     material.name = strings.clone_from_cstring(cmat.name)
 
-    if cmat.has_pbr_metallic_roughness do material.properties[.PBR_METALLIC_ROUGHNESS] = cmat.pbr_metallic_roughness
-    if cmat.has_pbr_specular_glossiness do material.properties[.PBR_SPECULAR_GLOSSINESS] = cmat.pbr_specular_glossiness
-    if cmat.has_clearcoat do material.properties[.CLEARCOAT] = cmat.clearcoat
-    if cmat.has_transmission do material.properties[.TRANSMISSION] = cmat.transmission
-    if cmat.has_volume do material.properties[.VOLUME] = cmat.volume
-    if cmat.has_ior do material.properties[.INDEX_OF_REFRACTION] = cmat.ior
-    if cmat.has_specular do material.properties[.SPECULAR] = cmat.specular
-    if cmat.has_sheen do material.properties[.SHEEN] = cmat.sheen
-    if cmat.has_emissive_strength do material.properties[.EMISSIVE_STRENGTH] = cmat.emissive_strength
-    if cmat.has_iridescence do material.properties[.IRIDESCENCE] = cmat.iridescence
-    if cmat.has_anisotropy do material.properties[.ANISTROPY] = cmat.anisotropy
-    if cmat.has_dispersion do material.properties[.DISPERSION] = cmat.dispersion
+    if cmat.has_pbr_metallic_roughness {
+        base_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.base_color_factor.texture) or_return
+        met_rough_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.metallic_roughness_texture.texture) or_return
+        // todo transfer data to gpu - likely just do on demand from renderer
+
+        base_tex_id := add_texture_to_manager(manager, base_tex)
+        met_rough_id := add_texture_to_manager(manager, met_rough_tex)
+
+        metallic_roughness := PBRMetallicRoughness {
+            base_tex_id,
+            met_rough_id,
+            cmat.pbr_metallic_roughness.base_color_factor,
+            cmat.pbr_metallic_roughness.metallic_factor,
+            cmat.pbr_metallic_roughness.roughness_factor
+        }
+        material.properties[.PBR_METALLIC_ROUGHNESS] = metallic_roughness
+    }
+
+    if cmat.normal_texture.texture != nil {
+        tex := texture_from_cgltf_texture(cmat.normal_texture.texture) or_return
+        tex_id := add_texture_to_manager(manager, tex)
+        material.properties[.NORMAL_TEXTURE] = tex_id
+    }
+    if cmat.occlusion_texture.texture != nil {
+        tex := texture_from_cgltf_texture(cmat.occlusion_texture.texture) or_return
+        tex_id := add_texture_to_manager(manager, tex)
+        material.properties[.OCCLUSION_TEXTURE] = tex_id
+    }
+    if cmat.emissive_texture.texture != nil {
+        tex := texture_from_cgltf_texture(cmat.emissive_texture.texture) or_return
+        tex_id := add_texture_to_manager(manager, tex)
+        material.properties[.EMISSIVE_TEXTURE] = tex_id
+        material.properties[.EMISSIVE_FACTOR] = cmat.emissive_factor
+    }
 
     material.double_sided = bool(cmat.double_sided)
     material.unlit = bool(cmat.unlit)
-
-    if cmat.normal_texture.texture != nil do material.properties[.NORMAL_TEXTURE] = NormalTexture(cmat.normal_texture)
-    if cmat.occlusion_texture.texture != nil do material.properties[.OCCLUSION_TEXTURE] = OcclusionTexture(cmat.occlusion_texture)
-    if cmat.emissive_texture.texture != nil {
-        material.properties[.EMISSIVE_TEXTURE] = EmissiveTexture(cmat.emissive_texture)
-        material.properties[.EMISSIVE_FACTOR] = cmat.emissive_factor
-    }
 
     return
 }
@@ -231,3 +245,37 @@ Model :: struct {
     meshes: [dynamic]Mesh,
 }
 
+TextureID :: u32
+Texture :: struct {
+    name: string,
+    image: Image,
+    gpu_texture: Maybe(u32)
+}
+
+Image :: struct {
+    name: string,
+    w, h, channels: i32,
+    pixel_data: rawptr,  // Can be nil for no data
+}
+
+texture_from_cgltf_texture :: proc(texture: cgltf.texture) -> (result: Texture, ok: bool) {
+    return Texture{
+        strings.clone_from_cstring(texture.name),
+        load_image_from_cgltf_image(texture.image_) or_return
+    }
+}
+
+load_image_from_cgltf_image :: proc(image: cgltf.image) -> (result: Image, ok: bool) {
+    result.name = strings.clone_from_cstring(image.name)
+    // Don't care about image URI's right now, maybe I will have to later
+    if !image.buffer_view {
+        dbg.debug_point(dbg.LogLevel.ERROR, "CGLTF image does not have any buffer data")
+        return
+    }
+
+    image_buffer: [^]byte = image.buffer_view.buffer.data + image.buffer_view.offset
+    result.pixel_data = stbi.load_from_memory(image_buffer, image.buffer_view.size, &result.w, &result.h, &result.channels, 0)
+
+    ok = true
+    return
+}

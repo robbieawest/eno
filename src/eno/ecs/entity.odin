@@ -2,7 +2,7 @@ package ecs
 
 import dbg "../debug"
 import cam "../camera"
-import "../model"
+import "../resource"
 
 import "core:mem"
 import "core:slice"
@@ -141,7 +141,7 @@ archetype_get_entity_data :: proc(archetype: ^Archetype) -> (result: [dynamic][d
 scene_add_default_archetype :: proc(scene: ^Scene, label: string, allocator := context.allocator) -> (ret: ^Archetype, ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Adding default archetype of name: %s",  label)
     return scene_add_archetype(scene, label,
-        make_component_info(model.Model, MODEL_COMPONENT),
+        make_component_info(resource.Model, MODEL_COMPONENT),
         make_component_info(WorldComponent, WORLD_COMPONENT), allocator = allocator
     )
 }

@@ -1,7 +1,7 @@
 package render
 
 import "../ecs"
-import "../model"
+import "../resource"
 import "../shader"
 import "../utils"
 import dbg "../debug"
@@ -27,16 +27,16 @@ render :: proc(pipeline: RenderPipeline, scene: ^ecs.Scene) -> (ok: bool) {
     // 1. query scene for renderable models
     isVisibleQueryData := true
     query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
-        { label = model.MODEL_COMPONENT.label, include = true },
+        { label = resource.MODEL_COMPONENT.label, include = true },
         { label = standards.VISIBLE_COMPONENT.label, data = &isVisibleQueryData }
     }}
     query_result := ecs.query_scene(scene, query) or_return
 
     // 2. flatten into lots of meshes
-    meshes: [dynamic]model.Mesh = make([dynamic]model.Mesh)
+    meshes: [dynamic]resource.Mesh = make([dynamic]resource.Mesh)
     for _, arch_result in query_result {
         for comp_label, comp_ind in arch_result.component_map {
-            model_data := ecs.components_deserialize_raw(model.Model, arch_result.data[comp_ind])
+            model_data := ecs.components_deserialize_raw(resource.Model, arch_result.data[comp_ind])
             for model in model_data do append_elems(&meshes, ..model.meshes[:])
         }
     }
@@ -97,8 +97,8 @@ MaterialModel :: enum {
     todo unfinished
 */
 create_forward_lighting_shader :: proc(
-    attribute_infos: model.VertexLayout,
-    material: model.Material,
+    attribute_infos: resource.VertexLayout,
+    material: resource.Material,
     lighting_model: LightingModel,
     material_model: MaterialModel,
     allocator := context.allocator
@@ -180,19 +180,19 @@ create_forward_lighting_shader :: proc(
 
     uniforms := make([dynamic]shader.GLSLPair); defer shader.destroy_glsl_pairs(uniforms[:])
 
-    append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, model.BASE_COLOR })  // base colour comes from pbrMetallicRoughness
-    append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, model.PBR_METALLIC_ROUGHNESS })
-    append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, model.NORMAL_TEXTURE })
+    append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, resource.BASE_COLOR })  // base colour comes from pbrMetallicRoughness
+    append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, resource.PBR_METALLIC_ROUGHNESS })
+    append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, resource.NORMAL_TEXTURE })
 
     inc_emissive_texture := .EMISSIVE_TEXTURE in material.properties
     inc_occlusion_texture := .OCCLUSION_TEXTURE in material.properties
 
     if inc_emissive_texture {
-        append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, model.EMISSIVE_TEXTURE })
-        append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.vec3, model.EMISSIVE_FACTOR })
+        append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, resource.EMISSIVE_TEXTURE })
+        append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.vec3, resource.EMISSIVE_FACTOR })
     }
 
-    if inc_occlusion_texture do append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, model.OCCLUSION_TEXTURE })
+    if inc_occlusion_texture do append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, resource.OCCLUSION_TEXTURE })
 
 
 

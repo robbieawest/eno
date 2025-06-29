@@ -2,7 +2,7 @@ package render
 
 import gl "vendor:OpenGL"
 
-import "../model"
+import "../resource"
 import dbg "../debug"
 import "../shader"
 import "../utils"
@@ -14,13 +14,13 @@ GlComponentStates :: enum u32 {
 }
 GlComponentState :: bit_set [GlComponentStates; u32]
 
-gl_component_is_drawable :: proc(component: model.GLComponent) -> GlComponentState {
+gl_component_is_drawable :: proc(component: resource.GLComponent) -> GlComponentState {
     states: u32 = u32(!component.vao.transferred) | u32(!component.vbo.transferred) << 1 | u32(!component.ebo.transferred) << 2
     return transmute(GlComponentState)states
 }
 
 // todo look at shaders for this
-release_mesh :: proc(mesh: ^model.Mesh) {
+release_mesh :: proc(mesh: ^resource.Mesh) {
     delete(mesh.vertex_data)
     delete(mesh.index_data)
     gl.DeleteVertexArrays(1, &mesh.gl_component.vao.id)
@@ -28,12 +28,12 @@ release_mesh :: proc(mesh: ^model.Mesh) {
     gl.DeleteBuffers(1, &mesh.gl_component.ebo.id)
 }
 
-release_model :: proc(model: ^model.Model) {
+release_model :: proc(model: ^resource.Model) {
     for &mesh in model.meshes do release_mesh(&mesh)
 }
 
 
-transfer_model :: proc(model: model.Model) -> (ok: bool) {
+transfer_model :: proc(model: resource.Model) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Transferring model")
 
     for &mesh in model.meshes do express_mesh_with_indices(&mesh)
@@ -45,7 +45,7 @@ transfer_model :: proc(model: model.Model) -> (ok: bool) {
 }
 
 
-express_mesh_with_indices :: proc(mesh: ^model.Mesh) -> (ok: bool) {
+express_mesh_with_indices :: proc(mesh: ^resource.Mesh) -> (ok: bool) {
 
 
     gl.GenVertexArrays(1, &mesh.gl_component.vao.id)
@@ -74,7 +74,7 @@ express_mesh_with_indices :: proc(mesh: ^model.Mesh) -> (ok: bool) {
     Assumes bound vao
 */
 @(private)
-create_and_express_vbo :: proc(vbo: ^u32, data: ^model.Mesh) -> (ok: bool) {
+create_and_express_vbo :: proc(vbo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Expressing gl mesh vertices")
     if len(data.vertex_data) == 0 {
         dbg.debug_point(dbg.LogLevel.ERROR, "No vertices given to express");
@@ -110,7 +110,7 @@ create_and_express_vbo :: proc(vbo: ^u32, data: ^model.Mesh) -> (ok: bool) {
     Assumes bound vao
 */
 @(private)
-create_and_express_ebo :: proc(ebo: ^u32, data: ^model.Mesh) -> (ok: bool) {
+create_and_express_ebo :: proc(ebo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Expressing gl mesh indices")
     if len(data.index_data) == 0 {
         dbg.debug_point(dbg.LogLevel.ERROR, "Cannot express 0 indices")
@@ -137,7 +137,7 @@ gl_draw_elements :: proc(draw_properties: ^DrawProperties) {
 */
 
 
-/* 2D Single sample texture */
+/* 2D single sample texture for gpu package internal use */
 Texture :: struct {
     id: Maybe(u32)
 }

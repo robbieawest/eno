@@ -1,6 +1,6 @@
 package gpu
 
-import "../model"
+import "../resource"
 import dbg "../debug"
 import "../utils"
 
@@ -18,11 +18,11 @@ import "core:slice"
     Overwrites any shader layout already existing
 
 */
-shader_layout_from_mesh :: proc(shader: ^ShaderInfo, mesh: model.Mesh) -> (ok: bool) {
+shader_layout_from_mesh :: proc(shader: ^ShaderInfo, mesh: resource.Mesh) -> (ok: bool) {
     return shader_layout_from_mesh_layout(shader, mesh.layout)
 }
 
-shader_layout_from_mesh_layout :: proc(shader: ^ShaderInfo, layout: model.VertexLayout) -> (ok: bool) {
+shader_layout_from_mesh_layout :: proc(shader: ^ShaderInfo, layout: resource.VertexLayout) -> (ok: bool) {
     n_Attributes := len(layout)
     new_inputs := make([dynamic]GLSLPair, n_Attributes)
     defer destroy_glsl_pairs(new_inputs[:])
@@ -44,7 +44,7 @@ shader_layout_from_mesh_layout :: proc(shader: ^ShaderInfo, layout: model.Vertex
 /*
     Allocates new name
 */
-parse_attribute_name :: proc(attribute_info: model.MeshAttributeInfo, allocator := context.allocator) -> (name: string, ok: bool) {
+parse_attribute_name :: proc(attribute_info: resource.MeshAttributeInfo, allocator := context.allocator) -> (name: string, ok: bool) {
     if len(attribute_info.name) == 0 {
         reflected_name, reflect_ok := reflect.enum_name_from_value(attribute_info.type)
         if !reflect_ok {
@@ -59,7 +59,7 @@ parse_attribute_name :: proc(attribute_info: model.MeshAttributeInfo, allocator 
     return
 }
 
-glsl_type_from_attribute :: proc(attribute_info: model.MeshAttributeInfo) -> (glsl_type: GLSLDataType, ok: bool) {
+glsl_type_from_attribute :: proc(attribute_info: resource.MeshAttributeInfo) -> (glsl_type: GLSLDataType, ok: bool) {
 
     switch attribute_info.element_type {
     case .invalid:
@@ -84,7 +84,7 @@ glsl_type_from_attribute :: proc(attribute_info: model.MeshAttributeInfo) -> (gl
     GLSL does suppport some mention of precision, but I really do not care for this
 */
 @(private)
-convert_component_type_to_glsl_type :: proc(component_type: model.MeshComponentType) -> (type: GLSLDataType, ok: bool) {
+convert_component_type_to_glsl_type :: proc(component_type: resource.MeshComponentType) -> (type: GLSLDataType, ok: bool) {
     switch component_type {
         case .invalid, .i8, .i16, .u8, .u16:
             dbg.debug_point(dbg.LogLevel.ERROR, "Invalid component type when attempting to convert to GLSL type")

@@ -8,7 +8,6 @@ import dbg "../debug"
 import control "../control"
 import "../camera"
 import glutils "../utils/gl_utils"
-import "../render"
 
 import "core:os"
 import glm "core:math/linalg/glsl"
