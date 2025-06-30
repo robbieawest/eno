@@ -1,6 +1,5 @@
 package resource
 
-import "../resource"
 import "../shader"
 
 // Package defining the resource manager and relevant systems relating to it

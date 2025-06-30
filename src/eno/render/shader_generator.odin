@@ -3,13 +3,11 @@ package gpu
 import "../resource"
 import dbg "../debug"
 import "../utils"
+import "../shader"
 
 import "core:strings"
 import "core:reflect"
-import "core:fmt"
-import "core:io"
-import "base:runtime"
-import "core:slice"
+
 
 // Defines procedures for building shaders from multiple blocks of input/output
 // Be careful when using these procedures if reading a shader from a file and not parsing that shader
@@ -18,11 +16,11 @@ import "core:slice"
     Overwrites any shader layout already existing
 
 */
-shader_layout_from_mesh :: proc(shader: ^ShaderInfo, mesh: resource.Mesh) -> (ok: bool) {
+shader_layout_from_mesh :: proc(shader: ^shader.ShaderInfo, mesh: resource.Mesh) -> (ok: bool) {
     return shader_layout_from_mesh_layout(shader, mesh.layout)
 }
 
-shader_layout_from_mesh_layout :: proc(shader: ^ShaderInfo, layout: resource.VertexLayout) -> (ok: bool) {
+shader_layout_from_mesh_layout :: proc(shader: ^shader.ShaderInfo, layout: resource.VertexLayout) -> (ok: bool) {
     n_Attributes := len(layout)
     new_inputs := make([dynamic]GLSLPair, n_Attributes)
     defer destroy_glsl_pairs(new_inputs[:])
