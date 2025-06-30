@@ -3,6 +3,7 @@ package game
 import SDL "vendor:sdl2"
 
 import ecs "../ecs"
+import "../resource"
 import win "../window"
 import dbg "../debug"
 import control "../control"
@@ -29,7 +30,8 @@ EnoGame :: struct {
     before_frame: before_loop_proc_,
     state: GAME_STATE,
     game_data: rawptr, // Use to store arbitrary information, for example render pipelines between before_frame and every_frame calls
-    controller: control.Controller
+    controller: control.Controller,
+    resource_manager: resource.ResourceManager
 }
 
 /*
@@ -81,6 +83,7 @@ init_game_with_scene :: proc(scene: ^ecs.Scene, window: win.WindowTarget, every_
     Game.every_frame = every_frame
     Game.before_frame = before_frame
     Game.controller = control.init_controller(allocator)
+    Game.resource_manager = resource.init_resource_manager(allocator)
 }
 
 

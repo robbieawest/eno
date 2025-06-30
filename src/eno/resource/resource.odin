@@ -12,11 +12,11 @@ ResourceManager :: struct {
     textures: map[TextureID]Texture
 }
 
-init_resource_manager :: proc() -> ResourceManager {
+init_resource_manager :: proc(allocator := context.allocator) -> ResourceManager {
     return ResourceManager {
-        make(map[MaterialID]Material),
-        make(map[ShaderID]shader.ShaderProgram),
-        make(map[TextureID]Texture)
+        make(map[MaterialID]Material, allocator=allocator),
+        make(map[ShaderID]shader.ShaderProgram, allocator=allocator),
+        make(map[TextureID]Texture, allocator=allocator)
     }
 }
 

@@ -14,7 +14,7 @@ import "core:log"
 // ^ See file_utils
 
 
-append_n :: proc(dynamic_arr: ^$T/[dynamic]$E, n: u32) {
+append_n :: proc(dynamic_arr: ^$T/[dynamic]$E, #any_int n: int) {
     reserve(dynamic_arr, n)
     for i in 0..<n {
         def: E 

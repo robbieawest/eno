@@ -40,7 +40,7 @@ before_frame :: proc() -> (ok: bool) {
         scale = { 0.5, 0.5, 0.5 }
     }
 
-    helmet_model := resource.Model{ resource.load_and_extract_meshes("SciFiHelmet") or_return }
+    helmet_model := resource.extract_model(&game.Game.resurce_manager, "../resources/models/SciFiHelmet/gLTF/SciFiHelmet.gltf", "SciFiHelmet") or_return
 
     ecs.archetype_add_entity(game.Game.scene, arch, "helmet_entity",
         ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, ecs.serialize_data(&helmet_model)),
