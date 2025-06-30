@@ -70,7 +70,7 @@ Mesh :: struct {
     vertex_data: VertexData,
     index_data: IndexData,
     layout: VertexLayout,
-    material: Material,
+    material: MaterialID,
     gl_component: GLComponent
 }
 
@@ -80,20 +80,9 @@ GLComponent :: struct {
     ebo: ElementBufferObject
 }
 
-VertexArrayObject :: struct {
-    id: u32,
-    transferred: bool
-}
-
-VertexBufferObject :: struct {
-    id: u32,
-    transferred: bool
-}
-
-ElementBufferObject :: struct {
-    id: u32,
-    transferred: bool
-}
+VertexArrayObject :: Maybe(u32)
+VertexBufferObject :: Maybe(u32)
+ElementBufferObject :: Maybe(u32)
 
 // DOES NOT RELEASE GPU MEMORY - USE RENDERER PROCEDURES FOR THIS
 destroy_mesh :: proc(mesh: ^Mesh) {
@@ -155,7 +144,8 @@ Material :: struct {
     name: string,
     properties: map[MaterialPropertyInfo]MaterialProperty,
     double_sided: bool,
-    unlit: bool
+    unlit: bool,
+    lighting_shader: Maybe(ShaderID)
 }
 
 PBRMetallicRoughness :: struct {
@@ -240,7 +230,6 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
 
     return
 }
-
 
 Model :: struct {
     meshes: [dynamic]Mesh,

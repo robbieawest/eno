@@ -17,7 +17,8 @@ DIRECTIONAL_LIGHT_COMPONENT := standards.ComponentTemplate{ "DirectionalLight", 
 SPOT_LIGHT_COMPONENT := standards.ComponentTemplate{ "SpotLight", SpotLight }
 
 
-render :: proc(pipeline: RenderPipeline, scene: ^ecs.Scene) -> (ok: bool) {
+render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, scene: ^ecs.Scene) -> (ok: bool) {
+
     /*
         for later:
             instancing done via InstanceTo ecs component
@@ -33,7 +34,7 @@ render :: proc(pipeline: RenderPipeline, scene: ^ecs.Scene) -> (ok: bool) {
     query_result := ecs.query_scene(scene, query) or_return
 
     // 2. flatten into lots of meshes
-    meshes: [dynamic]resource.Mesh = make([dynamic]resource.Mesh)
+    meshes: [dynamic]^resource.Mesh = make([dynamic]^resource.Mesh)
     for _, arch_result in query_result {
         for comp_label, comp_ind in arch_result.component_map {
             model_data := ecs.components_deserialize_raw(resource.Model, arch_result.data[comp_ind])
@@ -41,12 +42,20 @@ render :: proc(pipeline: RenderPipeline, scene: ^ecs.Scene) -> (ok: bool) {
         }
     }
 
-    // 3. get gpu components
-    // 4. deal with programs and light/camera uniforms
+    // 3. pre render
+    lighting_pass := false
+    for pass in pipeline.passes do lighting_pass |= pass.type == .LIGHTING
+    pre_render(manager, meshes, lighting_pass) or_return
 
-    //4.
+    // todo do create shader
+    // for now assume it works
 
-    if len(pipeline.passes) == 0 {
+    // 4. get gpu components
+    // 5. deal with programs and light/camera uniforms
+
+    //6.
+
+    if len(pipeline.passes) == 0 { // todo update, this is stupid, give a single framebuffer for lighting step, no pass means no render
         // Render to default framebuffer directly
         // Make single element draw call per mesh
     }
@@ -55,6 +64,17 @@ render :: proc(pipeline: RenderPipeline, scene: ^ecs.Scene) -> (ok: bool) {
     }
 
     return true
+}
+
+/*
+    Pre render makes sure all gpu-components - shader programs includes - are properly transfered
+    It also forces that each material has a lighting pass shader if lighting_pass is true
+    To this point it builds and compiles the lighting shader for each material that does not yet have one
+    To avoid this compilation step, simply handle the compilation outside of render()
+*/
+@(private)
+pre_render :: proc(manager: ^resource.ResourceManager, meshes: [dynamic]resource.Mesh, lighting_pass: bool) -> (ok: bool) {
+    for &mesh in meshes do transfer_mesh(&mesh, lighting_pass, true)
 }
 
 
@@ -80,6 +100,12 @@ SpotLight :: struct {
     inner_cone_angle: f32,
     outer_cone_angle: f32,
     attenuation: f32
+}
+
+
+// todo
+create_lighting_shader :: proc(material: resource.Material, compile: bool) {
+
 }
 
 

@@ -7,6 +7,8 @@ import dbg "../debug"
 import "../shader"
 import "../utils"
 
+// Todo update all of this w.r.t gpu components
+
 GlComponentStates :: enum u32 {
     VAO_TRANSFERRED,
     VBO_TRANSFERRED,
@@ -33,41 +35,46 @@ release_model :: proc(model: ^resource.Model) {
 }
 
 
-transfer_model :: proc(model: resource.Model) -> (ok: bool) {
+transfer_model :: proc(model: resource.Model, transfer_material_shader: bool) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Transferring model")
 
-    for &mesh in model.meshes do express_mesh_with_indices(&mesh)
-
-    // currently just gl_express_mesh_with_indices
-    // todo: add shader support
+    for &mesh in model.meshes do transfer_mesh(&mesh)
 
     return
 }
 
+// Binds VAO
+transfer_mesh :: proc(mesh: ^resource.Mesh, transfer_material_shader: bool, compile: bool, loc := #caller_location) -> (ok: bool) {
 
-express_mesh_with_indices :: proc(mesh: ^resource.Mesh) -> (ok: bool) {
+    if mesh.gl_component.vao == nil do create_and_transfer_vao(&mesh.gl_component.vao)
+    else do bind_vao(mesh.gl_component.vao)
+    if mesh.gl_component.vbo == nil do create_and_express_vbo(&mesh.gl_component.vbo, &mesh)
+    if mesh.gl_component.ebo == nil do create_and_express_ebo(&mesh.gl_component.ebo, &mesh)
+    if transfer_material_shader {
+        material := resource.get_material(manager, mesh.material)
+        if material == nil {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Mesh material id %d does not exist in the manager", mesh.material, loc=loc)
+            return
+        }
 
-
-    gl.GenVertexArrays(1, &mesh.gl_component.vao.id)
-    gl.BindVertexArray(mesh.gl_component.vao.id)
-
-    if !mesh.gl_component.vbo.transferred {
-        // Express vbo
-        create_and_express_vbo(&mesh.gl_component.vbo.id, mesh) or_return
-        mesh.gl_component.vbo.transferred = true
+        if material.lighting_shader == nil do material.lighting_shader = create_lighting_shader(material^, compile)
     }
-
-    if !mesh.gl_component.ebo.transferred {
-        // Express ebo
-         create_and_express_ebo(&mesh.gl_component.ebo.id, mesh) or_return
-         mesh.gl_component.ebo.transferred = true
-    }
-
 
     ok = true
     return
 }
 
+// Binds VAO
+@(private)
+create_and_transfer_vao :: proc(vao: ^u32) {
+    gl.GenVertexArrays(1, &vao)
+    bind_vao(vao^)
+}
+
+@(private)
+bind_vao :: proc(vao: u32) {
+    gl.BindVertexArray(vao)
+}
 
 /*
     Assumes not expressed
@@ -75,20 +82,16 @@ express_mesh_with_indices :: proc(mesh: ^resource.Mesh) -> (ok: bool) {
 */
 @(private)
 create_and_express_vbo :: proc(vbo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
-    dbg.debug_point(dbg.LogLevel.INFO, "Expressing gl mesh vertices")
     if len(data.vertex_data) == 0 {
         dbg.debug_point(dbg.LogLevel.ERROR, "No vertices given to express");
         return
     }
 
     gl.GenBuffers(1, vbo)
-    gl.BindBuffer(gl.ARRAY_BUFFER, vbo^)
+    bind_vbo(vbo^)
 
     total_byte_stride: u32 = 0; for attribute_layout in data.layout do total_byte_stride += attribute_layout.byte_stride
 
-   // log.infof("vbo: %d", gl_component.vbo)
-   // log.infof("stride: %d", stride)
-   // log.infof("mesh: %#v, layout: %#v, s: %d", len(mesh.vertex_data), mesh.layout, len(mesh.vertex_data))
     add_buffer_data(gl.ARRAY_BUFFER, data.vertex_data, { .WRITE_ONCE_READ_MANY, .DRAW })
 
     offset, current_ind: u32 = 0, 0
@@ -102,6 +105,11 @@ create_and_express_vbo :: proc(vbo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
 
     ok = true
     return
+}
+
+@(private)
+bind_vbo :: proc(vbo: u32) {
+    gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
 }
 
 
@@ -118,11 +126,16 @@ create_and_express_ebo :: proc(ebo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
     }
 
     gl.GenBuffers(1, ebo)
-    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo^)
+    bind_ebo(ebo^)
     gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(data.index_data) * size_of(u32), raw_data(data.index_data), gl.STATIC_DRAW)
 
     ok = true
     return
+}
+
+@(private)
+bind_ebo :: proc(ebo: u32) {
+    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
 }
 
 

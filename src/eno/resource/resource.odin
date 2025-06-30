@@ -37,3 +37,18 @@ add_material_to_manager :: proc(manager: ^ResourceManager, material: Material) -
     manager.materials[new_id] = material
     return new_id
 }
+
+get_texture :: proc(manager: ^ResourceManager, id: TextureID) -> ^Texture {
+    if id not_in manager.textures do return nil
+    return &manager.textures[id]
+}
+
+get_material :: proc(manager: ^ResourceManager, id: MaterialID) -> ^Material {
+    if id not_in manager.materials do return nil
+    return &manager.materials[id]
+}
+
+get_shader :: proc(manager: ^ResourceManager, id: ShaderID) -> ^shader.ShaderProgram{
+    if id not_in manager.shaders do return nil
+    return &manager.shaders[id]
+}

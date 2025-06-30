@@ -27,9 +27,16 @@ destroy_pipeline :: proc(pipeline: ^RenderPipeline) {
     delete(pipeline.passes)
 }
 
+
+RenderPassType :: enum {
+    LIGHTING,
+    POST
+}
+
 // Structure may be too simple
 RenderPass :: struct {
-    frame_buffer: FrameBuffer
+    frame_buffer: FrameBuffer,
+    type: RenderPassType
 }
 
 make_render_pass :: proc(frame_buffer: FrameBuffer) -> RenderPass {

@@ -71,7 +71,7 @@ extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh) -> (mode
         mesh_ret := &meshes[i]
 
         // Set material properties
-        mesh_ret.material = eno_material_from_cgltf_material(manager, primitive.material^) or_return
+        mesh_ret.material = add_material_to_manager(manager, eno_material_from_cgltf_material(manager, primitive.material^) or_return)
 
         // Construct layout
         for attribute in primitive.attributes {
