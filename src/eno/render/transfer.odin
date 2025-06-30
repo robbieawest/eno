@@ -142,6 +142,7 @@ Texture :: struct {
     id: Maybe(u32)
 }
 
+// Todo add sampling support and give channels input instead of internal_format
 make_texture :: proc(lod: i32 = 0, internal_format: i32 = gl.RGBA, w, h: i32, format: u32 = gl.RGBA, type: u32 = gl.FLOAT, data: rawptr = nil) -> (texture: Texture) {
     id: u32
     gl.GenTextures(1, &id)

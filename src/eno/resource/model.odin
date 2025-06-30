@@ -169,6 +169,7 @@ PBRMetallicRoughness :: struct {
 NormalTexture :: distinct TextureID
 OcclusionTexture :: distinct TextureID
 EmissiveTexture :: distinct TextureID
+EmissiveFactor :: distinct [3]f32
 
 /*
 PbrSpecularGlossiness :: cgltf.pbr_specular_glossiness
@@ -183,7 +184,6 @@ Iridescence :: cgltf.iridescence
 Anisotropy :: cgltf.anisotropy
 Dispersion :: cgltf.dispersion
 
-EmissiveFactor :: [3]f32
 AlphaMode :: cgltf.alpha_mode
 AlphaCutoff :: f32
 */
@@ -193,6 +193,7 @@ MaterialProperty :: union {
     NormalTexture,
     OcclusionTexture,
     EmissiveTexture,
+    EmissiveFactor
 }
 
 // Assumes the resource manager is properly initialized
@@ -200,7 +201,7 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
     material.name = strings.clone_from_cstring(cmat.name)
 
     if cmat.has_pbr_metallic_roughness {
-        base_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.base_color_factor.texture) or_return
+        base_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.base_color_texture.texture) or_return
         met_rough_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.metallic_roughness_texture.texture) or_return
         // todo transfer data to gpu - likely just do on demand from renderer
 
@@ -220,18 +221,18 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
     if cmat.normal_texture.texture != nil {
         tex := texture_from_cgltf_texture(cmat.normal_texture.texture) or_return
         tex_id := add_texture_to_manager(manager, tex)
-        material.properties[.NORMAL_TEXTURE] = tex_id
+        material.properties[.NORMAL_TEXTURE] = NormalTexture(tex_id)
     }
     if cmat.occlusion_texture.texture != nil {
         tex := texture_from_cgltf_texture(cmat.occlusion_texture.texture) or_return
         tex_id := add_texture_to_manager(manager, tex)
-        material.properties[.OCCLUSION_TEXTURE] = tex_id
+        material.properties[.OCCLUSION_TEXTURE] = OcclusionTexture(tex_id)
     }
     if cmat.emissive_texture.texture != nil {
         tex := texture_from_cgltf_texture(cmat.emissive_texture.texture) or_return
         tex_id := add_texture_to_manager(manager, tex)
-        material.properties[.EMISSIVE_TEXTURE] = tex_id
-        material.properties[.EMISSIVE_FACTOR] = cmat.emissive_factor
+        material.properties[.EMISSIVE_TEXTURE] = EmissiveTexture(tex_id)
+        material.properties[.EMISSIVE_FACTOR] = EmissiveFactor(cmat.emissive_factor)
     }
 
     material.double_sided = bool(cmat.double_sided)
@@ -258,23 +259,24 @@ Image :: struct {
     pixel_data: rawptr,  // Can be nil for no data
 }
 
-texture_from_cgltf_texture :: proc(texture: cgltf.texture) -> (result: Texture, ok: bool) {
-    return Texture{
+texture_from_cgltf_texture :: proc(texture: ^cgltf.texture) -> (result: Texture, ok: bool) {
+    return Texture {
         strings.clone_from_cstring(texture.name),
-        load_image_from_cgltf_image(texture.image_) or_return
-    }
+        load_image_from_cgltf_image(texture.image_) or_return,
+        nil
+    }, true
 }
 
-load_image_from_cgltf_image :: proc(image: cgltf.image) -> (result: Image, ok: bool) {
+load_image_from_cgltf_image :: proc(image: ^cgltf.image) -> (result: Image, ok: bool) {
     result.name = strings.clone_from_cstring(image.name)
     // Don't care about image URI's right now, maybe I will have to later
-    if !image.buffer_view {
-        dbg.debug_point(dbg.LogLevel.ERROR, "CGLTF image does not have any buffer data")
+    if image.buffer_view == nil {
+        dbg.debug_point(dbg.LogLevel.ERROR, "CGLTF image does not have any image buffer data")
         return
     }
 
-    image_buffer: [^]byte = image.buffer_view.buffer.data + image.buffer_view.offset
-    result.pixel_data = stbi.load_from_memory(image_buffer, image.buffer_view.size, &result.w, &result.h, &result.channels, 0)
+    image_buffer: [^]byte = transmute([^]byte)(uintptr(image.buffer_view.buffer.data) + uintptr(image.buffer_view.offset))
+    result.pixel_data = stbi.load_from_memory(image_buffer, i32(image.buffer_view.size), &result.w, &result.h, &result.channels, 0)
 
     ok = true
     return
