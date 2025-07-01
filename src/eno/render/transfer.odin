@@ -306,3 +306,8 @@ attach_program :: proc(program: shader.ShaderProgram, loc := #caller_location) {
         gl.UseProgram(program_id)
     }
 }
+
+
+issue_single_element_draw_call :: proc(#any_int indices_count: i32) {
+    gl.DrawElements(gl.TRIANGLES, indices_count, gl.UNSIGNED_INT, nil)
+}

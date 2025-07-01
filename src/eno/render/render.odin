@@ -25,7 +25,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
             batching via combining entities with matching gpu components
     */
 
-    // 1. query scene for renderable models
+    // query scene for renderable models
     isVisibleQueryData := true
     query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
         { label = resource.MODEL_COMPONENT.label, include = true },
@@ -33,7 +33,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
     }}
     query_result := ecs.query_scene(scene, query) or_return
 
-    // 2. flatten into lots of meshes
+    // flatten into lots of meshes
     meshes: [dynamic]^resource.Mesh = make([dynamic]^resource.Mesh)
     for _, arch_result in query_result {
         for comp_label, comp_ind in arch_result.component_map {
@@ -46,10 +46,8 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
     // todo do create shader
     // for now assume it works
 
-    // 4. get gpu components
-    // 5. deal with programs and light/camera uniforms
+    // todo deal with programs and light/camera uniforms
 
-    //6.
 
     if len(pipeline.passes) == 1 && pipelines.passes[0].type == .LIGHTING {
         // Render to default framebuffer directly
@@ -59,7 +57,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
 
            material := resource.get_material(manager, mesh.material)
            bind_material_uniforms(manager, material)
-           issue_single_element_draw_call()
+           issue_single_element_draw_call(len(mesh.index_data))
        }
     }
     else {
