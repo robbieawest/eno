@@ -93,9 +93,14 @@ destroy_mesh :: proc(mesh: ^Mesh) {
 
 // Textures and materials
 // base colour, pbr metallic, normal, occlusion and emissive texure/factor are supported currently
+MATERIAL_INFOS :: "materialInfos"
 
-BASE_COLOR :: "albedo"
 PBR_METALLIC_ROUGHNESS :: "pbrMetallicRoughness"
+METALLIC_FACTOR :: "metallicFactor"
+ROUGHNESS_FACTOR :: "roughnessFactor"
+BASE_COLOUR_TEXTURE :: "baseColourTexture"
+BASE_COLOUR_FACTOR :: "baseColourFactor"
+
 PBR_SPECULAR_GLOSSINESS :: "pbrSpecularGlossiness"
 CLEARCOAT :: "clearcoat"
 TRANSMISSION :: "transmission"
@@ -133,11 +138,10 @@ MaterialPropertyInfo :: enum {
     OCCLUSION_TEXTURE,
     EMISSIVE_TEXTURE,
     EMISSIVE_FACTOR,
-    ALPHA_MODE,
+    ALPHA_MODE0,
     ALPHA_CUTOFF
 }
-
-MaterialPropertiesInfos :: bit_set[MaterialPropertyInfo]
+MaterialPropertiesInfos :: bit_set[MaterialPropertyInfo; u32]
 
 MaterialID :: u32
 Material :: struct {
@@ -178,12 +182,17 @@ AlphaMode :: cgltf.alpha_mode
 AlphaCutoff :: f32
 */
 
-MaterialProperty :: union {
-    PBRMetallicRoughness,
-    NormalTexture,
-    OcclusionTexture,
-    EmissiveTexture,
-    EmissiveFactor
+
+
+MaterialProperty :: struct {
+    tag: string,
+    value: union {
+        PBRMetallicRoughness,
+        NormalTexture,
+        OcclusionTexture,
+        EmissiveTexture,
+        EmissiveFactor
+    }
 }
 
 // Assumes the resource manager is properly initialized
@@ -193,7 +202,6 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
     if cmat.has_pbr_metallic_roughness {
         base_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.base_color_texture.texture) or_return
         met_rough_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.metallic_roughness_texture.texture) or_return
-        // todo transfer data to gpu - likely just do on demand from renderer
 
         base_tex_id := add_texture_to_manager(manager, base_tex)
         met_rough_id := add_texture_to_manager(manager, met_rough_tex)
@@ -205,24 +213,24 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
             cmat.pbr_metallic_roughness.metallic_factor,
             cmat.pbr_metallic_roughness.roughness_factor
         }
-        material.properties[.PBR_METALLIC_ROUGHNESS] = metallic_roughness
+        material.properties[.PBR_METALLIC_ROUGHNESS] = { PBR_METALLIC_ROUGHNESS, metallic_roughness }
     }
 
     if cmat.normal_texture.texture != nil {
         tex := texture_from_cgltf_texture(cmat.normal_texture.texture) or_return
         tex_id := add_texture_to_manager(manager, tex)
-        material.properties[.NORMAL_TEXTURE] = NormalTexture(tex_id)
+        material.properties[.NORMAL_TEXTURE] = { NORMAL_TEXTURE, NormalTexture(tex_id) }
     }
     if cmat.occlusion_texture.texture != nil {
         tex := texture_from_cgltf_texture(cmat.occlusion_texture.texture) or_return
         tex_id := add_texture_to_manager(manager, tex)
-        material.properties[.OCCLUSION_TEXTURE] = OcclusionTexture(tex_id)
+        material.properties[.OCCLUSION_TEXTURE] = { OCCLUSION_TEXTURE, OcclusionTexture(tex_id) }
     }
     if cmat.emissive_texture.texture != nil {
         tex := texture_from_cgltf_texture(cmat.emissive_texture.texture) or_return
         tex_id := add_texture_to_manager(manager, tex)
-        material.properties[.EMISSIVE_TEXTURE] = EmissiveTexture(tex_id)
-        material.properties[.EMISSIVE_FACTOR] = EmissiveFactor(cmat.emissive_factor)
+        material.properties[.EMISSIVE_TEXTURE] = { EMISSIVE_TEXTURE, EmissiveTexture(tex_id) }
+        material.properties[.EMISSIVE_FACTOR] = { EMISSIVE_FACTOR, EmissiveFactor(cmat.emissive_factor) }
     }
 
     material.double_sided = bool(cmat.double_sided)

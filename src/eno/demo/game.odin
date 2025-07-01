@@ -24,7 +24,7 @@ GameData :: struct {
 
 every_frame :: proc() -> (ok: bool) {
 
-    render.render((cast(^GameData)game.Game.game_data).render_pipeline, game.Game.scene)
+    render.render(&game.Game.resource_manager, (cast(^GameData)game.Game.game_data).render_pipeline, game.Game.scene)
 
     // Swap
     ok = win.swap_window_bufs(game.Game.window); if !ok do log.errorf("could not swap bufs")
@@ -47,11 +47,11 @@ before_frame :: proc() -> (ok: bool) {
         ecs.make_ecs_component_data(standards.WORLD_COMPONENT.label, standards.WORLD_COMPONENT.type, ecs.serialize_data(&world_properties)),
     ) or_return
 
-    // todo figure out where to store shader identifiers in entity data
-    program := shader.read_shader_source("resources/shaders/demo_pbr_shader") or_return
 
     game_data := new(GameData)
-    game_data.render_pipeline = render.RenderPipeline{}  // Default -> Draw directly to default framebuffer
+    render_passes := [dynamic]render.RenderPass
+    append_elems(&render_passes, render.RenderPass{}) // default render pass signifies lighting pass
+    game_data.render_pipeline = render.RenderPipeline{ render_passes }
     game.Game.game_data = game_data
 
     // Camera

@@ -43,15 +43,18 @@ transfer_model :: proc(model: resource.Model, transfer_material_shader: bool) ->
     return
 }
 
-// Binds VAO
-transfer_mesh :: proc(mesh: ^resource.Mesh, transfer_material_shader: bool, compile: bool, loc := #caller_location) -> (ok: bool) {
+// Binds all resoucres
+transfer_mesh :: proc(manager: ^resource.ResourceManager, mesh: ^resource.Mesh, transfer_material_shader: bool, compile: bool, loc := #caller_location) -> (ok: bool) {
 
     if mesh.gl_component.vao == nil do create_and_transfer_vao(&mesh.gl_component.vao)
-    else do bind_vao(mesh.gl_component.vao)
-    if mesh.gl_component.vbo == nil do create_and_express_vbo(&mesh.gl_component.vbo, &mesh)
-    if mesh.gl_component.ebo == nil do create_and_express_ebo(&mesh.gl_component.ebo, &mesh)
+    else do bind_vao(mesh.gl_component.vao.?)
+    if mesh.gl_component.vbo == nil do create_and_transfer_vbo(&mesh.gl_component.vbo, &mesh)
+    else do bind_vbo(mesh.gl_component.vbo.?)
+    if mesh.gl_component.ebo == nil do create_and_transfer_ebo(&mesh.gl_component.ebo, &mesh)
+    else do bind_ebo(mesh.gl_component.ebo.?)
+
+    material := resource.get_material(manager, mesh.material)
     if transfer_material_shader {
-        material := resource.get_material(manager, mesh.material)
         if material == nil {
             dbg.debug_point(dbg.LogLevel.ERROR, "Mesh material id %d does not exist in the manager", mesh.material, loc=loc)
             return
@@ -59,12 +62,18 @@ transfer_mesh :: proc(mesh: ^resource.Mesh, transfer_material_shader: bool, comp
 
         if material.lighting_shader == nil do material.lighting_shader = create_lighting_shader(material^, compile)
     }
+    program := resource.get_shader(manager, material.lighting_shader)
+    bind_program(program.id.?)
 
     ok = true
     return
 }
 
-// Binds VAO
+/*
+    Binds VAO
+    Assumes bound vao
+    Assumes not already transferred
+*/
 @(private)
 create_and_transfer_vao :: proc(vao: ^u32) {
     gl.GenVertexArrays(1, &vao)
@@ -77,11 +86,12 @@ bind_vao :: proc(vao: u32) {
 }
 
 /*
-    Assumes not expressed
+    Assumes not already transferred
     Assumes bound vao
+    Binds VBO
 */
 @(private)
-create_and_express_vbo :: proc(vbo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
+create_and_transfer_vbo :: proc(vbo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
     if len(data.vertex_data) == 0 {
         dbg.debug_point(dbg.LogLevel.ERROR, "No vertices given to express");
         return
@@ -116,9 +126,10 @@ bind_vbo :: proc(vbo: u32) {
 /*
     Assumes not expressed
     Assumes bound vao
+    Binds EBO
 */
 @(private)
-create_and_express_ebo :: proc(ebo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
+create_and_transfer_ebo :: proc(ebo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Expressing gl mesh indices")
     if len(data.index_data) == 0 {
         dbg.debug_point(dbg.LogLevel.ERROR, "Cannot express 0 indices")
@@ -138,16 +149,9 @@ bind_ebo :: proc(ebo: u32) {
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
 }
 
-
-/*
-gl_draw_elements :: proc(draw_properties: ^DrawProperties) {
-    // todo add checks for expressedness of components
-    comp := draw_properties.gpu_component.(gl_GPUComponent)
-    gl.BindVertexArray(comp.vao)
-    gl.UseProgram(u32(comp.program.id.(i32)))
-    gl.DrawElements(gl.TRIANGLES, i32(len(draw_properties.indices.raw_data)), gl.UNSIGNED_INT, nil)
+bind_program :: proc(program: u32) {
+    gl.UseProgram(program.id)
 }
-*/
 
 
 /* 2D single sample texture for gpu package internal use */
@@ -169,6 +173,11 @@ make_texture :: proc(lod: i32 = 0, internal_format: i32 = gl.RGBA, w, h: i32, fo
 
 destroy_texture :: proc(texture: ^Texture) {
     if id, id_ok := texture.id.?; id_ok do gl.DeleteTextures(1, &id)
+}
+
+bind_texture :: proc(#any_int texture_unit: int, texture: Texture) {
+    gl.ActiveTexture(gl.TEXTURE0 + texture_unit)
+    gl.BindTexture(gl.TEXTURE_2D, texture.?)
 }
 
 

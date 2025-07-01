@@ -42,10 +42,6 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
         }
     }
 
-    // 3. pre render
-    lighting_pass := false
-    for pass in pipeline.passes do lighting_pass |= pass.type == .LIGHTING
-    pre_render(manager, meshes, lighting_pass) or_return
 
     // todo do create shader
     // for now assume it works
@@ -55,9 +51,16 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
 
     //6.
 
-    if len(pipeline.passes) == 0 { // todo update, this is stupid, give a single framebuffer for lighting step, no pass means no render
+    if len(pipeline.passes) == 1 && pipelines.passes[0].type == .LIGHTING {
         // Render to default framebuffer directly
         // Make single element draw call per mesh
+       for &mesh in meshes {
+           transfer_mesh(manager, mesh, true, true)
+
+           material := resource.get_material(manager, mesh.material)
+           bind_material_uniforms(manager, material)
+           issue_single_element_draw_call()
+       }
     }
     else {
         // figure it out when the need is there
@@ -67,14 +70,56 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
 }
 
 /*
-    Pre render makes sure all gpu-components - shader programs includes - are properly transfered
-    It also forces that each material has a lighting pass shader if lighting_pass is true
-    To this point it builds and compiles the lighting shader for each material that does not yet have one
-    To avoid this compilation step, simply handle the compilation outside of render()
+    Specifically used in respect to the lighting shader stored inside the material
 */
 @(private)
-pre_render :: proc(manager: ^resource.ResourceManager, meshes: [dynamic]resource.Mesh, lighting_pass: bool) -> (ok: bool) {
-    for &mesh in meshes do transfer_mesh(&mesh, lighting_pass, true)
+bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material) {
+    lighting_shader := resource.get_shader(manager, material.lighting_shader.?)
+
+    texture_unit := 0
+    infos: resource.MaterialPropertiesInfos
+    for info, property in material.properties {
+        infos += info
+        switch v in property {
+            case resource.PBRMetallicRoughness:
+                base_colour := resource.get_texture(manager, v.base_colour)
+                bind_texture(texture_unit, base_colour.gpu_texture.?)
+                shader.set_uniform(&lighting_shader, resource.BASE_COLOUR_TEXTURE, texture_unit)
+                texture_unit += 1
+
+                metallic_roughness := resource.get_texture(manager, v.metallic_roughness)
+                bind_texture(texture_unit, metallic_roughness.gpu_texture.?)
+                shader.set_uniform(&lighting_shader, resource.PBR_METALLIC_ROUGHNESS, texture_unit)
+                texture_unit += 1
+
+                shader.set_uniform(&lighting_shader, resource.BASE_COLOUR_FACTOR, v.base_colour_factor)
+                shader.set_uniform(&lighting_shader, resource.METALLIC_FACTOR, v.metallic_factor)
+                shader.set_uniform(&lighting_shader, resource.ROUGHNESS_FACTOR, v.roughness_factor)
+
+            case resource.EmissiveFactor:
+                shader.set_uniform(&lighting_shader, resource.EMISSIVE_FACTOR, v[0], v[1], v[2])
+
+            case resource.EmissiveTexture:
+                emissive_texture := resource.get_texture(manager, v)
+                bind_texture(texture_unit, emissive_texture.gpu_texture.?)
+                shader.set_uniform(&lighting_shader, resource.EMISSIVE_TEXTURE, texture_unit)
+                texture_unit += 1
+
+            case resource.OcclusionTexture:
+                occlusion_texture := resource.get_texture(manager, v)
+                bind_texture(texture_unit, occlusion_texture.gpu_texture.?)
+                shader.set_uniform(&lighting_shader, resource.OCCLUSION_TEXTURE, texture_unit)
+                texture_unit += 1
+
+            case resource.NormalTexture:
+                normal_texture := resource.get_texture(manager, v)
+                bind_texture(texture_unit, normal_texture.gpu_texture.?)
+                shader.set_uniform(&lighting_shader, resource.NORMAL_TEXTURE, texture_unit)
+                texture_unit += 1
+        }
+    }
+
+    shader.set_uniform(&lighting_shader, resource.MATERIAL_INFOS, transmute(u32)infos)
 }
 
 
