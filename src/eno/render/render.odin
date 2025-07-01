@@ -6,7 +6,6 @@ import "../shader"
 import "../utils"
 import dbg "../debug"
 
-import glm "core:math/linalg/glsl"
 import "core:strings"
 import "core:fmt"
 import "../standards"
@@ -121,29 +120,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
 }
 
 
-LightSourceInformation :: struct {
-    enabled: bool,
-    intensity: f32,
-    colour: glm.vec4
-}
 
-PointLight :: struct {
-    light_information: LightSourceInformation,
-    attenuation: f32
-}
-
-DirectionalLight :: struct {
-    light_information: LightSourceInformation,
-    direction: glm.vec3
-}
-
-// Cone shaped light
-SpotLight :: struct {
-    light_information: LightSourceInformation,
-    inner_cone_angle: f32,
-    outer_cone_angle: f32,
-    attenuation: f32
-}
 
 
 // todo

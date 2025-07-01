@@ -3,10 +3,12 @@ package ecs
 import dbg "../debug"
 import cam "../camera"
 import "../resource"
+import "../standards"
 
 import "core:mem"
 import "core:slice"
 import "core:strings"
+import glm "core:math/linalg/glsl"
 
 // Todo: look into component/entity deletion and custom allocators
 // Relate it to every type defined in eno
@@ -60,10 +62,11 @@ Scene :: struct {
     archetype_label_match: map[string]u32,  // Maps string label to index in archetypes
     allocated: bool,
     cameras: [dynamic]cam.Camera,
-    viewpoint: ^cam.Camera
+    viewpoint: ^cam.Camera,
+    light_sources: SceneLightSources
 }
 
-// Scene should be stack allocated if possible
+// Scene reside on the stack if possible
 init_scene :: proc() -> (scene: ^Scene) {
     scene = new(Scene)
     scene.allocated = true
@@ -73,6 +76,43 @@ init_scene :: proc() -> (scene: ^Scene) {
     return
 }
 
+// Light sources
+
+SceneLightSources :: struct {
+    point_lights: [dynamic]PointLight,
+    directional_lights: [dynamic]DirectionalLight,
+    spot_lights: [dynamic]SpotLight
+}
+
+init_scene_light_sources :: proc() -> SceneLightSources {
+    return { make([dynamic]PointLight), make([dynamic]DirectionalLight), make([dynamic]SpotLight) }
+}
+
+LightSourceInformation :: struct {
+    enabled: bool,
+    intensity: f32,
+    colour: glm.vec4
+}
+
+PointLight :: struct {
+    light_information: LightSourceInformation,
+    attenuation: f32
+}
+
+DirectionalLight :: struct {
+    light_information: LightSourceInformation,
+    direction: glm.vec3
+}
+
+// Cone shaped light
+SpotLight :: struct {
+    light_information: LightSourceInformation,
+    inner_cone_angle: f32,
+    outer_cone_angle: f32,
+    attenuation: f32
+}
+
+//
 
 // Does not free top level archetype
 destroy_archetype :: proc(archetype: ^Archetype, allocator := context.allocator, loc := #caller_location) {
@@ -141,8 +181,8 @@ archetype_get_entity_data :: proc(archetype: ^Archetype) -> (result: [dynamic][d
 scene_add_default_archetype :: proc(scene: ^Scene, label: string, allocator := context.allocator) -> (ret: ^Archetype, ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Adding default archetype of name: %s",  label)
     return scene_add_archetype(scene, label,
-        make_component_info(resource.Model, MODEL_COMPONENT),
-        make_component_info(WorldComponent, WORLD_COMPONENT), allocator = allocator
+        make_component_info(resource.MODEL_COMPONENT.type, resource.MODEL_COMPONENT.label),
+        make_component_info(standards.WORLD_COMPONENT.type, standards.WORLD_COMPONENT.label), allocator = allocator
     )
 }
 
