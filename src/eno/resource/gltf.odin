@@ -4,12 +4,14 @@ import "vendor:cgltf"
 
 import utils "../utils"
 import dbg "../debug"
+import "../standards"
 
 import "core:testing"
 import "core:strings"
+import glm "core:math/linalg/glsl"
 
 DEFAULT_OPTIONS: cgltf.options
-load_gltf_mesh_primitives :: proc(path: string) -> (data: ^cgltf.data, result: cgltf.result){
+load_gltf :: proc(path: string) -> (data: ^cgltf.data, result: cgltf.result){
     result = .io_error
 
     dbg.debug_point(dbg.LogLevel.INFO, "Reading gltf mesh. Path: \"%s\"", path)
@@ -37,7 +39,7 @@ load_gltf_mesh_primitives :: proc(path: string) -> (data: ^cgltf.data, result: c
 
 @(test)
 load_model_test :: proc(t: ^testing.T) {
-    data, result := load_gltf_mesh_primitives("SciFiHelmet")
+    data, result := load_gltf("SciFiHelmet")
     defer cgltf.free(data)
 
     testing.expect_value(t, result, cgltf.result.success)
@@ -47,8 +49,100 @@ load_model_test :: proc(t: ^testing.T) {
 }
 
 
+ModelWorldPair :: struct {
+    model: Model,
+    position: standards.WorldComponent
+}
+
+ModelSceneResult :: struct {
+    models: [dynamic]ModelWorldPair,
+    point_lights: [dynamic]PointLight,
+    spot_lights: [dynamic]SpotLight,
+    directional_lights: [dynamic]DirectionalLight
+}
+
+init_model_scene_result :: proc() -> ModelSceneResult {
+    return { make([dynamic]ModelWorldPair), make([dynamic]PointLight), make([dynamic]SpotLight), make([dynamic]DirectionalLight) }
+}
+
+destroy_model_scene_result :: proc(result: ModelSceneResult) {
+    delete(result.models)
+    delete(result.point_lights)
+    delete(result.spot_lights)
+    delete(result.directional_lights)
+}
+
+
+extract_gltf_scene :: proc{ extract_gltf_scene_from_path, extract_gltf_scene_no_path }
+
+extract_gltf_scene_from_path :: proc(manager: ^ResourceManager, path: string, scene_index := -1) -> (result: ModelSceneResult, ok: bool) {
+    data, res := load_gltf(path)
+    if res != .success do return
+
+    return extract_gltf_scene_no_path(manager, data, scene_index)
+}
+
+extract_gltf_scene_no_path :: proc(manager: ^ResourceManager, data: ^cgltf.data, scene_index := -1) -> (result: ModelSceneResult, ok: bool) {
+    scene: ^cgltf.scene
+    if scene_index == -1 do scene = data.scene
+    else {
+        if scene_index < 0 || scene_index >= len(data.scenes) {
+            dbg.debug_point(dbg.LogLevel.ERROR, "scene_index is out of range of gltf scenes")
+            return
+        }
+        scene = &data.scenes[scene_index]
+    }
+    result = init_model_scene_result()
+
+    node_loop: for node in scene.nodes {
+        world_comp: standards.WorldComponent
+        if node.has_translation do world_comp.position = node.translation
+        if node.has_rotation do world_comp.rotation = quaternion(x=node.rotation[0], y=node.rotation[1], z=node.rotation[2], w=node.rotation[3])
+        if node.has_scale do world_comp.scale = node.scale
+
+        if node.mesh != nil {
+            model := extract_cgltf_mesh(manager, node.mesh^) or_return
+            append(&result.models, ModelWorldPair{ model, world_comp })
+        }
+        else if node.light != nil {
+            switch node.light.type {
+                case .invalid:
+                    dbg.debug_point(dbg.LogLevel.WARN, "Invalid light type found, ignoring")
+                    continue node_loop
+                case .directional, .point:
+                    light := LightSourceInformation{
+                        strings.clone_from_cstring(node.light.name),
+                        true,
+                        node.light.intensity,
+                        node.light.color,
+                        world_comp
+                    }
+                    if node.light.type == .point do append(&result.point_lights, light)
+                    else do append(&result.directional_lights, light)
+                case .spot:
+                    spot_light := SpotLight {
+                        {
+                            strings.clone_from_cstring(node.light.name),
+                            true,
+                            node.light.intensity,
+                            node.light.color,
+                            world_comp
+                        },
+                        node.light.spot_inner_cone_angle,
+                        node.light.spot_outer_cone_angle
+                    }
+                    append(&result.spot_lights, spot_light)
+            }
+        }
+    }
+
+    ok = true
+    return
+}
+
+
 extract_model :: proc(manager: ^ResourceManager, path: string, model_name: string) -> (model: Model, ok: bool) {
-    data, res := load_gltf_mesh_primitives(path)
+    data, res := load_gltf(path)
     if res != .success do return
 
     for mesh in data.meshes {
@@ -64,7 +158,6 @@ extract_model :: proc(manager: ^ResourceManager, path: string, model_name: strin
 */
 extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh) -> (model: Model, ok: bool) {
     //This is assuming all mesh attributes (aside from indices) have the same count (for each primitive/mesh output)
-
     meshes := make([dynamic]Mesh, len(mesh.primitives))
 
     for primitive, i in mesh.primitives {
@@ -96,7 +189,7 @@ extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh) -> (mode
     }
 
     ok = true
-    model = { meshes }
+    model = { strings.clone_from_cstring(mesh.name), meshes }
     return
 }
 

@@ -7,6 +7,7 @@ import "../standards"
 import dbg "../debug"
 
 import "core:strings"
+import glm "core:math/linalg/glsl"
 
 MODEL_COMPONENT := standards.ComponentTemplate{ "Model", Model }
 
@@ -240,6 +241,7 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
 }
 
 Model :: struct {
+    name: string,
     meshes: [dynamic]Mesh,
 }
 
@@ -277,4 +279,22 @@ load_image_from_cgltf_image :: proc(image: ^cgltf.image) -> (result: Image, ok: 
 
     ok = true
     return
+}
+
+LightSourceInformation :: struct {
+    name: string,
+    enabled: bool,
+    intensity: f32,
+    colour: glm.vec3,
+    world_comp: standards.WorldComponent
+}
+
+PointLight :: LightSourceInformation
+DirectionalLight :: LightSourceInformation
+
+// Cone shaped light
+SpotLight :: struct {
+    light_information: LightSourceInformation,
+    inner_cone_angle: f32,
+    outer_cone_angle: f32,
 }

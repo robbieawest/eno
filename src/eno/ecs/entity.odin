@@ -8,7 +8,6 @@ import "../standards"
 import "core:mem"
 import "core:slice"
 import "core:strings"
-import glm "core:math/linalg/glsl"
 
 // Todo: look into component/entity deletion and custom allocators
 // Relate it to every type defined in eno
@@ -79,38 +78,16 @@ init_scene :: proc() -> (scene: ^Scene) {
 // Light sources
 
 SceneLightSources :: struct {
-    point_lights: [dynamic]PointLight,
-    directional_lights: [dynamic]DirectionalLight,
-    spot_lights: [dynamic]SpotLight
+    point_lights: [dynamic]resource.PointLight,
+    directional_lights: [dynamic]resource.DirectionalLight,
+    spot_lights: [dynamic]resource.SpotLight
 }
 
 init_scene_light_sources :: proc() -> SceneLightSources {
-    return { make([dynamic]PointLight), make([dynamic]DirectionalLight), make([dynamic]SpotLight) }
+    return { make([dynamic]resource.PointLight), make([dynamic]resource.DirectionalLight), make([dynamic]resource.SpotLight) }
 }
 
-LightSourceInformation :: struct {
-    enabled: bool,
-    intensity: f32,
-    colour: glm.vec4
-}
 
-PointLight :: struct {
-    light_information: LightSourceInformation,
-    attenuation: f32
-}
-
-DirectionalLight :: struct {
-    light_information: LightSourceInformation,
-    direction: glm.vec3
-}
-
-// Cone shaped light
-SpotLight :: struct {
-    light_information: LightSourceInformation,
-    inner_cone_angle: f32,
-    outer_cone_angle: f32,
-    attenuation: f32
-}
 
 //
 
