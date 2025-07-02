@@ -5,15 +5,23 @@ import "../resource"
 import "../shader"
 import "../utils"
 import dbg "../debug"
+import "../standards"
 
 import "core:strings"
 import "core:fmt"
-import "../standards"
-
+import glm "core:math/linalg/glsl"
+import camera "../camera"
 
 POINT_LIGHT_COMPONENT := standards.ComponentTemplate{ "PointLight", PointLight }
 DIRECTIONAL_LIGHT_COMPONENT := standards.ComponentTemplate{ "DirectionalLight", DirectionalLight }
 SPOT_LIGHT_COMPONENT := standards.ComponentTemplate{ "SpotLight", SpotLight }
+
+RenderContext :: struct {
+    camera_ubo: ^ShaderBuffer,
+    light_ubo: ^ShaderBuffer
+}
+
+RENDER_CONTEXT: RenderContext  // Global render context, this is fine really, only stores small amount of persistent external pointing data
 
 
 render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, scene: ^ecs.Scene) -> (ok: bool) {
@@ -28,36 +36,58 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
     isVisibleQueryData := true
     query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
         { label = resource.MODEL_COMPONENT.label, include = true },
+        { label = standards.WORLD_COMPONENT.label, include = true },
         { label = standards.VISIBLE_COMPONENT.label, data = &isVisibleQueryData }
     }}
     query_result := ecs.query_scene(scene, query) or_return
 
     // flatten into lots of meshes
-    meshes: [dynamic]^resource.Mesh = make([dynamic]^resource.Mesh)
+    ModelWorldPair :: struct {
+        model: ^resource.Model,
+        world_comp: ^standards.WorldComponent
+    }
+    model_data: [dynamic]ModelWorldPair = make([dynamic]ModelWorldPair)
+
     for _, arch_result in query_result {
+        model_data: []^resource.Model
+        world_comps: []^standards.WorldComponent
         for comp_label, comp_ind in arch_result.component_map {
-            model_data := ecs.components_deserialize_raw(resource.Model, arch_result.data[comp_ind])
-            for model in model_data do append_elems(&meshes, ..model.meshes[:])
+            switch comp_label {
+            case resource.MODEL_COMPONENT.label:
+                model_data = ecs.components_deserialize_raw(resource.Model, arch_result.data[comp_ind])
+            case standards.WORLD_COMPONENT.label:
+                world_comps = ecs.components_deserialize_raw(standards.WorldComponent, arch_result.data[comp_ind])
+            }
+
         }
+        for i in 0..<len(model_data) {
+            append(&model_data, ModelWorldPair{ model_data[i], world_comps[i] })
+        }
+
     }
 
 
     // todo do create shader
     // for now assume it works
 
-    // todo deal with programs and light/camera uniforms
-
-
     if len(pipeline.passes) == 1 && pipelines.passes[0].type == .LIGHTING {
         // Render to default framebuffer directly
         // Make single element draw call per mesh
-       for &mesh in meshes {
-           transfer_mesh(manager, mesh, true, true)
 
-           material := resource.get_material(manager, mesh.material)
-           bind_material_uniforms(manager, material)
-           issue_single_element_draw_call(len(mesh.index_data))
-       }
+        for &model_pair in model_data {
+            model_mat := standards.model_from_world_component(model_pair.world_comp^)
+            for &mesh in model_pair.model.meshes {
+                transfer_mesh(manager, mesh, true, true)
+
+                material := resource.get_material(manager, mesh.material)
+                lighting_shader := bind_material_uniforms(manager, material)
+                update_camera_ubo(scene)
+
+                shader.set_uniform(lighting_shader, standards.MODEL_MAT, model_mat)
+
+                issue_single_element_draw_call(len(mesh.index_data))
+            }
+        }
     }
     else {
         // figure it out when the need is there
@@ -70,8 +100,8 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
     Specifically used in respect to the lighting shader stored inside the material
 */
 @(private)
-bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material) {
-    lighting_shader := resource.get_shader(manager, material.lighting_shader.?)
+bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material) -> (lighting_shader: ^shader.ShaderProgram) {
+    lighting_shader = resource.get_shader(manager, material.lighting_shader.?)
 
     texture_unit := 0
     infos: resource.MaterialPropertiesInfos
@@ -117,8 +147,38 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
     }
 
     shader.set_uniform(&lighting_shader, resource.MATERIAL_INFOS, transmute(u32)infos)
+    return
 }
 
+
+CameraBufferData :: struct #packed {
+    position: glm.vec3,
+    _pad: float,
+    view: glm.mat4,
+    projection: glm.mat4
+}
+
+update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
+    viewpoint := scene.viewpoint
+    if viewpoint == nil {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Scene viewpoint is nil!")
+        return
+    }
+
+    camera_buffer_data := CameraBufferData {
+        viewpoint.position,
+        camera.camera_look_at(viewpoint),
+        camera.get_perspective(viewpoint)
+    }
+
+    if RENDER_CONTEXT.camera_ubo == nil {
+        RENDER_CONTEXT.camera_ubo = make_shader_buffer(&camera_buffer_data, .UBO, 0, { .WRITE_MANY_READ_MANY, .DRAW })
+    }
+    else {
+        ubo := RENDER_CONTEXT.camera_ubo
+        transfer_buffer_data(ubo.id.?, &camera_buffer.data, update=true)
+    }
+}
 
 
 

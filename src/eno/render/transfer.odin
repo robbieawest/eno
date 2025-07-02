@@ -102,7 +102,7 @@ create_and_transfer_vbo :: proc(vbo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
 
     total_byte_stride: u32 = 0; for attribute_layout in data.layout do total_byte_stride += attribute_layout.byte_stride
 
-    add_buffer_data(gl.ARRAY_BUFFER, data.vertex_data, { .WRITE_ONCE_READ_MANY, .DRAW })
+    transfer_buffer_data(gl.ARRAY_BUFFER, data.vertex_data, { .WRITE_ONCE_READ_MANY, .DRAW })
 
     offset, current_ind: u32 = 0, 0
     for attribute_info in data.layout {
@@ -225,23 +225,24 @@ buffer_usage_to_glenum :: proc(usage: BufferUsage) -> (res: u32) {
 }
 
 
-ShaderStorageBuffer :: struct {
+ShaderBufferType :: enum{ SSBO, UBO }
+ShaderBuffer :: struct {
     id: Maybe(u32),
     shader_binding: u32,
-    usage: BufferUsage
+    usage: BufferUsage,
+    type: ShaderBufferType
 }
 
-make_shader_storage_buffer_dynamic :: proc(data: $T/[dynamic]$E, shader_binding: u32, usage: BufferUsage) -> (buffer: ShaderStorageBuffer) {
-    return make_shader_storage_buffer_slice(data[:], shader_binding, usage)
-}
-
-make_shader_storage_buffer_slice :: proc(data: $T/[]$E, shader_binding: u32, usage: BufferUsage) -> (buffer: ShaderStorageBuffer) {
+make_shader_buffer :: proc(data: rawptr, type: ShaderBufferType, shader_binding: u32, usage: BufferUsage) -> (buffer: ShaderBuffer) {
     id: u32
     gl.GenBuffers(1, &id)
     buffer.id = id
-    gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, id)
-    add_buffer_data(gl.SHADER_STORAGE_BUFFER, data, usage)
-    gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, shader_binding, id)
+    buffer.type = type
+
+    glenum_type := type == .UBO ? gl.UNIFORM_BUFFER : gl.SHADER_STORAGE_BUFFER
+    gl.BindBuffer(glenum_type, id)
+    transfer_buffer_data(glenum_type, data, usage)
+    gl.BindBufferBase(glen_type, shader_binding, id)
 
     return
 }
@@ -249,21 +250,14 @@ make_shader_storage_buffer_slice :: proc(data: $T/[]$E, shader_binding: u32, usa
 
 /*
     Does not bind, create or validate
+    Set update to true when updating in a frame rather than setting the buffer up
 */
-add_buffer_data :: proc{ add_buffer_data_slice, add_buffer_data_dynamic }
-
-@(private)
-add_buffer_data_dynamic :: proc(target: u32, data: $T/[dynamic]$E, usage: BufferUsage, data_offset := 0) {
-    add_buffer_data_slice(target, data[:], usage, data_offset)
-}
-
-@(private)
-add_buffer_data_slice :: proc(target: u32, data: $T/[]$E, usage: BufferUsage, data_offset := 0) {
+transfer_buffer_data :: proc(target: u32, data: rawptr, usage: BufferUsage = {},  update := false, data_offset := 0) {
     data_size := size_of(E) * len(data)
-    if data_offset != 0 {
+    if data_offset != 0 || update {
         gl.BufferSubData(target, data_offset, data_size, raw_data(data))
     }
-    gl.BufferData(target, data_size, raw_data(data), buffer_usage_to_glenum(usage))
+    gl.BufferData(target, data_size, data, buffer_usage_to_glenum(usage))
 }
 
 

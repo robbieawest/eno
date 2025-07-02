@@ -51,7 +51,7 @@ load_model_test :: proc(t: ^testing.T) {
 
 ModelWorldPair :: struct {
     model: Model,
-    position: standards.WorldComponent
+    world_comp: standards.WorldComponent
 }
 
 ModelSceneResult :: struct {

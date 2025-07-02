@@ -5,7 +5,6 @@ import game "../game"
 import "../ecs"
 import "../resource"
 import cutils "../camera_utils"
-import shader "../shader"
 import "../standards"
 
 import "core:log"
@@ -36,11 +35,10 @@ before_frame :: proc() -> (ok: bool) {
 
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
 
-    world_properties := standards.WorldComponent {
-        scale = { 0.5, 0.5, 0.5 }
-    }
-
-    helmet_model := resource.extract_model(&game.Game.resurce_manager, "../resources/models/SciFiHelmet/gLTF/SciFiHelmet.gltf", "SciFiHelmet") or_return
+    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resurce_manager, "../resources/models/SciFiHelmet/gLTF/SciFiHelmet.gltf") or_return
+    // Not expecting any lights from this
+    helmet_model := scene_res.models[0].model
+    world_properties := scene_res.models[0].world_comp
 
     ecs.archetype_add_entity(game.Game.scene, arch, "helmet_entity",
         ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, ecs.serialize_data(&helmet_model)),

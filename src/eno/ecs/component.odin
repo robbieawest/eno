@@ -67,8 +67,7 @@ components_serialize :: proc(allocator := context.allocator, $T: typeid, input: 
 }
 
 
-@(private)
-deserialize_component_bytearr :: proc($T: typeid, bytearr: []byte, copy := false) -> (out: ^T) {
+component_deserialize_raw :: proc($T: typeid, bytearr: []byte, copy := false) -> (out: ^T) {
     new_data: ^T = cast(^T)raw_data(bytearr)
     if copy do mem.copy(out, new_data, size_of(T))
     else do out = new_data
@@ -76,7 +75,7 @@ deserialize_component_bytearr :: proc($T: typeid, bytearr: []byte, copy := false
 }
 
 component_deserialize:: proc($T: typeid, component: ECSComponentData, copy := false) -> (component_data: ComponentData(T)) {
-    data: ^T = deserialize_component_bytearr(T, component.data)
+    data: ^T = component_deserialize_raw(T, component.data)
     component_data = ComponentData(T){ label = component.label, data = data }
     return
 }
@@ -84,7 +83,7 @@ component_deserialize:: proc($T: typeid, component: ECSComponentData, copy := fa
 components_deserialize_raw :: proc($T: typeid, components_data: $B, copy := false) -> (ret: []^T)
     where B == [dynamic][dynamic]byte || B == [][]byte {
     ret = make([]^T, 0, len(components_data))
-    for comp_data in components_data do append(&ret, deserialize_component_bytearr(T, comp_data, copy))
+    for comp_data in components_data do append(&ret, component_deserialize_raw(T, comp_data, copy))
     return
 }
 
