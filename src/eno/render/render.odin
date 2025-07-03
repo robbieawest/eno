@@ -74,6 +74,8 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
         // Render to default framebuffer directly
         // Make single element draw call per mesh
 
+        // todo group calls by material
+
         for &model_pair in model_data {
             model_mat := standards.model_from_world_component(model_pair.world_comp^)
             for &mesh in model_pair.model.meshes {
@@ -180,12 +182,24 @@ update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
     }
 }
 
+update_lights_ssbo :: proc(scene :^ecs.Scene) -> (ok: bool) {
+    //todo
+    lights_info: ecs.SceneLightSources = scene.light_sources
+    LightSSBOData :: struct #packed {
+        point_lights: rawptr,
+    }
+}
 
 
-
-// todo
-create_lighting_shader :: proc(material: resource.Material, compile: bool) {
-
+// todo full - this is demo
+create_lighting_shader :: proc(manager: ^resource.ResourceManager, compile: bool) -> (result: shader.ShaderProgram) {
+    shaders: []shader.Shader = {
+        shader.read_single_shader_source("../resources/shaders/demo_shader.frag", .FRAGMENT),
+        shader.read_single_shader_source("../resources/shaders/demo_shader.vert", .VERTEX),
+    }
+    result = shader.make_shader_program(shaders)
+    transfer_shader(&result)
+    return
 }
 
 

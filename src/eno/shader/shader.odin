@@ -831,6 +831,19 @@ init_shader_source :: proc(source: string, extension: string) -> (shader: Shader
     return
 }
 
+
+read_single_shader_source :: proc(full_path: string, shader_type: ShaderType) -> (shader: Shader, ok: bool) {
+    source, err := futils.read_file_source(full_path)
+    if err != .None do return
+
+    shader.source.string_source = source
+    shader.source.is_available_as_string = true // Wtf even is this flag, you can just check the length of the string
+
+    shader.type = shader_type
+    ok = true
+    return
+}
+
 read_shader_source :: proc(filenames: ..string) -> (program: ShaderProgram, ok: bool) {
 
     shader_sources: [dynamic]Shader
