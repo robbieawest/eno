@@ -298,3 +298,7 @@ SpotLight :: struct {
     inner_cone_angle: f32,
     outer_cone_angle: f32,
 }
+
+POINT_LIGHT_COMPONENT := standards.ComponentTemplate{ "PointLight", PointLight }
+DIRECTIONAL_LIGHT_COMPONENT := standards.ComponentTemplate{ "DirectionalLight", DirectionalLight }
+SPOT_LIGHT_COMPONENT := standards.ComponentTemplate{ "SpotLight", SpotLight }

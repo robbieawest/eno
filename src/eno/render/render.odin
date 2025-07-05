@@ -12,9 +12,6 @@ import "core:fmt"
 import glm "core:math/linalg/glsl"
 import camera "../camera"
 
-POINT_LIGHT_COMPONENT := standards.ComponentTemplate{ "PointLight", PointLight }
-DIRECTIONAL_LIGHT_COMPONENT := standards.ComponentTemplate{ "DirectionalLight", DirectionalLight }
-SPOT_LIGHT_COMPONENT := standards.ComponentTemplate{ "SpotLight", SpotLight }
 
 RenderContext :: struct {
     camera_ubo: ^ShaderBuffer,
@@ -49,19 +46,19 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
     model_data: [dynamic]ModelWorldPair = make([dynamic]ModelWorldPair)
 
     for _, arch_result in query_result {
-        model_data: []^resource.Model
+        models: []^resource.Model
         world_comps: []^standards.WorldComponent
         for comp_label, comp_ind in arch_result.component_map {
             switch comp_label {
             case resource.MODEL_COMPONENT.label:
-                model_data = ecs.components_deserialize_raw(resource.Model, arch_result.data[comp_ind])
+                models = ecs.components_deserialize_raw(resource.Model, arch_result.data[comp_ind])
             case standards.WORLD_COMPONENT.label:
                 world_comps = ecs.components_deserialize_raw(standards.WorldComponent, arch_result.data[comp_ind])
             }
 
         }
         for i in 0..<len(model_data) {
-            append(&model_data, ModelWorldPair{ model_data[i], world_comps[i] })
+            append(&model_data, ModelWorldPair{ models[i], world_comps[i] })
         }
 
     }
@@ -70,20 +67,24 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
     // todo do create shader
     // for now assume it works
 
-    if len(pipeline.passes) == 1 && pipelines.passes[0].type == .LIGHTING {
+    if len(pipeline.passes) == 1 && pipeline.passes[0].type == .LIGHTING {
         // Render to default framebuffer directly
         // Make single element draw call per mesh
+        create_lighting_shader(manager, true) or_return
 
         // todo group calls by material
 
         for &model_pair in model_data {
             model_mat := standards.model_from_world_component(model_pair.world_comp^)
             for &mesh in model_pair.model.meshes {
-                transfer_mesh(manager, mesh, true, true)
+                transfer_mesh(manager, &mesh, true, true)
 
                 material := resource.get_material(manager, mesh.material)
-                lighting_shader := bind_material_uniforms(manager, material)
-                update_camera_ubo(scene)
+                lighting_shader := resource.get_shader(manager, material.lighting_shader.?)
+                bind_program(lighting_shader.id.?) // todo do in bind_material_uniforms
+
+                // bind_material_uniforms(manager, material)
+                // update_camera_ubo(scene)
 
                 shader.set_uniform(lighting_shader, standards.MODEL_MAT, model_mat)
 
@@ -102,60 +103,59 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
     Specifically used in respect to the lighting shader stored inside the material
 */
 @(private)
-bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material) -> (lighting_shader: ^shader.ShaderProgram) {
-    lighting_shader = resource.get_shader(manager, material.lighting_shader.?)
+bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material) {
+    lighting_shader := resource.get_shader(manager, material.lighting_shader.?)
 
-    texture_unit := 0
+    texture_unit: u32
     infos: resource.MaterialPropertiesInfos
     for info, property in material.properties {
-        infos += info
-        switch v in property {
+        infos += { info }
+        switch v in property.value {
             case resource.PBRMetallicRoughness:
                 base_colour := resource.get_texture(manager, v.base_colour)
-                bind_texture(texture_unit, base_colour.gpu_texture.?)
-                shader.set_uniform(&lighting_shader, resource.BASE_COLOUR_TEXTURE, texture_unit)
+                bind_texture(texture_unit, base_colour.gpu_texture)
+                shader.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, i32(texture_unit))
                 texture_unit += 1
 
                 metallic_roughness := resource.get_texture(manager, v.metallic_roughness)
-                bind_texture(texture_unit, metallic_roughness.gpu_texture.?)
-                shader.set_uniform(&lighting_shader, resource.PBR_METALLIC_ROUGHNESS, texture_unit)
+                bind_texture(texture_unit, metallic_roughness.gpu_texture)
+                shader.set_uniform(lighting_shader, resource.PBR_METALLIC_ROUGHNESS, i32(texture_unit))
                 texture_unit += 1
 
-                shader.set_uniform(&lighting_shader, resource.BASE_COLOUR_FACTOR, v.base_colour_factor)
-                shader.set_uniform(&lighting_shader, resource.METALLIC_FACTOR, v.metallic_factor)
-                shader.set_uniform(&lighting_shader, resource.ROUGHNESS_FACTOR, v.roughness_factor)
+                shader.set_uniform(lighting_shader, resource.BASE_COLOUR_FACTOR, v.base_colour_factor[0], v.base_colour_factor[1], v.base_colour_factor[2], v.base_colour_factor[3])
+                shader.set_uniform(lighting_shader, resource.METALLIC_FACTOR, v.metallic_factor)
+                shader.set_uniform(lighting_shader, resource.ROUGHNESS_FACTOR, v.roughness_factor)
 
             case resource.EmissiveFactor:
-                shader.set_uniform(&lighting_shader, resource.EMISSIVE_FACTOR, v[0], v[1], v[2])
+                shader.set_uniform(lighting_shader, resource.EMISSIVE_FACTOR, v[0], v[1], v[2])
 
             case resource.EmissiveTexture:
-                emissive_texture := resource.get_texture(manager, v)
+                emissive_texture := resource.get_texture(manager, resource.TextureID(v))
                 bind_texture(texture_unit, emissive_texture.gpu_texture.?)
-                shader.set_uniform(&lighting_shader, resource.EMISSIVE_TEXTURE, texture_unit)
+                shader.set_uniform(lighting_shader, resource.EMISSIVE_TEXTURE, i32(texture_unit))
                 texture_unit += 1
 
             case resource.OcclusionTexture:
-                occlusion_texture := resource.get_texture(manager, v)
+                occlusion_texture := resource.get_texture(manager, resource.TextureID(v))
                 bind_texture(texture_unit, occlusion_texture.gpu_texture.?)
-                shader.set_uniform(&lighting_shader, resource.OCCLUSION_TEXTURE, texture_unit)
+                shader.set_uniform(lighting_shader, resource.OCCLUSION_TEXTURE, i32(texture_unit))
                 texture_unit += 1
 
             case resource.NormalTexture:
-                normal_texture := resource.get_texture(manager, v)
+                normal_texture := resource.get_texture(manager, resource.TextureID(v))
                 bind_texture(texture_unit, normal_texture.gpu_texture.?)
-                shader.set_uniform(&lighting_shader, resource.NORMAL_TEXTURE, texture_unit)
+                shader.set_uniform(lighting_shader, resource.NORMAL_TEXTURE, i32(texture_unit))
                 texture_unit += 1
         }
     }
 
-    shader.set_uniform(&lighting_shader, resource.MATERIAL_INFOS, transmute(u32)infos)
-    return
+    shader.set_uniform(lighting_shader, resource.MATERIAL_INFOS, transmute(u32)infos)
 }
 
 
 CameraBufferData :: struct #packed {
     position: glm.vec3,
-    _pad: float,
+    _pad: f32,
     view: glm.mat4,
     projection: glm.mat4
 }
@@ -169,17 +169,23 @@ update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
 
     camera_buffer_data := CameraBufferData {
         viewpoint.position,
+        0,
         camera.camera_look_at(viewpoint),
         camera.get_perspective(viewpoint)
     }
 
     if RENDER_CONTEXT.camera_ubo == nil {
-        RENDER_CONTEXT.camera_ubo = make_shader_buffer(&camera_buffer_data, .UBO, 0, { .WRITE_MANY_READ_MANY, .DRAW })
+        camera_ubo := new(ShaderBuffer)
+
+        RENDER_CONTEXT.camera_ubo = new(ShaderBuffer)
+        RENDER_CONTEXT.camera_ubo^ = make_shader_buffer(&camera_buffer_data, .UBO, 0, { .WRITE_MANY_READ_MANY, .DRAW })
     }
     else {
         ubo := RENDER_CONTEXT.camera_ubo
-        transfer_buffer_data(ubo.id.?, &camera_buffer.data, update=true)
+        transfer_buffer_data(ubo.id.?, &camera_buffer_data, size_of(CameraBufferData), update=true)
     }
+
+    return true
 }
 
 update_lights_ssbo :: proc(scene :^ecs.Scene) -> (ok: bool) {
@@ -188,18 +194,30 @@ update_lights_ssbo :: proc(scene :^ecs.Scene) -> (ok: bool) {
     LightSSBOData :: struct #packed {
         point_lights: rawptr,
     }
+
+    return true
 }
 
 
 // todo full - this is demo
-create_lighting_shader :: proc(manager: ^resource.ResourceManager, compile: bool) -> (result: shader.ShaderProgram) {
+create_lighting_shader :: proc(manager: ^resource.ResourceManager, compile: bool) -> (ok: bool) {
     shaders: []shader.Shader = {
-        shader.read_single_shader_source("../resources/shaders/demo_shader.frag", .FRAGMENT),
-        shader.read_single_shader_source("../resources/shaders/demo_shader.vert", .VERTEX),
+        shader.read_single_shader_source("../resources/shaders/demo_shader.frag", .FRAGMENT) or_return,
+        shader.read_single_shader_source("../resources/shaders/demo_shader.vert", .VERTEX) or_return,
     }
-    result = shader.make_shader_program(shaders)
-    transfer_shader(&result)
-    return
+
+    for _, &material in manager.materials {
+        if material.lighting_shader != nil do continue
+
+        for &shader in shaders do shader.source.string_source = strings.clone(shader.source.string_source)
+        program := shader.make_shader_program(shaders)
+        if compile do transfer_shader(&program)
+
+        shader_id := resource.add_shader_to_manager(manager, program)
+        material.lighting_shader = shader_id
+    }
+
+    return true
 }
 
 
@@ -225,7 +243,7 @@ create_forward_lighting_shader :: proc(
 ) -> (vertex: shader.ShaderInfo, frag: shader.ShaderInfo, ok: bool) {
 
     // Add input bindings
-    shader.shader_layout_from_mesh_layout(&vertex, attribute_infos) or_return
+    shader_layout_from_mesh_layout(&vertex, attribute_infos) or_return
 
     //Lights
     light_struct := shader.make_shader_struct("Light",
@@ -249,7 +267,7 @@ create_forward_lighting_shader :: proc(
 
     // Add shader input/output for both vertex and fragment
     for attribute_info in attribute_infos {
-        input_pair := shader.GLSLPair{ shader.glsl_type_from_attribute(attribute_info) or_return, attribute_info.name}
+        input_pair := shader.GLSLPair{ glsl_type_from_attribute(attribute_info) or_return, attribute_info.name}
         shader.add_outputs(&vertex, input_pair)
         shader.add_inputs(&frag, input_pair)
 
@@ -300,7 +318,8 @@ create_forward_lighting_shader :: proc(
 
     uniforms := make([dynamic]shader.GLSLPair); defer shader.destroy_glsl_pairs(uniforms[:])
 
-    append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, resource.BASE_COLOR })  // base colour comes from pbrMetallicRoughness
+    // todo
+    append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, resource.BASE_COLOUR_TEXTURE })  // base colour comes from pbrMetallicRoughness
     append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, resource.PBR_METALLIC_ROUGHNESS })
     append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, resource.NORMAL_TEXTURE })
 

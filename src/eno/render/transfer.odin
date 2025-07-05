@@ -7,27 +7,14 @@ import dbg "../debug"
 import "../shader"
 import "../utils"
 
-// Todo update all of this w.r.t gpu components
-
-GlComponentStates :: enum u32 {
-    VAO_TRANSFERRED,
-    VBO_TRANSFERRED,
-    EBO_TRANSFERRED,
-}
-GlComponentState :: bit_set [GlComponentStates; u32]
-
-gl_component_is_drawable :: proc(component: resource.GLComponent) -> GlComponentState {
-    states: u32 = u32(!component.vao.transferred) | u32(!component.vbo.transferred) << 1 | u32(!component.ebo.transferred) << 2
-    return transmute(GlComponentState)states
-}
 
 // todo look at shaders for this
 release_mesh :: proc(mesh: ^resource.Mesh) {
     delete(mesh.vertex_data)
     delete(mesh.index_data)
-    gl.DeleteVertexArrays(1, &mesh.gl_component.vao.id)
-    gl.DeleteBuffers(1, &mesh.gl_component.vbo.id)
-    gl.DeleteBuffers(1, &mesh.gl_component.ebo.id)
+    gl.DeleteVertexArrays(1, &mesh.gl_component.vao.?)
+    gl.DeleteBuffers(1, &mesh.gl_component.vbo.?)
+    gl.DeleteBuffers(1, &mesh.gl_component.ebo.?)
 }
 
 release_model :: proc(model: ^resource.Model) {
@@ -35,10 +22,10 @@ release_model :: proc(model: ^resource.Model) {
 }
 
 
-transfer_model :: proc(model: resource.Model, transfer_material_shader: bool) -> (ok: bool) {
+transfer_model :: proc(manager: ^resource.ResourceManager, model: resource.Model, transfer_material_shader: bool) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Transferring model")
 
-    for &mesh in model.meshes do transfer_mesh(&mesh)
+    for &mesh in model.meshes do transfer_mesh(manager, &mesh, transfer_material_shader, transfer_material_shader)
 
     return
 }
@@ -46,11 +33,11 @@ transfer_model :: proc(model: resource.Model, transfer_material_shader: bool) ->
 // Binds all resoucres
 transfer_mesh :: proc(manager: ^resource.ResourceManager, mesh: ^resource.Mesh, transfer_material_shader: bool, compile: bool, loc := #caller_location) -> (ok: bool) {
 
-    if mesh.gl_component.vao == nil do create_and_transfer_vao(&mesh.gl_component.vao)
+    if mesh.gl_component.vao == nil do create_and_transfer_vao(&mesh.gl_component.vao.?)
     else do bind_vao(mesh.gl_component.vao.?)
-    if mesh.gl_component.vbo == nil do create_and_transfer_vbo(&mesh.gl_component.vbo, &mesh)
+    if mesh.gl_component.vbo == nil do create_and_transfer_vbo(&mesh.gl_component.vbo.?, mesh) or_return
     else do bind_vbo(mesh.gl_component.vbo.?)
-    if mesh.gl_component.ebo == nil do create_and_transfer_ebo(&mesh.gl_component.ebo, &mesh)
+    if mesh.gl_component.ebo == nil do create_and_transfer_ebo(&mesh.gl_component.ebo.?, mesh) or_return
     else do bind_ebo(mesh.gl_component.ebo.?)
 
     material := resource.get_material(manager, mesh.material)
@@ -60,9 +47,9 @@ transfer_mesh :: proc(manager: ^resource.ResourceManager, mesh: ^resource.Mesh, 
             return
         }
 
-        if material.lighting_shader == nil do material.lighting_shader = create_lighting_shader(material^, compile)
+        // if material.lighting_shader == nil do material.lighting_shader = create_lighting_shader(material^, compile)
     }
-    program := resource.get_shader(manager, material.lighting_shader)
+    program := resource.get_shader(manager, material.lighting_shader.?)
     bind_program(program.id.?)
 
     ok = true
@@ -76,7 +63,7 @@ transfer_mesh :: proc(manager: ^resource.ResourceManager, mesh: ^resource.Mesh, 
 */
 @(private)
 create_and_transfer_vao :: proc(vao: ^u32) {
-    gl.GenVertexArrays(1, &vao)
+    gl.GenVertexArrays(1, vao)
     bind_vao(vao^)
 }
 
@@ -102,7 +89,7 @@ create_and_transfer_vbo :: proc(vbo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
 
     total_byte_stride: u32 = 0; for attribute_layout in data.layout do total_byte_stride += attribute_layout.byte_stride
 
-    transfer_buffer_data(gl.ARRAY_BUFFER, data.vertex_data, { .WRITE_ONCE_READ_MANY, .DRAW })
+    transfer_buffer_data(gl.ARRAY_BUFFER, raw_data(data.vertex_data), len(data.vertex_data) * size_of(f32), { .WRITE_ONCE_READ_MANY, .DRAW })
 
     offset, current_ind: u32 = 0, 0
     for attribute_info in data.layout {
@@ -150,20 +137,18 @@ bind_ebo :: proc(ebo: u32) {
 }
 
 bind_program :: proc(program: u32) {
-    gl.UseProgram(program.id)
+    gl.UseProgram(program)
 }
 
 
 /* 2D single sample texture for gpu package internal use */
-Texture :: struct {
-    id: Maybe(u32)
-}
+Texture :: Maybe(u32)
 
 // Todo add sampling support and give channels input instead of internal_format
 make_texture :: proc(lod: i32 = 0, internal_format: i32 = gl.RGBA, w, h: i32, format: u32 = gl.RGBA, type: u32 = gl.FLOAT, data: rawptr = nil) -> (texture: Texture) {
     id: u32
     gl.GenTextures(1, &id)
-    texture.id = id
+    texture = id
 
     gl.BindTexture(gl.TEXTURE_2D, id)
     gl.TexImage2D(gl.TEXTURE_2D, lod, internal_format, w, h, 0, format, type, data)
@@ -172,11 +157,11 @@ make_texture :: proc(lod: i32 = 0, internal_format: i32 = gl.RGBA, w, h: i32, fo
 }
 
 destroy_texture :: proc(texture: ^Texture) {
-    if id, id_ok := texture.id.?; id_ok do gl.DeleteTextures(1, &id)
+    if id, id_ok := texture.?; id_ok do gl.DeleteTextures(1, &id)
 }
 
-bind_texture :: proc(#any_int texture_unit: int, texture: Texture) {
-    gl.ActiveTexture(gl.TEXTURE0 + texture_unit)
+bind_texture :: proc(texture_unit: u32, texture: Texture) {
+    gl.ActiveTexture(u32(gl.TEXTURE0) + texture_unit)
     gl.BindTexture(gl.TEXTURE_2D, texture.?)
 }
 
@@ -239,10 +224,10 @@ make_shader_buffer :: proc(data: rawptr, type: ShaderBufferType, shader_binding:
     buffer.id = id
     buffer.type = type
 
-    glenum_type := type == .UBO ? gl.UNIFORM_BUFFER : gl.SHADER_STORAGE_BUFFER
+    glenum_type: u32 = type == .UBO ? gl.UNIFORM_BUFFER : gl.SHADER_STORAGE_BUFFER
     gl.BindBuffer(glenum_type, id)
-    transfer_buffer_data(glenum_type, data, usage)
-    gl.BindBufferBase(glen_type, shader_binding, id)
+    transfer_buffer_data(glenum_type, data, buffer_usage_to_glenum(usage))
+    gl.BindBufferBase(glenum_type, shader_binding, id)
 
     return
 }
@@ -252,10 +237,9 @@ make_shader_buffer :: proc(data: rawptr, type: ShaderBufferType, shader_binding:
     Does not bind, create or validate
     Set update to true when updating in a frame rather than setting the buffer up
 */
-transfer_buffer_data :: proc(target: u32, data: rawptr, usage: BufferUsage = {},  update := false, data_offset := 0) {
-    data_size := size_of(E) * len(data)
+transfer_buffer_data :: proc(target: u32, data: rawptr, #any_int data_size: int, usage: BufferUsage = {},  update := false, data_offset := 0) {
     if data_offset != 0 || update {
-        gl.BufferSubData(target, data_offset, data_size, raw_data(data))
+        gl.BufferSubData(target, data_offset, data_size, data)
     }
     gl.BufferData(target, data_size, data, buffer_usage_to_glenum(usage))
 }

@@ -35,7 +35,7 @@ before_frame :: proc() -> (ok: bool) {
 
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
 
-    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resurce_manager, "../resources/models/SciFiHelmet/gLTF/SciFiHelmet.gltf") or_return
+    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "../resources/models/SciFiHelmet/gLTF/SciFiHelmet.gltf") or_return
     // Not expecting any lights from this
     helmet_model := scene_res.models[0].model
     world_properties := scene_res.models[0].world_comp
@@ -47,13 +47,13 @@ before_frame :: proc() -> (ok: bool) {
 
 
     game_data := new(GameData)
-    render_passes := [dynamic]render.RenderPass
+    render_passes := make([dynamic]render.RenderPass)
     append_elems(&render_passes, render.RenderPass{}) // default render pass signifies lighting pass
     game_data.render_pipeline = render.RenderPipeline{ render_passes }
     game.Game.game_data = game_data
 
     // Camera
-    ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "helmet_cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
+    ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
 
     game.add_event_hooks(
         game.HOOK_MOUSE_MOTION(),

@@ -1,4 +1,4 @@
-package gpu
+package render
 
 import "../resource"
 import dbg "../debug"
@@ -20,10 +20,10 @@ shader_layout_from_mesh :: proc(shader: ^shader.ShaderInfo, mesh: resource.Mesh)
     return shader_layout_from_mesh_layout(shader, mesh.layout)
 }
 
-shader_layout_from_mesh_layout :: proc(shader: ^shader.ShaderInfo, layout: resource.VertexLayout) -> (ok: bool) {
+shader_layout_from_mesh_layout :: proc(shader_info: ^shader.ShaderInfo, layout: resource.VertexLayout) -> (ok: bool) {
     n_Attributes := len(layout)
-    new_inputs := make([dynamic]GLSLPair, n_Attributes)
-    defer destroy_glsl_pairs(new_inputs[:])
+    new_inputs := make([dynamic]shader.GLSLPair, n_Attributes)
+    defer shader.destroy_glsl_pairs(new_inputs[:])
 
     for i: uint = 0; i < uint(n_Attributes); i += 1 {
         glsl_type := glsl_type_from_attribute(layout[i]) or_return
@@ -31,10 +31,10 @@ shader_layout_from_mesh_layout :: proc(shader: ^shader.ShaderInfo, layout: resou
         name := parse_attribute_name(layout[i]) or_return
         defer delete(name)
 
-        new_inputs[i] = GLSLPair{ glsl_type, utils.concat("a_", name) }
+        new_inputs[i] = shader.GLSLPair{ glsl_type, utils.concat("a_", name) }
     }
 
-    add_inputs(shader, ..new_inputs[:])
+    shader.add_inputs(shader_info, ..new_inputs[:])
     ok = true
     return
 }
@@ -57,7 +57,7 @@ parse_attribute_name :: proc(attribute_info: resource.MeshAttributeInfo, allocat
     return
 }
 
-glsl_type_from_attribute :: proc(attribute_info: resource.MeshAttributeInfo) -> (glsl_type: GLSLDataType, ok: bool) {
+glsl_type_from_attribute :: proc(attribute_info: resource.MeshAttributeInfo) -> (glsl_type: shader.GLSLDataType, ok: bool) {
 
     switch attribute_info.element_type {
     case .invalid:
@@ -82,7 +82,7 @@ glsl_type_from_attribute :: proc(attribute_info: resource.MeshAttributeInfo) -> 
     GLSL does suppport some mention of precision, but I really do not care for this
 */
 @(private)
-convert_component_type_to_glsl_type :: proc(component_type: resource.MeshComponentType) -> (type: GLSLDataType, ok: bool) {
+convert_component_type_to_glsl_type :: proc(component_type: resource.MeshComponentType) -> (type: shader.GLSLDataType, ok: bool) {
     switch component_type {
         case .invalid, .i8, .i16, .u8, .u16:
             dbg.debug_point(dbg.LogLevel.ERROR, "Invalid component type when attempting to convert to GLSL type")

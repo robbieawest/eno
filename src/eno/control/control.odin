@@ -1,4 +1,4 @@
-package control2
+package control
 
 import SDL "vendor:sdl2"
 

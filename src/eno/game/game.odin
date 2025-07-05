@@ -6,7 +6,7 @@ import ecs "../ecs"
 import "../resource"
 import win "../window"
 import dbg "../debug"
-import control "../control"
+import "../control"
 import "../camera"
 import glutils "../utils/gl_utils"
 

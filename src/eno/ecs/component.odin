@@ -80,12 +80,20 @@ component_deserialize:: proc($T: typeid, component: ECSComponentData, copy := fa
     return
 }
 
-components_deserialize_raw :: proc($T: typeid, components_data: $B, copy := false) -> (ret: []^T)
-    where B == [dynamic][dynamic]byte || B == [][]byte {
+components_deserialize_raw :: proc{ components_deserialize_raw_slice, components_deserialize_raw_dyna }
+
+components_deserialize_raw_slice :: proc($T: typeid, components_data: [][]byte, copy := false) -> (ret: []^T) {
     ret = make([]^T, 0, len(components_data))
     for comp_data in components_data do append(&ret, component_deserialize_raw(T, comp_data, copy))
     return
 }
+
+components_deserialize_raw_dyna :: proc($T: typeid, components_data: [dynamic][dynamic]byte, copy := false) -> (ret: []^T) {
+    ret = make([]^T, len(components_data))
+    for comp_data, i in components_data do ret[i] = component_deserialize_raw(T, comp_data[:], copy)
+    return
+}
+
 
 components_deserialize :: proc($T: typeid, components_data: ..ECSComponentData, copy := false) -> (ret: []ComponentData(T)) {
     ret = make([]ComponentData(T), len(components_data))

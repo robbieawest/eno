@@ -239,9 +239,9 @@ set_vector_uniform :: proc(
 set_matrix_uniform :: proc(
     program: ^ShaderProgram,
     label: string,
-    count: i32,
-    transpose: bool,
-    mat: matrix[$N, $M]$T
+    mat: matrix[$N, $M]$T,
+    count: i32 = 1,
+    transpose: bool = false,
 )
     where T == f32 || T == f64 && N > 1 && N <= 4 && M > 1 && M <= 4
 {

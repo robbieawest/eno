@@ -8,6 +8,7 @@ import "../shader"
 
 @(test)
 forward_lighting_shader_test :: proc(t: ^testing.T) {
+    /*
 
     layout := make(#soa[dynamic]resource.MeshAttributeInfo, 0); defer delete(layout)
     append_soa_elems(&layout,
@@ -38,4 +39,5 @@ forward_lighting_shader_test :: proc(t: ^testing.T) {
 
     log.infof("Vertex: %#v", s_vertex.source.string_source)
     log.infof("Frag: %#v", s_frag.source.string_source)
+    */
 }

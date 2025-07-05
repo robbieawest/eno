@@ -39,8 +39,9 @@ RenderPass :: struct {
     type: RenderPassType
 }
 
+// Populate this when needed
 make_render_pass :: proc(frame_buffer: FrameBuffer) -> RenderPass {
-    return { frame_buffer }
+    return { frame_buffer , .LIGHTING }
 }
 
 destroy_render_pass :: proc(render_pass: ^RenderPass) {
@@ -250,11 +251,7 @@ make_attachment :: proc(
     if is_render_buffer {
         render_buffer := make_renderbuffer(frame_buffer.w, frame_buffer.h, format)
 
-        frame_buffer_id, fid_ok := utils.unwrap_maybe(frame_buffer.id)
-        render_buffer_id, rid_ok := utils.unwrap_maybe(render_buffer.id)
-        if fid_ok && rid_ok {
-            gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl_attachment_id, gl.RENDERBUFFER, utils.unwrap_maybe(render_buffer.id) or_return)
-        }
+        gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl_attachment_id, gl.RENDERBUFFER, render_buffer.id.? or_return)
         attachment.data = render_buffer
     }
     else {
@@ -262,9 +259,7 @@ make_attachment :: proc(
         gl.TexParameteri(gl.FRAMEBUFFER, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
         gl.TexParameteri(gl.FRAMEBUFFER, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 
-        if texture_id, id_ok := utils.unwrap_maybe(texture.id); id_ok {
-            gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl_attachment_id, gl.TEXTURE_2D, utils.unwrap_maybe(texture.id) or_return, lod)
-        }
+        gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl_attachment_id, gl.TEXTURE_2D, texture.? or_return, lod)
         attachment.data = texture
     }
 
