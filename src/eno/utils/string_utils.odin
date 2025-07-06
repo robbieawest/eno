@@ -4,6 +4,7 @@ import dbg "../debug"
 
 import "core:testing"
 import "core:log"
+import "core:mem"
 import "core:strings"
 import "core:fmt"
 import "core:text/regex"
@@ -153,7 +154,7 @@ concat_test :: proc(t: ^testing.T) {
 }
 
 
-concat_cstr :: proc(string_inp: ..cstring) -> cstring {
+concat_cstr :: proc(string_inp: ..cstring) -> (ret: cstring, err: mem.Allocator_Error) {
     builder := strings.builder_make()
     defer strings.builder_destroy(&builder)
 
@@ -183,16 +184,24 @@ regex_match_no_flags :: proc(grammar: string, pattern: string) -> (matched: bool
 }
 
 regex_match_flags :: proc(grammar: string, pattern: string, flags: regex.Flags) -> (matched: bool) {
-
-    regex_match_iterator, err := regex.create_iterator(grammar, pattern, { .No_Capture } + flags)
-    defer regex.destroy_iterator(regex_match_iterator)
+    expression, err := regex.create(pattern, { .No_Capture })
     if err != nil {
         dbg.debug_point(dbg.LogLevel.ERROR, "Could not create regex match iterator, defaulting to no match")
         return
     }
 
-    _, _, matched = regex.match_iterator(&regex_match_iterator)
+    _, matched = regex.match(expression, pattern)
     return
+
+    /*
+    regex_match_iterator, err := regex.create_iterator(grammar, pattern, { .No_Capture } + flags)
+    defer regex.destroy_iterator(regex_match_iterator)
+    if err != nil {
+
+    }
+
+    _, _, matched = regex.match_iterator(&regex_match_iterator)
+    */
 }
 
 @(test)

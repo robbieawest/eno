@@ -4,8 +4,10 @@ import win "../window"
 import game "../game"
 
 import "core:log"
+import "core:testing"
 
 main :: proc() {
+
     context.logger = log.create_console_logger()
     log.info("Starting Demo")
 
@@ -17,4 +19,9 @@ main :: proc() {
     game.init_game(window_target, every_frame, before_frame); defer game.destroy_game()
 
     game.run_game()
+}
+
+@(test)
+test_main :: proc(t: ^testing.T) {
+    main()
 }
