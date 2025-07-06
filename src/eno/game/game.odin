@@ -96,7 +96,6 @@ init_game_default_scene :: proc(window: win.WindowTarget, every_frame: frame_loo
     Game.controller = control.init_controller(allocator)
 }
 
-
 destroy_game :: proc(allocator := context.allocator) {
     win.destroy_window(Game.window)
     ecs.destroy_scene(Game.scene, allocator)
@@ -104,8 +103,6 @@ destroy_game :: proc(allocator := context.allocator) {
 
     dbg.log_debug_stack()
     dbg.destroy_debug_stack()
-
-    os.exit(0)
 }
 
 

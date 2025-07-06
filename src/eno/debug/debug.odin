@@ -7,7 +7,6 @@ import "core:strings"
 import "core:fmt"
 import "core:mem"
 import "core:reflect"
-import "core:slice"
 
 import "base:runtime"
 
@@ -167,7 +166,8 @@ StackItem :: struct {
 }
 
 destroy_stack_item :: proc(stack_item: ^StackItem) {
-    if len(stack_item.data.log_info.msg) != 0 && stack_item.data.log_info.msg != DEBUG_MARKER do delete(stack_item.data.log_info.msg)
+    if stack_item == nil do return
+    delete(stack_item.data.log_info.msg)
     free(stack_item)
 }
 
@@ -175,8 +175,8 @@ destroy_stack_item :: proc(stack_item: ^StackItem) {
 @(private)
 r_Destroy_stack_item :: proc(stack_item: ^StackItem) {
     if stack_item == nil do return
-    destroy_stack_item(stack_item)
     r_Destroy_stack_item(stack_item.prev)
+    destroy_stack_item(stack_item)
 }
 
 
@@ -260,7 +260,6 @@ destroy_debug_stack :: proc() {
 
     r_Destroy_stack_item(DEBUG_STACK.stack_head)
     free(DEBUG_STACK)
-    DEBUG_STACK = nil
 }
 
 
@@ -276,7 +275,7 @@ r_Debug_point_no_log :: proc(debug_flags := DEBUG_FLAGS, loc := #caller_location
 
 DEBUG_MARKER := " ** Debug Marker ** "
 d_Debug_point_no_log :: proc(debug_flags := DEBUG_FLAGS, loc := #caller_location) {
-    if debug_flags.PUSH_LOGS_TO_DEBUG_STACK do push_to_debug_stack({ DEBUG_MARKER, .INFO }, loc = loc)
+    if debug_flags.PUSH_LOGS_TO_DEBUG_STACK do push_to_debug_stack({ strings.clone(DEBUG_MARKER), .INFO }, loc = loc)
 }
 
 
