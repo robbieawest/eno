@@ -50,7 +50,6 @@ MatchedComponentData :: struct ($T: typeid) {
 serialize_data :: proc(data: $T, size: int, copy := false) -> []byte {
     when intrinsics.type_is_pointer(T) {
         data := transmute([]byte)mem.Raw_Slice{ data, size }
-        log.infof("size: %d", len(data))
         return copy ? slice.clone(data) : data
     }
     else {

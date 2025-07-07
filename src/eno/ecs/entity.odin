@@ -176,7 +176,6 @@ scene_add_archetype :: proc(scene: ^Scene, label: string, component_infos: ..Com
 
     archetype: Archetype
     for component_info in component_infos {
-        log.infof("comp size: %d", component_info.size)
         archetype.component_info.total_size_per_entity += component_info.size
     }
     archetype.component_info.component_infos = slice.clone(component_infos)
