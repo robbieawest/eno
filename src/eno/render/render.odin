@@ -7,6 +7,7 @@ import "../utils"
 import dbg "../debug"
 import "../standards"
 
+import "core:log"
 import "core:strings"
 import "core:fmt"
 import glm "core:math/linalg/glsl"
@@ -57,37 +58,53 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
             }
 
         }
-        for i in 0..<len(model_data) {
+        if len(models) != len(world_comps) {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Received unbalanced input from scene query")
+            return
+        }
+        for i in 0..<len(models) {
             append(&model_data, ModelWorldPair{ models[i], world_comps[i] })
         }
 
     }
 
+    log.infof("mat: %#v", model_data[0].model.meshes[0].material)
 
     // todo do create shader
     // for now assume it works
-
     if len(pipeline.passes) == 1 && pipeline.passes[0].type == .LIGHTING {
         // Render to default framebuffer directly
         // Make single element draw call per mesh
-        create_lighting_shader(manager, true) or_return
+        log.info("here")
+        ok = create_lighting_shader(manager, true)
+        if !ok {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Lighting shader failed to create")
+            return
+        }
 
         // todo group calls by material
 
         for &model_pair in model_data {
+            log.info("in here")
             model_mat := standards.model_from_world_component(model_pair.world_comp^)
             for &mesh in model_pair.model.meshes {
                 transfer_mesh(manager, &mesh, true, true)
 
-                material := resource.get_material(manager, mesh.material)
+                mat_id, mat_ok := mesh.material.?; if !mat_ok {
+                    dbg.debug_point(dbg.LogLevel.ERROR, "material not found for mesh")
+                    return
+                }
+
+                material := resource.get_material(manager, mat_id)
                 lighting_shader := resource.get_shader(manager, material.lighting_shader.?)
                 bind_program(lighting_shader.id.?) // todo do in bind_material_uniforms
 
                 // bind_material_uniforms(manager, material)
-                // update_camera_ubo(scene)
+                update_camera_ubo(scene)
 
                 shader.set_uniform(lighting_shader, standards.MODEL_MAT, model_mat)
 
+                log.info("issuing draw")
                 issue_single_element_draw_call(len(mesh.index_data))
             }
         }
@@ -201,15 +218,16 @@ update_lights_ssbo :: proc(scene :^ecs.Scene) -> (ok: bool) {
 
 // todo full - this is demo
 create_lighting_shader :: proc(manager: ^resource.ResourceManager, compile: bool) -> (ok: bool) {
-    shaders: []shader.Shader = {
-        shader.read_single_shader_source("../resources/shaders/demo_shader.frag", .FRAGMENT) or_return,
-        shader.read_single_shader_source("../resources/shaders/demo_shader.vert", .VERTEX) or_return,
-    }
+    log.info("lighting shader")
 
     for _, &material in manager.materials {
         if material.lighting_shader != nil do continue
 
-        for &shader in shaders do shader.source.string_source = strings.clone(shader.source.string_source)
+        shaders: []shader.Shader = {
+            shader.read_single_shader_source("../resources/shaders/demo_shader.frag", .FRAGMENT) or_return,
+            shader.read_single_shader_source("../resources/shaders/demo_shader.vert", .VERTEX) or_return,
+        }
+        log.infof("shaders: %#v", shaders)
         program := shader.make_shader_program(shaders)
         if compile do transfer_shader(&program)
 

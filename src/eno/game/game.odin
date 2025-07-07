@@ -50,6 +50,9 @@ run_game :: proc() {
         dbg.debug_point(dbg.LogLevel.ERROR, "False received from before_frame procedure. Terminating")
         return
     }
+    else {
+        dbg.debug_point(dbg.LogLevel.INFO, "before_frame complete, moving to loop")
+    }
 
     for Game.state == .RUNNING {
         control.poll(&Game.controller)

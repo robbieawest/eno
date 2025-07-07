@@ -72,7 +72,7 @@ Mesh :: struct {
     vertex_data: VertexData,
     index_data: IndexData,
     layout: VertexLayout,
-    material: MaterialID,
+    material: Maybe(MaterialID),
     gl_component: GLComponent
 }
 
@@ -269,14 +269,24 @@ texture_from_cgltf_texture :: proc(texture: ^cgltf.texture) -> (result: Texture,
 
 load_image_from_cgltf_image :: proc(image: ^cgltf.image) -> (result: Image, ok: bool) {
     result.name = strings.clone_from_cstring(image.name)
-    // Don't care about image URI's right now, maybe I will have to later
+    dbg.debug_point(dbg.LogLevel.INFO, "Reading cgltf image: %s", image.uri)
+
+
     if image.buffer_view == nil {
-        dbg.debug_point(dbg.LogLevel.ERROR, "CGLTF image does not have any image buffer data")
-        return
+        if image.uri == nil {
+            dbg.debug_point(dbg.LogLevel.ERROR, "CGLTF image does not have any image buffer data")
+            return
+        }
+
+        // Use URI
+        result.pixel_data = stbi.load(image.uri, &result.w, &result.h, &result.channels, 0)
+    }
+    else {
+        // Use buffer
+        image_buffer: [^]byte = transmute([^]byte)(uintptr(image.buffer_view.buffer.data) + uintptr(image.buffer_view.offset))
+        result.pixel_data = stbi.load_from_memory(image_buffer, i32(image.buffer_view.size), &result.w, &result.h, &result.channels, 0)
     }
 
-    image_buffer: [^]byte = transmute([^]byte)(uintptr(image.buffer_view.buffer.data) + uintptr(image.buffer_view.offset))
-    result.pixel_data = stbi.load_from_memory(image_buffer, i32(image.buffer_view.size), &result.w, &result.h, &result.channels, 0)
 
     ok = true
     return

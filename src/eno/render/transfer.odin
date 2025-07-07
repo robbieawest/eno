@@ -40,7 +40,11 @@ transfer_mesh :: proc(manager: ^resource.ResourceManager, mesh: ^resource.Mesh, 
     if mesh.gl_component.ebo == nil do create_and_transfer_ebo(&mesh.gl_component.ebo.?, mesh) or_return
     else do bind_ebo(mesh.gl_component.ebo.?)
 
-    material := resource.get_material(manager, mesh.material)
+    mat_id, mat_ok := mesh.material.?; if !mat_ok {
+        dbg.debug_point(dbg.LogLevel.ERROR, "material not found for mesh")
+        return
+    }
+    material := resource.get_material(manager, mat_id)
     if transfer_material_shader {
         if material == nil {
             dbg.debug_point(dbg.LogLevel.ERROR, "Mesh material id %d does not exist in the manager", mesh.material, loc=loc)

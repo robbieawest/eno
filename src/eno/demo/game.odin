@@ -23,7 +23,7 @@ GameData :: struct {
 
 every_frame :: proc() -> (ok: bool) {
 
-    render.render(&game.Game.resource_manager, (cast(^GameData)game.Game.game_data).render_pipeline, game.Game.scene)
+    render.render(&game.Game.resource_manager, (cast(^GameData)game.Game.game_data).render_pipeline, game.Game.scene) or_return
 
     // Swap
     ok = win.swap_window_bufs(game.Game.window); if !ok do log.errorf("could not swap bufs")
@@ -35,7 +35,9 @@ before_frame :: proc() -> (ok: bool) {
 
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
 
+    log.info("before")
     scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf") or_return
+    log.info("after")
     // Not expecting any lights from this
     helmet_model := scene_res.models[0].model
     world_properties := scene_res.models[0].world_comp
