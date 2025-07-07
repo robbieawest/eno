@@ -4,6 +4,8 @@ import dbg "../debug"
 import "../utils"
 
 import "core:mem"
+import "core:testing"
+import "core:log"
 
 SceneQuery :: union {
     ArchetypeQuery,  // To use the same query on all archetypes
@@ -67,6 +69,7 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResu
 query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result: ArchetypeQueryResult) {
 
     result.data = archetype_get_entity_data(archetype)
+    log.infof("data before %#v", result.data)
     result.component_map = utils.copy_map(archetype.components_label_match)
     result.entity_map = utils.copy_map(archetype.entities)
 
@@ -78,9 +81,16 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
     // Filter result
     entities_to_be_filtered := make([dynamic]Entity)
 
+    log.infof("query: %#v", query)
+
+    component_remove_map := make(map[string]bool, archetype.n_Components)
+    for comp_label, _ in archetype.components_label_match do component_remove_map[comp_label] = true
+
     for component_query in query.components {
         comp_ind, comp_exists := archetype.components_label_match[component_query.label]
         if !comp_exists do return {} // Skip archetype
+
+        log.infof("comp ind: %d", comp_ind)
 
         component_data: [dynamic][dynamic]byte = result.data[comp_ind]
         if component_query.data != nil {
@@ -92,23 +102,33 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
             }
         }
 
-        // Regardless of filter result, remove component from output
-        ordered_remove(&result.data, comp_ind)
-        delete_key(&result.component_map, component_query.label)
+        if component_query.include do component_remove_map[component_query.label] = false
     }
+
+    // Filter all components via the component_remove_map
+    component_indices_to_delete := make([dynamic]int)
+    for comp_label, remove_comp in component_remove_map {
+        if !remove_comp do continue
+        delete_key(&result.component_map, comp_label)
+        append(&component_indices_to_delete, int(archetype.components_label_match[comp_label]))
+    }
+    utils.remove_from_dynamic(&result.data, ..component_indices_to_delete[:])
 
     // Add query entities to filter
     for entity in query.entities do append(&entities_to_be_filtered, archetype.entities[entity])
 
+    log.infof("filter entities: %#v", entities_to_be_filtered)
     // Finally filter entities out
 
     // Firstly remove from component data
-    entity_columns := make([dynamic]int, len(entities_to_be_filtered))
-    for i := 0; i < len(entities_to_be_filtered); i += 0 {
-        entity_columns[i] = int(entities_to_be_filtered[i].archetype_column)
+    entity_columns_to_remove := make([dynamic]int, len(entities_to_be_filtered))
+    for i in 0..<len(entities_to_be_filtered) {
+        entity_columns_to_remove[i] = int(entities_to_be_filtered[i].archetype_column)
         delete_key(&result.entity_map, entities_to_be_filtered[i].name)
     }
-    utils.remove_from_dynamic(&result.data, ..entity_columns[:])
+    log.infof("entities to delete: %v", entity_columns_to_remove)
+    for &comp in result.data do utils.remove_from_dynamic(&comp, ..entity_columns_to_remove[:])
+
 
     // And then decrement all the entity columns so that they are in order of one-increments
     // This is valid since we just removed everything in between
@@ -121,6 +141,9 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
 
     return
 }
+
+
+
 
 
 /*

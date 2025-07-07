@@ -4,11 +4,12 @@ import glm "core:math/linalg/glsl"
 
 ComponentTemplate :: struct {
     label: string,
-    type: typeid
+    type: typeid,
+    size: int
 }
 
-WORLD_COMPONENT := ComponentTemplate{ "World", WorldComponent } // Of type WorldComponent
-VISIBLE_COMPONENT := ComponentTemplate{ "IsVisible", bool }
+WORLD_COMPONENT := ComponentTemplate{ "World", WorldComponent, size_of(WorldComponent) } // Of type WorldComponent
+VISIBLE_COMPONENT := ComponentTemplate{ "IsVisible", bool, size_of(bool) }
 
 WorldComponent :: struct {
     position: glm.vec3,

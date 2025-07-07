@@ -8,8 +8,9 @@ import dbg "../debug"
 
 import "core:strings"
 import glm "core:math/linalg/glsl"
+import "core:log"
 
-MODEL_COMPONENT := standards.ComponentTemplate{ "Model", Model }
+MODEL_COMPONENT := standards.ComponentTemplate{ "Model", Model, size_of(Model) }
 
 /*
 VertexLayout :: struct {
@@ -198,7 +199,7 @@ MaterialProperty :: struct {
 
 // Assumes the resource manager is properly initialized
 eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.material) -> (material: Material, ok: bool) {
-    material.name = strings.clone_from_cstring(cmat.name)
+    if cmat.name != nil do material.name = strings.clone_from_cstring(cmat.name)
 
     if cmat.has_pbr_metallic_roughness {
         base_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.base_color_texture.texture) or_return
@@ -299,6 +300,6 @@ SpotLight :: struct {
     outer_cone_angle: f32,
 }
 
-POINT_LIGHT_COMPONENT := standards.ComponentTemplate{ "PointLight", PointLight }
-DIRECTIONAL_LIGHT_COMPONENT := standards.ComponentTemplate{ "DirectionalLight", DirectionalLight }
-SPOT_LIGHT_COMPONENT := standards.ComponentTemplate{ "SpotLight", SpotLight }
+POINT_LIGHT_COMPONENT := standards.ComponentTemplate{ "PointLight", PointLight, size_of(PointLight) }
+DIRECTIONAL_LIGHT_COMPONENT := standards.ComponentTemplate{ "DirectionalLight", DirectionalLight, size_of(DirectionalLight) }
+SPOT_LIGHT_COMPONENT := standards.ComponentTemplate{ "SpotLight", SpotLight, size_of(SpotLight) }

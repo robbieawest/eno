@@ -4,6 +4,9 @@ import gl "vendor:OpenGL"
 import SDL "vendor:sdl2"
 
 import dbg "../debug"
+import "../ecs"
+import "../resource"
+import "../standards"
 
 import "core:testing"
 import "core:log"
@@ -104,4 +107,39 @@ express_shader_test :: proc(t: ^testing.T) {
 
  testing.expect(t, program.expressed, "expressed check")
  */
+}
+
+@(test)
+query_archetype_test :: proc(t: ^testing.T) {
+    log.infof("%d", size_of(resource.Model))
+    dbg.init_debug_stack()
+    scene := new(ecs.Scene)
+    arch, _ := ecs.scene_add_default_archetype(scene, "demo_entities")
+    manager := resource.init_resource_manager()
+
+    scene_res, _ := resource.extract_gltf_scene(&manager, "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf")
+    helmet_model := scene_res.models[0].model
+    world_properties := scene_res.models[0].world_comp
+
+    _ = ecs.archetype_add_entity(scene, arch, "helmet_entity",
+        ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, ecs.serialize_data(&helmet_model, size_of(resource.Model))),
+        ecs.make_ecs_component_data(standards.WORLD_COMPONENT.label, standards.WORLD_COMPONENT.type, ecs.serialize_data(&world_properties, size_of(standards.WorldComponent))),
+        ecs.make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, ecs.serialize_data(true, size_of(bool)))
+    )
+
+    _ = ecs.archetype_add_entity(scene, arch, "helmet_entity 2",
+        ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, ecs.serialize_data(&helmet_model, size_of(resource.Model))),
+        ecs.make_ecs_component_data(standards.WORLD_COMPONENT.label, standards.WORLD_COMPONENT.type, ecs.serialize_data(&world_properties, size_of(standards.WorldComponent))),
+        ecs.make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, ecs.serialize_data(false, size_of(bool)))
+    )
+
+    isVisibleQueryData := true
+    query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
+        { label = resource.MODEL_COMPONENT.label, include = true },
+        { label = standards.WORLD_COMPONENT.label, include = true },
+        { label = standards.VISIBLE_COMPONENT.label, data = &isVisibleQueryData }
+    }}
+    query_result := ecs.query_archetype(arch, query)
+
+    log.infof("query result: %#v", query_result)
 }

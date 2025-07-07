@@ -6,8 +6,10 @@ import "../resource"
 import "../standards"
 
 import "core:mem"
+import "core:log"
 import "core:slice"
 import "core:strings"
+import utils "../utils"
 
 // Todo: look into component/entity deletion and custom allocators
 // Relate it to every type defined in eno
@@ -26,23 +28,20 @@ Entity :: struct {
 
 
 ComponentInfo :: struct {
-    size: u32,  // In bytes
     label: string,
-    type: typeid
+    type: typeid,
+    size: int
 }
 
-make_component_info :: proc(T: typeid, label: string) -> ComponentInfo {
-    return ComponentInfo{ size = size_of(T), label = label, type = T }
-}
 
 ArchetypeComponentInfo :: struct {
-    total_size_per_entity: u32,
+    total_size_per_entity: int,
     component_infos: []ComponentInfo
 }
 
-ARCHETYPE_MAX_COMPONENTS : u32 : 0x000FFFFF
-ARCHETYPE_MAX_ENTITIES : u32 : 0x00FFFFFF 
-ARCHETYPE_INITIAL_ENTITIES_CAPACITTY : u32 : 100
+ARCHETYPE_MAX_COMPONENTS :: 0x000FFFFF
+ARCHETYPE_MAX_ENTITIES :: 0x00FFFFFF
+ARCHETYPE_INITIAL_ENTITIES_CAPACITTY :: 100
 Archetype :: struct {
     n_Entities: u32,
     entities: map[string]Entity,  // Allocated using default heap allocator/context allocator
@@ -136,20 +135,20 @@ archetype_get_component_data :: proc(archetype: ^Archetype, component_label: str
 /*
     Return all archetype data but instead split by specific entity parts
     This form is very workable, and is used in querying
+    Why does this return [dynamic] instead of slice? No clue
 */
 @(private)
 archetype_get_entity_data :: proc(archetype: ^Archetype) -> (result: [dynamic][dynamic][dynamic]byte) {
     result = make([dynamic][dynamic][dynamic]byte, len(archetype.components))
-    for i := 0; i < len(archetype.components); i += 1 {
+    for i in 0..<len(archetype.components) {
         comp_data := archetype.components[i]
         comp_size := int(archetype.component_info.component_infos[i].size)
 
-        inner_result := make([dynamic][dynamic]byte, len(comp_data) / comp_size)
-        for j := 0; j < len(inner_result); j += 1 {
+        result[i] = make([dynamic][dynamic]byte, archetype.n_Entities)
+        for j in 0..<int(archetype.n_Entities) {
             individual_component_start := j * comp_size
-            inner_result[j] = slice.into_dynamic(comp_data[individual_component_start:individual_component_start + comp_size])
+            result[i][j] = utils.slice_to_dynamic(comp_data[individual_component_start:individual_component_start + comp_size])
         }
-        result[i] = inner_result
     }
     return
 }
@@ -158,8 +157,10 @@ archetype_get_entity_data :: proc(archetype: ^Archetype) -> (result: [dynamic][d
 scene_add_default_archetype :: proc(scene: ^Scene, label: string, allocator := context.allocator) -> (ret: ^Archetype, ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Adding default archetype of name: %s",  label)
     return scene_add_archetype(scene, label,
-        make_component_info(resource.MODEL_COMPONENT.type, resource.MODEL_COMPONENT.label),
-        make_component_info(standards.WORLD_COMPONENT.type, standards.WORLD_COMPONENT.label), allocator = allocator
+        cast(ComponentInfo)(resource.MODEL_COMPONENT),
+        cast(ComponentInfo)(standards.WORLD_COMPONENT),
+        cast(ComponentInfo)(standards.VISIBLE_COMPONENT),
+        allocator=allocator
     )
 }
 
@@ -175,6 +176,7 @@ scene_add_archetype :: proc(scene: ^Scene, label: string, component_infos: ..Com
 
     archetype: Archetype
     for component_info in component_infos {
+        log.infof("comp size: %d", component_info.size)
         archetype.component_info.total_size_per_entity += component_info.size
     }
     archetype.component_info.component_infos = slice.clone(component_infos)

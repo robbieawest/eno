@@ -6,6 +6,9 @@ import "core:mem"
 import "core:slice"
 import "core:strings"
 
+import "base:intrinsics"
+import "core:log"
+
 ComponentTemplate :: struct {
     label: string,
     type: typeid
@@ -44,15 +47,23 @@ MatchedComponentData :: struct ($T: typeid) {
 
 // Serialization and deserialization
 
-serialize_data :: proc(data: ^$T, copy := false) -> []byte {
-    data := transmute([]byte)mem.Raw_Slice{ data, size_of(T) }
-    return copy ? slice.clone(data) : data
+serialize_data :: proc(data: $T, size: int, copy := false) -> []byte {
+    when intrinsics.type_is_pointer(T) {
+        data := transmute([]byte)mem.Raw_Slice{ data, size }
+        log.infof("size: %d", len(data))
+        return copy ? slice.clone(data) : data
+    }
+    else {
+        // Must copy
+        data := data
+        return slice.clone(transmute([]byte)mem.Raw_Slice{ &data, size })
+    }
 }
 
 // Copies everything in input
-serialize_component :: proc(component: ComponentData($T), allocator := context.allocator) -> (ret: ECSComponentData) {
+serialize_component :: proc(component: ComponentData($T), copy := false, allocator := context.allocator) -> (ret: ECSComponentData) {
     ret.label = strings.clone(component.label)
-    ret.data = serialize_data(component.data)
+    ret.data = serialize_data(component.data, size_of(T), copy)
     return
 }
 

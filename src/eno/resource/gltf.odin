@@ -8,31 +8,30 @@ import "../standards"
 
 import "core:testing"
 import "core:strings"
-import glm "core:math/linalg/glsl"
 
 DEFAULT_OPTIONS: cgltf.options
-load_gltf :: proc(path: string) -> (data: ^cgltf.data, result: cgltf.result){
+load_gltf :: proc(path: string) -> (data: ^cgltf.data, result: cgltf.result) {
     result = .io_error
 
-    dbg.debug_point(dbg.LogLevel.INFO, "Reading gltf mesh. Path: \"%s\"", path)
+    dbg.debug_point(dbg.LogLevel.INFO, "Reading gltf file. Path: \"%s\"", path)
 
     cpath := strings.clone_to_cstring(path)
 
     data, result = cgltf.parse_file(DEFAULT_OPTIONS, cpath)
 
     if result != .success {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Unable to load gltf mesh. Path: \"%s\"", path)
+        dbg.debug_point(dbg.LogLevel.ERROR, "Unable to load gltf file. Path: \"%s\"", path)
         return
     }
     if result = cgltf.load_buffers(DEFAULT_OPTIONS, data, cpath); result != .success {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Unable to load default buffers for gltf mesh. Path: \"%s\"", path)
+        dbg.debug_point(dbg.LogLevel.ERROR, "Unable to load default buffers for gltf scenes. Path: \"%s\"", path)
         return
     }
     if result = cgltf.validate(data); result != .success {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Unable to validate imported data for gltf mesh. Path: \"%s\"", path)
+        dbg.debug_point(dbg.LogLevel.ERROR, "Unable to validate imported data for gltf scenes. Path: \"%s\"", path)
         return
     }
-    
+
     return data, .success
 }
 
@@ -99,7 +98,6 @@ extract_gltf_scene_no_path :: proc(manager: ^ResourceManager, data: ^cgltf.data,
         if node.has_translation do world_comp.position = node.translation
         if node.has_rotation do world_comp.rotation = quaternion(x=node.rotation[0], y=node.rotation[1], z=node.rotation[2], w=node.rotation[3])
         if node.has_scale do world_comp.scale = node.scale
-
         if node.mesh != nil {
             model := extract_cgltf_mesh(manager, node.mesh^) or_return
             append(&result.models, ModelWorldPair{ model, world_comp })
@@ -164,7 +162,11 @@ extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh) -> (mode
         mesh_ret := &meshes[i]
 
         // Set material properties
-        mesh_ret.material = add_material_to_manager(manager, eno_material_from_cgltf_material(manager, primitive.material^) or_return)
+        /*
+        if primitive.material != nil {
+            mesh_ret.material = add_material_to_manager(manager, eno_material_from_cgltf_material(manager, primitive.material^) or_return)
+        }
+        */
 
         // Construct layout
         for attribute in primitive.attributes {

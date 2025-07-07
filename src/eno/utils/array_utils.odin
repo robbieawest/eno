@@ -2,12 +2,12 @@ package utils
 
 import dbg "../debug"
 
-import "base:intrinsics"
-
 import "core:testing"
 import "core:mem"
 import "core:slice"
 import "core:log"
+
+import "base:runtime"
 
 // Utils package must not depend on any other package
 // If certain functionality needs to be dependent on another package, just make another package
@@ -98,4 +98,15 @@ remove_from_dynamic_test :: proc(t: ^testing.T) {
     testing.expect_value(t, arr[3], 1)
     testing.expect_value(t, arr[4], 2)
     log.infof("arr: %v", arr)
+}
+
+slice_to_dynamic :: proc(a: $T/[]$E) -> [dynamic]E {
+    s := transmute(runtime.Raw_Slice)a
+    d := runtime.Raw_Dynamic_Array{
+        data = s.data,
+        len  = s.len,
+        cap  = s.len,
+        allocator = runtime.nil_allocator(),
+    }
+    return transmute([dynamic]E)d
 }
