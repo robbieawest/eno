@@ -2,6 +2,8 @@ package resource
 
 import "../shader"
 
+import "core:log"
+
 // Package defining the resource manager and relevant systems relating to it
 
 ShaderID :: u32  // Referring to full shader pipelines
@@ -21,6 +23,7 @@ init_resource_manager :: proc(allocator := context.allocator) -> ResourceManager
 }
 
 add_texture_to_manager :: proc(manager: ^ResourceManager, texture: Texture) -> TextureID {
+    //log.infof("texture: %#v", texture)
     new_id := u32(len(manager.textures))
     manager.textures[new_id] = texture
     return new_id
@@ -33,6 +36,7 @@ add_shader_to_manager :: proc(manager: ^ResourceManager, program: shader.ShaderP
 }
 
 add_material_to_manager :: proc(manager: ^ResourceManager, material: Material) -> MaterialID {
+    log.infof("mat: %#v", material)
     new_id := u32(len(manager.materials))
     manager.materials[new_id] = material
     return new_id

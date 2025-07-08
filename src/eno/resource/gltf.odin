@@ -2,9 +2,10 @@ package resource
 
 import "vendor:cgltf"
 
-import utils "../utils"
+import "../utils"
 import dbg "../debug"
 import "../standards"
+import futils "../file_utils"
 
 import "core:testing"
 import "core:strings"
@@ -75,13 +76,20 @@ destroy_model_scene_result :: proc(result: ModelSceneResult) {
 extract_gltf_scene :: proc{ extract_gltf_scene_from_path, extract_gltf_scene_no_path }
 
 extract_gltf_scene_from_path :: proc(manager: ^ResourceManager, path: string, scene_index := -1) -> (result: ModelSceneResult, ok: bool) {
+    futils.check_path(path) or_return
+    gltf_folder_path, path_ok := futils.file_path_to_folder_path(path)
+    if !path_ok {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Given path does not represent a file")
+        return
+    }
+
     data, res := load_gltf(path)
     if res != .success do return
 
-    return extract_gltf_scene_no_path(manager, data, scene_index)
+    return extract_gltf_scene_no_path(manager, data, gltf_folder_path, scene_index)
 }
 
-extract_gltf_scene_no_path :: proc(manager: ^ResourceManager, data: ^cgltf.data, scene_index := -1) -> (result: ModelSceneResult, ok: bool) {
+extract_gltf_scene_no_path :: proc(manager: ^ResourceManager, data: ^cgltf.data, gltf_folder_path: string, scene_index := -1) -> (result: ModelSceneResult, ok: bool) {
     scene: ^cgltf.scene
     if scene_index == -1 do scene = data.scene
     else {
@@ -100,7 +108,7 @@ extract_gltf_scene_no_path :: proc(manager: ^ResourceManager, data: ^cgltf.data,
         if node.has_scale do world_comp.scale = node.scale
         else do world_comp.scale = [3]f32{ 1.0, 1.0, 1.0 }
         if node.mesh != nil {
-            model := extract_cgltf_mesh(manager, node.mesh^) or_return
+            model := extract_cgltf_mesh(manager, node.mesh^, gltf_folder_path) or_return
             append(&result.models, ModelWorldPair{ model, world_comp })
         }
         else if node.light != nil {
@@ -141,11 +149,19 @@ extract_gltf_scene_no_path :: proc(manager: ^ResourceManager, data: ^cgltf.data,
 
 
 extract_model :: proc(manager: ^ResourceManager, path: string, model_name: string) -> (model: Model, ok: bool) {
+    futils.check_path(path) or_return
+    gltf_folder_path, path_ok := futils.file_path_to_folder_path(path)
+    if !path_ok {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Given path does not represent a file")
+        return
+    }
+
     data, res := load_gltf(path)
     if res != .success do return
 
+
     for mesh in data.meshes {
-        if strings.compare(string(mesh.name), model_name) == 0 do return extract_cgltf_mesh(manager, mesh)
+        if strings.compare(string(mesh.name), model_name) == 0 do return extract_cgltf_mesh(manager, mesh, gltf_folder_path)
     }
 
     ok = false
@@ -155,7 +171,7 @@ extract_model :: proc(manager: ^ResourceManager, path: string, model_name: strin
 /*
     Gives an eno mesh for each primitive in the cgltf "mesh"
 */
-extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh) -> (model: Model, ok: bool) {
+extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh, gltf_file_location: string) -> (model: Model, ok: bool) {
     //This is assuming all mesh attributes (aside from indices) have the same count (for each primitive/mesh output)
     meshes := make([dynamic]Mesh, len(mesh.primitives))
 
@@ -164,7 +180,7 @@ extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh) -> (mode
 
         // Set material properties
         if primitive.material != nil {
-            mesh_ret.material = add_material_to_manager(manager, eno_material_from_cgltf_material(manager, primitive.material^) or_return)
+            mesh_ret.material = add_material_to_manager(manager, eno_material_from_cgltf_material(manager, primitive.material^, gltf_file_location) or_return)
         }
 
         // Construct layout

@@ -85,3 +85,28 @@ read_source_test :: proc(t: ^testing.T) {
 
     log.infof("source: %#s", source)
 }
+
+
+check_path :: proc(path: string, loc := #caller_location) -> (ok: bool) {
+    ok = os.is_dir(path) || os.is_file(path)
+    if !ok do dbg.debug_point(dbg.LogLevel.ERROR, "Path is not valid", loc)
+    return
+}
+
+// Returns false if you give a folder path
+file_path_to_folder_path :: proc(file_path: string) -> (folder_path: string, ok: bool) {
+    length := len(file_path)
+    if length == 0 ||  is_path_separator(file_path[length - 1]) do return
+
+    next_seperator := length - 1
+    for next_seperator >= 0 && !is_path_separator(file_path[next_seperator]){
+        next_seperator -= 1
+    }
+
+    if next_seperator == -1 do return file_path, true
+    return file_path[:next_seperator + 1], true
+}
+
+is_path_separator :: proc(to_check: byte) -> bool {
+    return to_check == '/' || to_check == '\\';
+}
