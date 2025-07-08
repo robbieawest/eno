@@ -7,7 +7,7 @@ Attempts to be interactable and extendible in every stage.
 ## Building
 
 #### Prerequisites
-- `odin` programming language is installed, the tested release is `dev-2024-11`.
+- `odin` programming language is installed, the current tested release is `dev-2025-04`.
 - `SDL2` is installed.
 - `OpenGL` is installed.
 
