@@ -68,14 +68,11 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
 
     }
 
-    log.infof("mat: %#v", model_data[0].model.meshes[0].material)
-
     // todo do create shader
     // for now assume it works
     if len(pipeline.passes) == 1 && pipeline.passes[0].type == .LIGHTING {
         // Render to default framebuffer directly
         // Make single element draw call per mesh
-        log.info("here")
         ok = create_lighting_shader(manager, true)
         if !ok {
             dbg.debug_point(dbg.LogLevel.ERROR, "Lighting shader failed to create")
@@ -195,7 +192,7 @@ update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
         camera_ubo := new(ShaderBuffer)
 
         RENDER_CONTEXT.camera_ubo = new(ShaderBuffer)
-        RENDER_CONTEXT.camera_ubo^ = make_shader_buffer(&camera_buffer_data, .UBO, 0, { .WRITE_MANY_READ_MANY, .DRAW })
+        RENDER_CONTEXT.camera_ubo^ = make_shader_buffer(&camera_buffer_data, size_of(CameraBufferData), .UBO, 0, { .WRITE_MANY_READ_MANY, .DRAW })
     }
     else {
         ubo := RENDER_CONTEXT.camera_ubo
@@ -218,16 +215,15 @@ update_lights_ssbo :: proc(scene :^ecs.Scene) -> (ok: bool) {
 
 // todo full - this is demo
 create_lighting_shader :: proc(manager: ^resource.ResourceManager, compile: bool) -> (ok: bool) {
-    log.info("lighting shader")
 
     for _, &material in manager.materials {
         if material.lighting_shader != nil do continue
 
+        dbg.debug_point(dbg.LogLevel.INFO, "Creating lighing shader for material: %s", material.name)
         shaders: []shader.Shader = {
-            shader.read_single_shader_source("../resources/shaders/demo_shader.frag", .FRAGMENT) or_return,
-            shader.read_single_shader_source("../resources/shaders/demo_shader.vert", .VERTEX) or_return,
+            shader.read_single_shader_source("./resources/shaders/demo_shader.frag", .FRAGMENT) or_return,
+            shader.read_single_shader_source("./resources/shaders/demo_shader.vert", .VERTEX) or_return,
         }
-        log.infof("shaders: %#v", shaders)
         program := shader.make_shader_program(shaders)
         if compile do transfer_shader(&program)
 

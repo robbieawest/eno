@@ -7,6 +7,9 @@ import dbg "../debug"
 import "../shader"
 import "../utils"
 
+import "core:log"
+import "base:runtime"
+
 
 // todo look at shaders for this
 release_mesh :: proc(mesh: ^resource.Mesh) {
@@ -33,11 +36,11 @@ transfer_model :: proc(manager: ^resource.ResourceManager, model: resource.Model
 // Binds all resoucres
 transfer_mesh :: proc(manager: ^resource.ResourceManager, mesh: ^resource.Mesh, transfer_material_shader: bool, compile: bool, loc := #caller_location) -> (ok: bool) {
 
-    if mesh.gl_component.vao == nil do create_and_transfer_vao(&mesh.gl_component.vao.?)
+    if mesh.gl_component.vao == nil do create_and_transfer_vao(&mesh.gl_component.vao)
     else do bind_vao(mesh.gl_component.vao.?)
-    if mesh.gl_component.vbo == nil do create_and_transfer_vbo(&mesh.gl_component.vbo.?, mesh) or_return
+    if mesh.gl_component.vbo == nil do create_and_transfer_vbo(&mesh.gl_component.vbo, mesh) or_return
     else do bind_vbo(mesh.gl_component.vbo.?)
-    if mesh.gl_component.ebo == nil do create_and_transfer_ebo(&mesh.gl_component.ebo.?, mesh) or_return
+    if mesh.gl_component.ebo == nil do create_and_transfer_ebo(&mesh.gl_component.ebo, mesh) or_return
     else do bind_ebo(mesh.gl_component.ebo.?)
 
     mat_id, mat_ok := mesh.material.?; if !mat_ok {
@@ -66,9 +69,19 @@ transfer_mesh :: proc(manager: ^resource.ResourceManager, mesh: ^resource.Mesh, 
     Assumes not already transferred
 */
 @(private)
-create_and_transfer_vao :: proc(vao: ^u32) {
+create_and_transfer_vao :: proc{ create_and_transfer_vao_raw, create_and_transfer_vao_maybe }
+
+@(private)
+create_and_transfer_vao_raw :: proc(vao: ^u32) {
     gl.GenVertexArrays(1, vao)
     bind_vao(vao^)
+}
+
+@(private)
+create_and_transfer_vao_maybe :: proc(vao: ^Maybe(u32)) {
+    new_vao: u32
+    create_and_transfer_vao_raw(&new_vao)
+    vao^ = new_vao
 }
 
 @(private)
@@ -82,7 +95,18 @@ bind_vao :: proc(vao: u32) {
     Binds VBO
 */
 @(private)
-create_and_transfer_vbo :: proc(vbo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
+create_and_transfer_vbo :: proc{ create_and_transfer_vbo_maybe, create_and_transfer_vbo_raw }
+
+@(private)
+create_and_transfer_vbo_maybe :: proc(vbo: ^Maybe(u32), data: ^resource.Mesh) -> (ok: bool) {
+    new_vbo: u32
+    ok = create_and_transfer_vbo_raw(&new_vbo, data)
+    vbo^ = new_vbo
+    return ok
+}
+
+@(private)
+create_and_transfer_vbo_raw :: proc(vbo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
     if len(data.vertex_data) == 0 {
         dbg.debug_point(dbg.LogLevel.ERROR, "No vertices given to express");
         return
@@ -120,7 +144,18 @@ bind_vbo :: proc(vbo: u32) {
     Binds EBO
 */
 @(private)
-create_and_transfer_ebo :: proc(ebo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
+create_and_transfer_ebo :: proc{ create_and_transfer_ebo_maybe, create_and_transfer_ebo_raw }
+
+@(private)
+create_and_transfer_ebo_maybe :: proc(ebo: ^Maybe(u32), data: ^resource.Mesh) -> (ok: bool) {
+    new_ebo: u32
+    ok = create_and_transfer_ebo_raw(&new_ebo, data)
+    ebo^ = new_ebo
+    return ok
+}
+
+@(private)
+create_and_transfer_ebo_raw :: proc(ebo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Expressing gl mesh indices")
     if len(data.index_data) == 0 {
         dbg.debug_point(dbg.LogLevel.ERROR, "Cannot express 0 indices")
@@ -222,7 +257,9 @@ ShaderBuffer :: struct {
     type: ShaderBufferType
 }
 
-make_shader_buffer :: proc(data: rawptr, type: ShaderBufferType, shader_binding: u32, usage: BufferUsage) -> (buffer: ShaderBuffer) {
+make_shader_buffer :: proc(data: rawptr, data_size: int, type: ShaderBufferType, shader_binding: u32, usage: BufferUsage) -> (buffer: ShaderBuffer) {
+    dbg.debug_point(dbg.LogLevel.INFO, "Creating shader buffer of type: %v and binding: %d", type, shader_binding)
+
     id: u32
     gl.GenBuffers(1, &id)
     buffer.id = id
@@ -230,7 +267,7 @@ make_shader_buffer :: proc(data: rawptr, type: ShaderBufferType, shader_binding:
 
     glenum_type: u32 = type == .UBO ? gl.UNIFORM_BUFFER : gl.SHADER_STORAGE_BUFFER
     gl.BindBuffer(glenum_type, id)
-    transfer_buffer_data(glenum_type, data, buffer_usage_to_glenum(usage))
+    transfer_buffer_data(glenum_type, data, data_size, usage)
     gl.BindBufferBase(glenum_type, shader_binding, id)
 
     return
@@ -251,7 +288,7 @@ transfer_buffer_data :: proc(target: u32, data: rawptr, #any_int data_size: int,
 
 // Shaders
 transfer_shader :: proc(program: ^shader.ShaderProgram) -> (ok: bool) {
-    dbg.debug_point(dbg.LogLevel.INFO, "Expressing shader")
+    dbg.debug_point(dbg.LogLevel.INFO, "Transferring shader program")
 
     if program.id != nil do return true
 
@@ -260,7 +297,7 @@ transfer_shader :: proc(program: ^shader.ShaderProgram) -> (ok: bool) {
 
     i := 0
     for _, &given_shader in program.shaders {
-        dbg.debug_point(dbg.LogLevel.INFO, "Expressing source")
+        dbg.debug_point(dbg.LogLevel.INFO, "Compiling shader of type %v", given_shader.type)
         if !given_shader.source.is_available_as_string || len(given_shader.source.string_source) == 0 {
             dbg.debug_point(dbg.LogLevel.INFO, "Shader source was not provided prior to transfer_shader, building new")
             shader.supply_shader_source(&given_shader) or_return
@@ -269,14 +306,14 @@ transfer_shader :: proc(program: ^shader.ShaderProgram) -> (ok: bool) {
         id, compile_ok := gl.compile_shader_from_source(given_shader.source.string_source, shader.conv_gl_shader_type(given_shader.type))
         if !compile_ok {
             dbg.debug_point(dbg.LogLevel.ERROR, "Could not compile shader source: %s", given_shader.source)
-            return ok
+            return
         }
         shader_ids[i] = id
+        i += 1
     }
 
     program.id = gl.create_and_link_program(shader_ids[:]) or_return
-    ok = true
-    return
+    return true
 }
 
 attach_program :: proc(program: shader.ShaderProgram, loc := #caller_location) {

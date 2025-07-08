@@ -833,8 +833,12 @@ init_shader_source :: proc(source: string, extension: string) -> (shader: Shader
 
 
 read_single_shader_source :: proc(full_path: string, shader_type: ShaderType) -> (shader: Shader, ok: bool) {
+    dbg.debug_point(dbg.LogLevel.INFO, "Reading single shader source: %s", full_path)
     source, err := futils.read_file_source(full_path)
-    if err != .None do return
+    if err != .None {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not read file source for shader")
+        return
+    }
 
     shader.source.string_source = source
     shader.source.is_available_as_string = true // Wtf even is this flag, you can just check the length of the string

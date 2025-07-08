@@ -199,6 +199,7 @@ MaterialProperty :: struct {
 
 // Assumes the resource manager is properly initialized
 eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.material) -> (material: Material, ok: bool) {
+    dbg.debug_point(dbg.LogLevel.INFO, "Converting cgltf material: %s", cmat.name)
     if cmat.name != nil do material.name = strings.clone_from_cstring(cmat.name)
 
     if cmat.has_pbr_metallic_roughness {
@@ -238,6 +239,7 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
     material.double_sided = bool(cmat.double_sided)
     material.unlit = bool(cmat.unlit)
 
+    ok = true
     return
 }
 
