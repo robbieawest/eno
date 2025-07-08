@@ -82,7 +82,6 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
         // todo group calls by material
 
         for &model_pair in model_data {
-            log.info("in here")
             model_mat := standards.model_from_world_component(model_pair.world_comp^)
             for &mesh in model_pair.model.meshes {
                 transfer_mesh(manager, &mesh, true, true)
@@ -94,15 +93,14 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
 
                 material := resource.get_material(manager, mat_id)
                 lighting_shader := resource.get_shader(manager, material.lighting_shader.?)
-                bind_program(lighting_shader.id.?) // todo do in bind_material_uniforms
+                bind_program(lighting_shader.id.?)
 
                 // bind_material_uniforms(manager, material)
                 update_camera_ubo(scene)
 
                 shader.set_uniform(lighting_shader, standards.MODEL_MAT, model_mat)
 
-                log.info("issuing draw")
-                issue_single_element_draw_call(len(mesh.index_data))
+                issue_single_element_draw_call(mesh.indices_count)
             }
         }
     }

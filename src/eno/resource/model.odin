@@ -70,7 +70,9 @@ IndexData :: [dynamic]u32
 
 Mesh :: struct {
     vertex_data: VertexData,
+    vertices_count: int,
     index_data: IndexData,
+    indices_count: int,
     layout: VertexLayout,
     material: Maybe(MaterialID),
     gl_component: GLComponent

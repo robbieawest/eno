@@ -10,8 +10,8 @@ import "../control"
 import "../camera"
 import glutils "../utils/gl_utils"
 
-import "core:os"
 import glm "core:math/linalg/glsl"
+import "core:log"
 
 // Game structure is defined here, e.g. defining the game loop, polling events, etc.
 
@@ -171,7 +171,7 @@ HOOKS_CAMERA_MOVEMENT :: proc() -> (hooks: control.Hooks) {
             viewpoint
         ),
         control.make_hook(
-            control.make_hook_identifier(key_states = []SDL.Scancode{ .Q }),
+            control.make_hook_identifier(key_states = []SDL.Scancode{ .LCTRL }),
             proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, -1.0, 0.0 }) },
             viewpoint
         ),

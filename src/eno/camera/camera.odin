@@ -1,6 +1,7 @@
 package camera
 
 import glm "core:math/linalg/glsl"
+import "core:log"
 
 Camera :: struct {
     position: [3]f32,
@@ -89,15 +90,17 @@ move_unmodulated :: proc(camera: ^Camera, direction: [3]f32) {
     May be buggy for values which are not normalized or are not WASD directions
 */
 move_with_yaw :: proc(camera: ^Camera, direction: [3]f32) {
-    assert(direction.y == 0)
     assert(camera != nil)
 
-    length := glm.length(direction)
-    angle_from_default_towards := glm.acos(glm.dot(direction, DEFAULT_TOWARDS) / length)
-    if direction.x < 0 do angle_from_default_towards *= -1
+     direction_without_y := [3]f32{ direction[0], 0.0, direction[2] }
+
+    length := glm.length(direction_without_y)
+
+    angle_from_default_towards := glm.acos(glm.dot(direction_without_y, DEFAULT_TOWARDS) / (length + 0.00001))
+    if direction_without_y.x < 0 do angle_from_default_towards *= -1
 
     new_direction_angle := angle_from_default_towards + glm.radians(camera.yaw)
-    new_direction := [3]f32{ length * glm.cos(new_direction_angle),  0.0, length * glm.sin(new_direction_angle) }
+    new_direction := [3]f32{ length * glm.cos(new_direction_angle),  direction[1], length * glm.sin(new_direction_angle) }
 
     move(camera, new_direction)
 }

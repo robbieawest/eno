@@ -98,6 +98,7 @@ extract_gltf_scene_no_path :: proc(manager: ^ResourceManager, data: ^cgltf.data,
         if node.has_translation do world_comp.position = node.translation
         if node.has_rotation do world_comp.rotation = quaternion(x=node.rotation[0], y=node.rotation[1], z=node.rotation[2], w=node.rotation[3])
         if node.has_scale do world_comp.scale = node.scale
+        else do world_comp.scale = [3]f32{ 1.0, 1.0, 1.0 }
         if node.mesh != nil {
             model := extract_cgltf_mesh(manager, node.mesh^) or_return
             append(&result.models, ModelWorldPair{ model, world_comp })
@@ -185,7 +186,9 @@ extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh) -> (mode
         // Get float stride - the number of floats needed for each vertex
 
         mesh_ret.vertex_data = extract_vertex_data_from_primitive(primitive) or_return
+        mesh_ret.vertices_count = len(mesh_ret.vertex_data)
         mesh_ret.index_data = extract_index_data_from_primitive(primitive) or_return
+        mesh_ret.indices_count = len(mesh_ret.index_data)
     }
 
     ok = true
