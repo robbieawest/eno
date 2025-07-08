@@ -175,6 +175,8 @@ CameraBufferData :: struct #packed {
 }
 
 update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
+    dbg.debug_point()
+
     viewpoint := scene.viewpoint
     if viewpoint == nil {
         dbg.debug_point(dbg.LogLevel.ERROR, "Scene viewpoint is nil!")
@@ -196,7 +198,7 @@ update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
     }
     else {
         ubo := RENDER_CONTEXT.camera_ubo
-        transfer_buffer_data(ubo.id.?, &camera_buffer_data, size_of(CameraBufferData), update=true)
+        transfer_buffer_data(ShaderBufferType.UBO, &camera_buffer_data, size_of(CameraBufferData), update=true, buffer_id=ubo.id.?)
     }
 
     return true

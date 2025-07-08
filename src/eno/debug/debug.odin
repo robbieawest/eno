@@ -120,11 +120,11 @@ GL_DEBUG_CALLBACK :: proc "c" (source: u32, type: u32, id: u32, severity: u32, l
             else if DEBUG_FLAGS.PANIC_ON_GL_ERROR do panic("Panic raised on OpenGL error via DebugFlags.PANIC_ON_GL_ERROR")
         }
 
-        if DEBUG_FLAGS.PUSH_GL_LOG_TO_DEBUG_STACK do push_to_debug_stack({ fmt.aprintf("OpenGL LogL %s", s_Message), .ERROR})
+        if DEBUG_FLAGS.PUSH_GL_LOG_TO_DEBUG_STACK do push_to_debug_stack({ fmt.aprintf("OpenGL Log %s", s_Message), .ERROR})
     case:
         log.warnf("%s", strings.to_string(builder))
 
-        if DEBUG_FLAGS.PUSH_GL_LOG_TO_DEBUG_STACK do push_to_debug_stack({ fmt.aprintf("OpenGL LogL %s", s_Message), .WARN})
+        if DEBUG_FLAGS.PUSH_GL_LOG_TO_DEBUG_STACK do push_to_debug_stack({ fmt.aprintf("OpenGL Log %s", s_Message), .WARN})
     }
 
 

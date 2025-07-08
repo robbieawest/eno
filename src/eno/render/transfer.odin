@@ -266,8 +266,7 @@ make_shader_buffer :: proc(data: rawptr, data_size: int, type: ShaderBufferType,
     buffer.type = type
 
     glenum_type: u32 = type == .UBO ? gl.UNIFORM_BUFFER : gl.SHADER_STORAGE_BUFFER
-    gl.BindBuffer(glenum_type, id)
-    transfer_buffer_data(glenum_type, data, data_size, usage)
+    transfer_buffer_data(glenum_type, data, data_size, usage=usage, buffer_id=id)
     gl.BindBufferBase(glenum_type, shader_binding, id)
 
     return
@@ -278,9 +277,23 @@ make_shader_buffer :: proc(data: rawptr, data_size: int, type: ShaderBufferType,
     Does not bind, create or validate
     Set update to true when updating in a frame rather than setting the buffer up
 */
-transfer_buffer_data :: proc(target: u32, data: rawptr, #any_int data_size: int, usage: BufferUsage = {},  update := false, data_offset := 0) {
+transfer_buffer_data :: proc{ transfer_buffer_data_of_type, transfer_buffer_data_of_target }
+
+transfer_buffer_data_of_type :: proc(type: ShaderBufferType, data: rawptr, #any_int data_size: int, usage: BufferUsage = {},  update := false, data_offset := 0, buffer_id: Maybe(u32) = nil) {
+    target: u32 = type == .UBO ? gl.UNIFORM_BUFFER : gl.SHADER_STORAGE_BUFFER
+    if buffer_id != nil do gl.BindBuffer(target, buffer_id.?)
+        if data_offset != 0 || update {
+        gl.BufferSubData(target, data_offset, data_size, data)
+        return
+    }
+    gl.BufferData(target, data_size, data, buffer_usage_to_glenum(usage))
+}
+
+transfer_buffer_data_of_target :: proc(target: u32, data: rawptr, #any_int data_size: int, usage: BufferUsage = {},  update := false, data_offset := 0, buffer_id: Maybe(u32) = nil) {
+    if buffer_id != nil do gl.BindBuffer(target, buffer_id.?)
     if data_offset != 0 || update {
         gl.BufferSubData(target, data_offset, data_size, data)
+        return
     }
     gl.BufferData(target, data_size, data, buffer_usage_to_glenum(usage))
 }
