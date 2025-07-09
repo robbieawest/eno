@@ -314,16 +314,20 @@ LightSourceInformation :: struct {
     name: string,
     enabled: bool,
     intensity: f32,
-    colour: glm.vec3,
-    world_comp: standards.WorldComponent
+    colour: glm.vec4,
+    position: glm.vec3
 }
 
 PointLight :: LightSourceInformation
-DirectionalLight :: LightSourceInformation
+DirectionalLight :: struct {
+    light_information: LightSourceInformation,
+    direction: glm.vec3
+}
 
 // Cone shaped light
 SpotLight :: struct {
     light_information: LightSourceInformation,
+    direction: glm.vec3,
     inner_cone_angle: f32,
     outer_cone_angle: f32,
 }

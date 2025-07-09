@@ -7,7 +7,6 @@ import "../utils"
 import dbg "../debug"
 import "../standards"
 
-import "core:log"
 import "core:strings"
 import "core:fmt"
 import glm "core:math/linalg/glsl"
@@ -16,7 +15,7 @@ import camera "../camera"
 
 RenderContext :: struct {
     camera_ubo: ^ShaderBuffer,
-    light_ubo: ^ShaderBuffer
+    lights_ssbo: ^ShaderBuffer
 }
 
 RENDER_CONTEXT: RenderContext  // Global render context, this is fine really, only stores small amount of persistent external pointing data
@@ -95,7 +94,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
                 lighting_shader := resource.get_shader(manager, material.lighting_shader.?)
                 bind_program(lighting_shader.id.?)
 
-                // bind_material_uniforms(manager, material)
+                bind_material_uniforms(manager, material)
                 update_camera_ubo(scene)
 
                 shader.set_uniform(lighting_shader, standards.MODEL_MAT, model_mat)
@@ -189,8 +188,6 @@ update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
     }
 
     if RENDER_CONTEXT.camera_ubo == nil {
-        camera_ubo := new(ShaderBuffer)
-
         RENDER_CONTEXT.camera_ubo = new(ShaderBuffer)
         RENDER_CONTEXT.camera_ubo^ = make_shader_buffer(&camera_buffer_data, size_of(CameraBufferData), .UBO, 0, { .WRITE_MANY_READ_MANY, .DRAW })
     }
@@ -203,10 +200,52 @@ update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
 }
 
 update_lights_ssbo :: proc(scene :^ecs.Scene) -> (ok: bool) {
-    //todo
     lights_info: ecs.SceneLightSources = scene.light_sources
-    LightSSBOData :: struct #packed {
-        point_lights: rawptr,
+
+    lights := scene.light_sources
+    num_spot_lights := len(lights.spot_lights)
+    num_directional_lights := len(lights.directional_lights)
+    num_point_lights := len(lights.point_lights)
+
+    SPOT_LIGHT_GPU_SIZE :: 64
+    DIRECTIONAL_LIGHT_GPU_SIZE :: 48
+    POINT_LIGHT_GPU_SIZE :: 32
+
+    spot_light_buffer_size := SPOT_LIGHT_GPU_SIZE * num_spot_lights
+    directional_light_buffer_size := DIRECTIONAL_LIGHT_GPU_SIZE * num_directional_lights
+    point_light_buffer_size := POINT_LIGHT_GPU_SIZE * num_point_lights
+
+    light_ssbo_data: []byte = make([]byte, 32 /* For lengths and pad */ + spot_light_buffer_size + directional_light_buffer_size + point_light_buffer_size)
+    (transmute(^int)light_ssbo_data[:4])^ = num_spot_lights
+    (transmute(^int)light_ssbo_data[4:8])^ = num_directional_lights
+    (transmute(^int)light_ssbo_data[8:12])^ = num_point_lights
+
+    current_offset := 16
+    for light in lights.spot_lights {
+        next_offset := current_offset + SPOT_LIGHT_GPU_SIZE
+        (transmute(^resource.SpotLight)light_ssbo_data[current_offset:next_offset])^ = light
+        current_offset = next_offset
+    }
+
+    for light in lights.directional_lights {
+        next_offset := current_offset + DIRECTIONAL_LIGHT_GPU_SIZE
+        (transmute(^resource.DirectionalLight)light_ssbo_data[current_offset:next_offset])^ = light
+        current_offset = next_offset
+    }
+
+    for light in lights.point_lights {
+        next_offset := current_offset + POINT_LIGHT_GPU_SIZE
+        (transmute(^resource.PointLight)light_ssbo_data[current_offset:next_offset])^ = light
+        current_offset = next_offset
+    }
+
+    if RENDER_CONTEXT.lights_ssbo == nil {
+        RENDER_CONTEXT.lights_ssbo = new(ShaderBuffer)
+        RENDER_CONTEXT.lights_ssbo^ = make_shader_buffer(raw_data(light_ssbo_data), len(light_ssbo_data), .SSBO, 0, { .WRITE_MANY_READ_MANY, .DRAW })
+    }
+    else {
+        ssbo := RENDER_CONTEXT.lights_ssbo
+        transfer_buffer_data(ShaderBufferType.UBO, raw_data(light_ssbo_data), len(light_ssbo_data), update=true, buffer_id=ssbo.id.?)
     }
 
     return true
