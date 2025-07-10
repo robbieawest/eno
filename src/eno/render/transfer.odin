@@ -282,7 +282,7 @@ transfer_buffer_data :: proc{ transfer_buffer_data_of_type, transfer_buffer_data
 transfer_buffer_data_of_type :: proc(type: ShaderBufferType, data: rawptr, #any_int data_size: int, usage: BufferUsage = {},  update := false, data_offset := 0, buffer_id: Maybe(u32) = nil) {
     target: u32 = type == .UBO ? gl.UNIFORM_BUFFER : gl.SHADER_STORAGE_BUFFER
     if buffer_id != nil do gl.BindBuffer(target, buffer_id.?)
-        if data_offset != 0 || update {
+    if data_offset != 0 || update {
         gl.BufferSubData(target, data_offset, data_size, data)
         return
     }

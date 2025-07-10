@@ -10,6 +10,7 @@ import "../standards"
 import "core:strings"
 import "core:fmt"
 import glm "core:math/linalg/glsl"
+import "core:mem"
 import camera "../camera"
 
 
@@ -94,7 +95,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
                 lighting_shader := resource.get_shader(manager, material.lighting_shader.?)
                 bind_program(lighting_shader.id.?)
 
-                bind_material_uniforms(manager, material)
+                bind_material_uniforms(manager, material^)
                 update_camera_ubo(scene)
 
                 shader.set_uniform(lighting_shader, standards.MODEL_MAT, model_mat)
@@ -199,6 +200,65 @@ update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
     return true
 }
 
+GPULightInformation :: struct #packed {
+    colour: [4]f32,
+    position: [3]f32,
+    intensity: f32
+}
+
+SpotLightGPU :: struct #packed {
+    light_information: GPULightInformation,
+    direction: [3]f32,
+    inner_cone_angle: f32,
+    outer_cone_angle: f32,
+    _pad: [3]f32,
+}
+
+DirectionalLightGPU :: struct #packed {
+    light_information: GPULightInformation,
+    direction: [3]f32,
+    _pad: f32
+}
+
+PointLightGPU :: struct #packed {
+    light_information: GPULightInformation
+}
+
+conv_light_information :: proc(info: resource.LightSourceInformation) -> GPULightInformation {
+    return { info.colour, info.position, info.intensity }
+}
+
+// Returns heap allocated gpu light - make sure to free
+light_to_gpu_light :: proc(light: union{ resource.SpotLight, resource.PointLight, resource.DirectionalLight }) -> (gpu_light: rawptr) {
+
+    switch v in light {
+        case resource.SpotLight:
+            p_Light := new(SpotLightGPU)
+            p_Light^ = SpotLightGPU{
+                light_information = conv_light_information(v.light_information),
+                direction = v.direction,
+                inner_cone_angle = v.inner_cone_angle,
+                outer_cone_angle = v.outer_cone_angle
+            }
+            gpu_light = p_Light
+        case resource.PointLight:
+            p_Light := new(PointLightGPU)
+            p_Light^ = PointLightGPU{ conv_light_information(v) }
+            gpu_light = p_Light
+        case resource.DirectionalLight:
+            p_Light := new(DirectionalLightGPU)
+            p_Light^ = DirectionalLightGPU{
+                light_information = conv_light_information(v.light_information),
+                direction = v.direction
+            }
+            gpu_light = p_Light
+    }
+
+    if gpu_light == nil do dbg.debug_point(dbg.LogLevel.ERROR, "Nil GPU light information found")
+    return
+}
+
+
 update_lights_ssbo :: proc(scene :^ecs.Scene) -> (ok: bool) {
     lights_info: ecs.SceneLightSources = scene.light_sources
 
@@ -207,36 +267,36 @@ update_lights_ssbo :: proc(scene :^ecs.Scene) -> (ok: bool) {
     num_directional_lights := len(lights.directional_lights)
     num_point_lights := len(lights.point_lights)
 
-    SPOT_LIGHT_GPU_SIZE :: 64
-    DIRECTIONAL_LIGHT_GPU_SIZE :: 48
-    POINT_LIGHT_GPU_SIZE :: 32
+    SPOT_LIGHT_GPU_SIZE :: size_of(SpotLightGPU)
+    DIRECTIONAL_LIGHT_GPU_SIZE :: size_of(DirectionalLightGPU)
+    POINT_LIGHT_GPU_SIZE :: size_of(PointLightGPU)
 
     spot_light_buffer_size := SPOT_LIGHT_GPU_SIZE * num_spot_lights
     directional_light_buffer_size := DIRECTIONAL_LIGHT_GPU_SIZE * num_directional_lights
     point_light_buffer_size := POINT_LIGHT_GPU_SIZE * num_point_lights
 
     light_ssbo_data: []byte = make([]byte, 32 /* For lengths and pad */ + spot_light_buffer_size + directional_light_buffer_size + point_light_buffer_size)
-    (transmute(^int)light_ssbo_data[:4])^ = num_spot_lights
-    (transmute(^int)light_ssbo_data[4:8])^ = num_directional_lights
-    (transmute(^int)light_ssbo_data[8:12])^ = num_point_lights
+    (transmute(^int)&light_ssbo_data[0])^ = num_spot_lights
+    (transmute(^int)&light_ssbo_data[4])^ = num_directional_lights
+    (transmute(^int)&light_ssbo_data[8])^ = num_point_lights
 
     current_offset := 16
     for light in lights.spot_lights {
-        next_offset := current_offset + SPOT_LIGHT_GPU_SIZE
-        (transmute(^resource.SpotLight)light_ssbo_data[current_offset:next_offset])^ = light
-        current_offset = next_offset
+        gpu_light := light_to_gpu_light(light)
+        mem.copy(&light_ssbo_data[current_offset], gpu_light, SPOT_LIGHT_GPU_SIZE)
+        current_offset += SPOT_LIGHT_GPU_SIZE
     }
 
     for light in lights.directional_lights {
-        next_offset := current_offset + DIRECTIONAL_LIGHT_GPU_SIZE
-        (transmute(^resource.DirectionalLight)light_ssbo_data[current_offset:next_offset])^ = light
-        current_offset = next_offset
+        gpu_light := light_to_gpu_light(light)
+        mem.copy(&light_ssbo_data[current_offset], gpu_light, DIRECTIONAL_LIGHT_GPU_SIZE)
+        current_offset += DIRECTIONAL_LIGHT_GPU_SIZE
     }
 
     for light in lights.point_lights {
-        next_offset := current_offset + POINT_LIGHT_GPU_SIZE
-        (transmute(^resource.PointLight)light_ssbo_data[current_offset:next_offset])^ = light
-        current_offset = next_offset
+        gpu_light := light_to_gpu_light(light)
+        mem.copy(&light_ssbo_data[current_offset], gpu_light, POINT_LIGHT_GPU_SIZE)
+        current_offset += POINT_LIGHT_GPU_SIZE
     }
 
     if RENDER_CONTEXT.lights_ssbo == nil {

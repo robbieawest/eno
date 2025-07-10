@@ -54,7 +54,7 @@ SpotLight getSpotLight(uint index) {
     return light;
 }
 
-SpotLight getDirectionalLight(uint index) {
+DirectionalLight getDirectionalLight(uint index) {
     DirectionalLight light;
     light.lightInformation = getLightSourceInformation(index);
     light.direction.x = lightData[index + 8];
@@ -63,8 +63,8 @@ SpotLight getDirectionalLight(uint index) {
     return light;
 }
 
-SpotLight getPointLight(uint index) {
-    DirectionalLight light;
+PointLight getPointLight(uint index) {
+    PointLight light;
     light.lightInformation = getLightSourceInformation(index);
     return light;
 }

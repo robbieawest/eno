@@ -111,29 +111,39 @@ extract_gltf_scene_no_path :: proc(manager: ^ResourceManager, data: ^cgltf.data,
             model := extract_cgltf_mesh(manager, node.mesh^, gltf_folder_path) or_return
             append(&result.models, ModelWorldPair{ model, world_comp })
         }
+        /* for KHR_lights_punctual - not intending to really support right now, can rework this later if needed
         else if node.light != nil {
             switch node.light.type {
                 case .invalid:
                     dbg.debug_point(dbg.LogLevel.WARN, "Invalid light type found, ignoring")
                     continue node_loop
-                case .directional, .point:
+                case .point:
                     light := LightSourceInformation{
                         strings.clone_from_cstring(node.light.name),
                         true,
                         node.light.intensity,
-                        node.light.color,
-                        world_comp
+                        [4]f32{ node.light.color.x, node.light.color.y, node.light.color.z, 1.0 },
+                        world_comp.position
                     }
                     if node.light.type == .point do append(&result.point_lights, light)
                     else do append(&result.directional_lights, light)
+                case .directional:
+                    light := LightSourceInformation{
+                        strings.clone_from_cstring(node.light.name),
+                        true,
+                        node.light.intensity,
+                        [4]f32{ node.light.color.x, node.light.color.y, node.light.color.z, 1.0 },
+                        world_comp.position
+                    }
+
                 case .spot:
                     spot_light := SpotLight {
                         {
                             strings.clone_from_cstring(node.light.name),
                             true,
                             node.light.intensity,
-                            node.light.color,
-                            world_comp
+                            [4]f32{ node.light.color.x, node.light.color.y, node.light.color.z, 1.0 },
+                            world_comp.position
                         },
                         node.light.spot_inner_cone_angle,
                         node.light.spot_outer_cone_angle
@@ -141,6 +151,7 @@ extract_gltf_scene_no_path :: proc(manager: ^ResourceManager, data: ^cgltf.data,
                     append(&result.spot_lights, spot_light)
             }
         }
+        */
     }
 
     ok = true
