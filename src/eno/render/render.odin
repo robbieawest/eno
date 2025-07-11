@@ -68,8 +68,6 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
 
     }
 
-    // todo do create shader
-    // for now assume it works
     if len(pipeline.passes) == 1 && pipeline.passes[0].type == .LIGHTING {
         // Render to default framebuffer directly
         // Make single element draw call per mesh
@@ -84,7 +82,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
         for &model_pair in model_data {
             model_mat := standards.model_from_world_component(model_pair.world_comp^)
             for &mesh in model_pair.model.meshes {
-                transfer_mesh(manager, &mesh, true, true)
+                transfer_mesh(manager, &mesh)
 
                 mat_id, mat_ok := mesh.material.?; if !mat_ok {
                     dbg.debug_point(dbg.LogLevel.ERROR, "material not found for mesh")
@@ -95,8 +93,9 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
                 lighting_shader := resource.get_shader(manager, material.lighting_shader.?)
                 bind_program(lighting_shader.id.?)
 
-                bind_material_uniforms(manager, material^)
+                bind_material_uniforms(manager, material^) or_return
                 update_camera_ubo(scene)
+                update_lights_ssbo(scene)
 
                 shader.set_uniform(lighting_shader, standards.MODEL_MAT, model_mat)
 
@@ -115,7 +114,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
     Specifically used in respect to the lighting shader stored inside the material
 */
 @(private)
-bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material) {
+bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material) -> (ok: bool) {
     lighting_shader := resource.get_shader(manager, material.lighting_shader.?)
 
     texture_unit: u32
@@ -125,12 +124,22 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
         switch v in property.value {
             case resource.PBRMetallicRoughness:
                 base_colour := resource.get_texture(manager, v.base_colour)
-                bind_texture(texture_unit, base_colour.gpu_texture)
+                if base_colour == nil {
+                    dbg.debug_point(dbg.LogLevel.ERROR, "PBR Metallic Roughness base colour texture unavailable")
+                    return
+                }
+                metallic_roughness := resource.get_texture(manager, v.metallic_roughness)
+                if metallic_roughness == nil {
+                    dbg.debug_point(dbg.LogLevel.ERROR, "PBR Metallic Roughness metallic roughness texture unavailable")
+                    return
+                }
+
+
+                bind_texture(texture_unit, base_colour.gpu_texture) or_return
                 shader.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, i32(texture_unit))
                 texture_unit += 1
 
-                metallic_roughness := resource.get_texture(manager, v.metallic_roughness)
-                bind_texture(texture_unit, metallic_roughness.gpu_texture)
+                bind_texture(texture_unit, metallic_roughness.gpu_texture) or_return
                 shader.set_uniform(lighting_shader, resource.PBR_METALLIC_ROUGHNESS, i32(texture_unit))
                 texture_unit += 1
 
@@ -143,25 +152,36 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
 
             case resource.EmissiveTexture:
                 emissive_texture := resource.get_texture(manager, resource.TextureID(v))
-                bind_texture(texture_unit, emissive_texture.gpu_texture.?)
+                bind_texture(texture_unit, emissive_texture.gpu_texture.?) or_return
                 shader.set_uniform(lighting_shader, resource.EMISSIVE_TEXTURE, i32(texture_unit))
                 texture_unit += 1
 
             case resource.OcclusionTexture:
                 occlusion_texture := resource.get_texture(manager, resource.TextureID(v))
-                bind_texture(texture_unit, occlusion_texture.gpu_texture.?)
+                if occlusion_texture  == nil {
+                    dbg.debug_point(dbg.LogLevel.ERROR, "Occlusion texture unavailable")
+                    return
+                }
+
+                bind_texture(texture_unit, occlusion_texture.gpu_texture.?) or_return
                 shader.set_uniform(lighting_shader, resource.OCCLUSION_TEXTURE, i32(texture_unit))
                 texture_unit += 1
 
             case resource.NormalTexture:
                 normal_texture := resource.get_texture(manager, resource.TextureID(v))
-                bind_texture(texture_unit, normal_texture.gpu_texture.?)
+                if normal_texture  == nil {
+                    dbg.debug_point(dbg.LogLevel.ERROR, "Normal texture unavailable")
+                    return
+                }
+
+                bind_texture(texture_unit, normal_texture.gpu_texture.?) or_return
                 shader.set_uniform(lighting_shader, resource.NORMAL_TEXTURE, i32(texture_unit))
                 texture_unit += 1
         }
     }
 
     shader.set_uniform(lighting_shader, resource.MATERIAL_INFOS, transmute(u32)infos)
+    return true
 }
 
 

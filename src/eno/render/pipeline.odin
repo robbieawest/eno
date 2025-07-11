@@ -84,14 +84,14 @@ Attachment :: struct {
 
 destroy_attachment :: proc(attachment: ^Attachment) {
     switch &data in attachment.data {
-        case Texture: destroy_texture(&data)
+        case GPUTexture: destroy_texture(&data)
         case RenderBuffer: destroy_render_buffer(&data)
     }
 }
 
 
 AttachmentData :: union {
-    Texture,
+    GPUTexture,
     RenderBuffer
 }
 
@@ -200,7 +200,7 @@ draw_framebuffer_to_screen :: proc(frame_buffer: ^FrameBuffer, attachment_id: u3
             gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, 0)
 
             gl.BlitFramebuffer(0, 0, w, h, 0, 0, w, h,  gl.COLOR_ATTACHMENT0, interpolation)  // This could be smarter
-        case Texture:
+        case GPUTexture:
             // todo
     }
 }
@@ -255,11 +255,16 @@ make_attachment :: proc(
         attachment.data = render_buffer
     }
     else {
-        texture := make_texture(internal_format = texture_internal_format, w = frame_buffer.w, h = frame_buffer.h, format = format, type = texture_backing_type, lod = lod)
+        texture := make_texture(frame_buffer.w, frame_buffer.h, internal_format=texture_internal_format, format=format, type=texture_backing_type, lod = lod)
+        if texture == nil {
+            dbg.debug_point(dbg.LogLevel.ERROR, "make texture returned a nil texture")
+            return
+        }
+
         gl.TexParameteri(gl.FRAMEBUFFER, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
         gl.TexParameteri(gl.FRAMEBUFFER, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 
-        gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl_attachment_id, gl.TEXTURE_2D, texture.? or_return, lod)
+        gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl_attachment_id, gl.TEXTURE_2D, texture.?, lod)
         attachment.data = texture
     }
 
