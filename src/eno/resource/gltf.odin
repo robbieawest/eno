@@ -44,8 +44,6 @@ load_model_test :: proc(t: ^testing.T) {
 
     testing.expect_value(t, result, cgltf.result.success)
     testing.expect(t, data != nil, "nil check")
-    
-    //log.infof("data: \n%#v", data)
 }
 
 

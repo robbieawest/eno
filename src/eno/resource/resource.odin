@@ -23,7 +23,6 @@ init_resource_manager :: proc(allocator := context.allocator) -> ResourceManager
 }
 
 add_texture_to_manager :: proc(manager: ^ResourceManager, texture: Texture) -> TextureID {
-    //log.infof("texture: %#v", texture)
     new_id := u32(len(manager.textures))
     manager.textures[new_id] = texture
     return new_id

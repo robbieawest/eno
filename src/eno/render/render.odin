@@ -6,6 +6,7 @@ import "../shader"
 import "../utils"
 import dbg "../debug"
 import "../standards"
+import lutils "../utils/linalg_utils"
 
 import "core:strings"
 import "core:fmt"
@@ -81,6 +82,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
 
         for &model_pair in model_data {
             model_mat := standards.model_from_world_component(model_pair.world_comp^)
+            normal_mat := lutils.normal_mat(model_mat)
             for &mesh in model_pair.model.meshes {
                 transfer_mesh(manager, &mesh)
 
@@ -98,6 +100,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
                 update_lights_ssbo(scene)
 
                 shader.set_uniform(lighting_shader, standards.MODEL_MAT, model_mat)
+                shader.set_uniform(lighting_shader, standards.NORMAL_MAT, normal_mat)
 
                 issue_single_element_draw_call(mesh.indices_count)
             }
@@ -133,7 +136,6 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                     dbg.debug_point(dbg.LogLevel.ERROR, "PBR Metallic Roughness metallic roughness texture unavailable")
                     return
                 }
-
 
                 bind_texture(texture_unit, base_colour.gpu_texture) or_return
                 shader.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, i32(texture_unit))

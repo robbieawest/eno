@@ -70,9 +70,27 @@ PointLight getPointLight(uint index) {
 }
 
 
-in vec4 position;
+in vec3 position;
+in vec3 normal;
+in vec2 texCoords;
 out vec4 Colour;
 
+uniform sampler2D baseColourTexture;
+uniform vec4 baseColourFactor;
+uniform sampler2D pbrMetallicRoughness;
+uniform float metallicFactor;
+uniform float roughnessFactor;
+uniform sampler2D occlusionTexture;
+uniform sampler2D normalTexture;
+uniform sampler2D emissiveTexture;
+
 void main() {
-    Colour = position;
+    vec3 albedo = texture(baseColourTexture, texCoords).rgb;
+    float roughness = texture(pbrMetallicRoughness, texCoords).g;
+    float metallic = texture(pbrMetallicRoughness, texCoords).b;
+    vec3 fragNormal = texture(normalTexture, texCoords).rgb;
+    vec3 occlusion = texture(occlusionTexture, texCoords).rgb;
+    vec4 factor = baseColourFactor;
+    float mfactor = metallicFactor;
+    Colour = vec4(albedo, 1.0);
 }

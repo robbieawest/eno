@@ -8,6 +8,7 @@ import "../shader"
 import "../utils"
 
 import "core:log"
+import "core:mem"
 import "base:runtime"
 
 
@@ -233,6 +234,7 @@ make_texture_raw :: proc(w, h: i32, data: rawptr = nil, internal_format: i32 = g
 
     gl.BindTexture(gl.TEXTURE_2D, id)
     gl.TexImage2D(gl.TEXTURE_2D, lod, internal_format, w, h, 0, format, type, data)
+    gl.GenerateMipmap(gl.TEXTURE_2D)
 
     return
 }

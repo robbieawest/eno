@@ -25,3 +25,4 @@ model_from_world_component :: proc(world_comp: WorldComponent) -> (model: glm.ma
 }
 
 MODEL_MAT :: "m_Model"
+NORMAL_MAT :: "m_Normal"

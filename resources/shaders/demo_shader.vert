@@ -10,16 +10,19 @@ layout (std140, binding = 0) uniform CameraInfo {
 layout (location = 0) in vec3 aNormal;
 layout (location = 1) in vec3 aPosition;
 layout (location = 2) in vec4 aTangent;
-layout (location = 3) in vec2 aTexcoord;
+layout (location = 3) in vec2 aTexCoords;
 
 uniform mat4 m_Model;
+uniform mat3 m_Normal;
 
-out vec4 position;
-
+out vec3 position;
+out vec3 normal;
+out vec2 texCoords;
 
 void main() {
-    mat4 mvp = Camera.m_Project * Camera.m_View * m_Model;
-    vec4 position4 = vec4(aPosition, 1.0);
-    position = position4;
-    gl_Position = mvp * vec4(aPosition, 1.0);
+    texCoords = aTexCoords;
+    position = vec3(m_Model * vec4(aPosition, 1.0));
+    normal = m_Normal * aNormal;
+
+    gl_Position = Camera.m_Project * Camera.m_View * vec4(position, 1.0);
 }
