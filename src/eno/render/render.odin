@@ -223,7 +223,8 @@ update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
 }
 
 GPULightInformation :: struct #packed {
-    colour: [4]f32,
+    colour: [3]f32,
+    _pad: f32,
     position: [3]f32,
     intensity: f32
 }

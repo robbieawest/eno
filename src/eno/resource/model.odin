@@ -314,7 +314,7 @@ LightSourceInformation :: struct {
     name: string,
     enabled: bool,
     intensity: f32,
-    colour: glm.vec4,
+    colour: glm.vec3,
     position: glm.vec3
 }
 
