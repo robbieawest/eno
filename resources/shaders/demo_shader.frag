@@ -5,7 +5,7 @@ layout(std430, binding = 1) buffer LightBuf {
     uint numDirectionalLights;
     uint numPointLights;
     uint _pad;
-    float lightData[];  // Raw buffer of light data
+    float lightdata[];  // Raw buffer of light data
 } Lights;
 
 struct LightSourceInformation {
@@ -35,33 +35,33 @@ struct PointLight {
 
 LightSourceInformation getLightSourceInformation(uint index) {
     LightSourceInformation lightInformation;
-    lightInformation.colour.r = lightData[index];
-    lightInformation.colour.g = lightData[index + 1];
-    lightInformation.colour.b = lightData[index + 2];
-    lightInformation.position.x = lightData[index + 4];
-    lightInformation.position.y = lightData[index + 5];
-    lightInformation.position.z = lightData[index + 6];
-    lightInformation.intensity = lightData[index + 7];
+    lightInformation.colour.r = Lights.lightdata[index];
+    lightInformation.colour.g = Lights.lightdata[index + 1];
+    lightInformation.colour.b = Lights.lightdata[index + 2];
+    lightInformation.position.x = Lights.lightdata[index + 4];
+    lightInformation.position.y = Lights.lightdata[index + 5];
+    lightInformation.position.z = Lights.lightdata[index + 6];
+    lightInformation.intensity = Lights.lightdata[index + 7];
     return lightInformation;
 }
 
 SpotLight getSpotLight(uint index) {
     SpotLight light;
     light.lightInformation = getLightSourceInformation(index);
-    light.direction.x = lightData[index + 8];
-    light.direction.y = lightData[index + 9];
-    light.direction.z = lightData[index + 10];
-    light.innerConeAngle = lightData[index + 11];
-    light.outerConeAngle = lightData[index + 12];
+    light.direction.x = Lights.lightdata[index + 8];
+    light.direction.y = Lights.lightdata[index + 9];
+    light.direction.z = Lights.lightdata[index + 10];
+    light.innerConeAngle = Lights.lightdata[index + 11];
+    light.outerConeAngle = Lights.lightdata[index + 12];
     return light;
 }
 
 DirectionalLight getDirectionalLight(uint index) {
     DirectionalLight light;
     light.lightInformation = getLightSourceInformation(index);
-    light.direction.x = lightData[index + 8];
-    light.direction.y = lightData[index + 9];
-    light.direction.z = lightData[index + 10];
+    light.direction.x = Lights.lightdata[index + 8];
+    light.direction.y = Lights.lightdata[index + 9];
+    light.direction.z = Lights.lightdata[index + 10];
     return light;
 }
 

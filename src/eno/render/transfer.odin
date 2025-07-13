@@ -50,6 +50,10 @@ transfer_mesh :: proc(manager: ^resource.ResourceManager, mesh: ^resource.Mesh, 
     material := resource.get_material(manager, mat_id)
     if material.lighting_shader != nil {
         program := resource.get_shader(manager, material.lighting_shader.?)
+        if program.id == nil {
+            dbg.debug_point(dbg.LogLevel.ERROR, "Lighting shader is not yet transferred")
+            return
+        }
         bind_program(program.id.?)
     }
 

@@ -18,11 +18,13 @@ uniform mat3 m_Normal;
 out vec3 position;
 out vec3 normal;
 out vec2 texCoords;
+out vec3 cameraPosition;
 
 void main() {
     texCoords = aTexCoords;
     position = vec3(m_Model * vec4(aPosition, 1.0));
     normal = m_Normal * aNormal;
+    cameraPosition = Camera.position;
 
     gl_Position = Camera.m_Project * Camera.m_View * vec4(position, 1.0);
 }

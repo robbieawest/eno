@@ -93,7 +93,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
 
                 material := resource.get_material(manager, mat_id)
                 lighting_shader := resource.get_shader(manager, material.lighting_shader.?)
-                bind_program(lighting_shader.id.?)
+                bind_program(lighting_shader.id.?) // todo temporary
 
                 bind_material_uniforms(manager, material^) or_return
                 update_camera_ubo(scene)
