@@ -248,7 +248,7 @@ PointLightGPU :: struct #packed {
 }
 
 conv_light_information :: proc(info: resource.LightSourceInformation) -> GPULightInformation {
-    return { info.colour, info.position, info.intensity }
+    return { info.colour, 0.0, info.position, info.intensity }
 }
 
 // Returns heap allocated gpu light - make sure to free

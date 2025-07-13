@@ -38,7 +38,6 @@ LightSourceInformation getLightSourceInformation(uint index) {
     lightInformation.colour.r = lightData[index];
     lightInformation.colour.g = lightData[index + 1];
     lightInformation.colour.b = lightData[index + 2];
-    lightInformation.colour.a = lightData[index + 3];
     lightInformation.position.x = lightData[index + 4];
     lightInformation.position.y = lightData[index + 5];
     lightInformation.position.z = lightData[index + 6];
@@ -88,6 +87,7 @@ uniform sampler2D occlusionTexture;
 uniform sampler2D normalTexture;
 uniform sampler2D emissiveTexture;
 
+float PI = 3.14159265358979323;
 
 float DistributionGGX(vec3 N, vec3 H, float roughness) {
     float a = roughness*roughness;
@@ -104,7 +104,7 @@ float DistributionGGX(vec3 N, vec3 H, float roughness) {
 
 float GeomSchlickGGX(float NdotV, float roughness) {
     float r = (roughness + 1.0);
-    float k = ( r* r) / 8.0;
+    float k = (r * r) / 8.0;
 
     float num = NdotV;
     float denom = NdotV * (1.0 - k) + k;
@@ -115,13 +115,13 @@ float GeomSchlickGGX(float NdotV, float roughness) {
 float GeomSmith(vec3 N, vec3 V, vec3 L, float roughness) {
     float NdotV = max(dot(N, V), 0.0);
     float NdotL = max(dot(N, L), 0.0);
-    float ggx2  = GeomSchlickGGX(NdotV, roughness);
-    float ggx1  = GeomSchlickGGX(NdotL, roughness);
+    float ggx2 = GeomSchlickGGX(NdotV, roughness);
+    float ggx1 = GeomSchlickGGX(NdotL, roughness);
 
     return ggx1 * ggx2;
 }
 
-vec3 FresnelShlick(vec3 V, vec3 H, vec3 F0) {
+vec3 FresnelSchlick(vec3 V, vec3 H, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - max(dot(H, V), 0.0), 0.0, 1.0), 5.0);
 }
 
@@ -129,18 +129,18 @@ vec3 calculateBRDF(vec3 N, vec3 V, vec3 L, vec3 H, vec3 albedo, float roughness,
     float NDF = DistributionGGX(N, H, roughness);
     float G = GeomSmith(N, V, L, roughness);
     vec3 fresnelIncidence = mix(vec3(0.04), albedo, metallic);
-    vec3 fresnel = FresnelSchlick(max(dot(H, V), 0.0), fresnelIncidence);
+    vec3 fresnel = FresnelSchlick(H, V, fresnelIncidence);
 
     vec3 num = NDF * G * fresnel;
     float denom = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
     vec3 specular = num / denom;
 
     vec3 diffuseShare = (vec3(1.0) - fresnel) * (1 - metallic);
-    vec3 lambertian = albedo / 3.1415926323;
+    vec3 lambertian = albedo / PI;
     return diffuseShare * lambertian + specular;
 }
 
-vec3 calculateReflectance(vec3 BRDF, vec3 N, vec3 L, float radiance) {
+vec3 calculateReflectance(vec3 BRDF, vec3 N, vec3 L, vec3 radiance) {
     return BRDF * radiance * max(dot(N, L), 0.0);
 }
 
@@ -164,12 +164,12 @@ void main() {
     for (uint i = 0; i < Lights.numPointLights; i++) {
         PointLight light = getPointLight(bufIndex);
         vec3 lightDir = normalize(light.lightInformation.position - position);
-        vec3 half = normalize(lightDir + viewDir);
+        vec3 halfVec = normalize(lightDir + viewDir);
 
         float lightDist = length(lightDir);
         vec3 radiance = light.lightInformation.colour / (lightDist * lightDist);
 
-        vec3 BRDF = calculateBRDF(geomNormal, viewDir, lightDir, half, albedo, roughness * roughnessFactor, metallic * metallicFactor);
+        vec3 BRDF = calculateBRDF(geomNormal, viewDir, lightDir, halfVec, albedo, roughness * roughnessFactor, metallic * metallicFactor);
         vec3 reflectance = calculateReflectance(BRDF, geomNormal, lightDir, radiance);
         lightOutputted += reflectance;
 
@@ -178,9 +178,10 @@ void main() {
 
     // Ambient - arbitrary
     vec3 ambient = vec3(0.03) * albedo * occlusion;
-    Colour = ambient + lightOutputted;
+    vec3 colour = ambient + lightOutputted;
 
     // HDR
-    Colour = Colour / (Colour + vec3(1.0));
-    Colour = pow(Colour, vec3(1.0 / 2.2));
+    colour = colour / (colour + vec3(1.0));
+    colour = pow(colour, vec3(1.0 / 2.2));
+    Colour = vec4(colour, 1.0);
 }
