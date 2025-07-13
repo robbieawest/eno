@@ -177,7 +177,7 @@ void main() {
     }
 
     // Ambient - arbitrary
-    vec3 ambient = vec3(0.03) * albedo * occlusion;
+    vec3 ambient = vec3(0.001) * albedo * occlusion;
     vec3 colour = ambient + lightOutputted;
 
     // HDR

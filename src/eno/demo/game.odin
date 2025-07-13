@@ -56,6 +56,10 @@ before_frame :: proc() -> (ok: bool) {
     // Camera
     ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
 
+    // todo copy light name internally
+    light := resource.PointLight{ "demo_light", true, 1.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 1.0, 1.0, 1.0 } }
+    ecs.scene_add_lights(game.Game.scene, light)
+
     game.add_event_hooks(
         game.HOOK_MOUSE_MOTION(),
         game.HOOK_CLOSE_WINDOW(),

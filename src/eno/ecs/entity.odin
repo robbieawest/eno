@@ -86,6 +86,16 @@ init_scene_light_sources :: proc() -> SceneLightSources {
     return { make([dynamic]resource.PointLight), make([dynamic]resource.DirectionalLight), make([dynamic]resource.SpotLight) }
 }
 
+scene_add_lights :: proc(scene: ^Scene, lights: ..union{ resource.PointLight, resource.DirectionalLight, resource.SpotLight }) {
+
+    for light in lights {
+        switch v in light {
+            case resource.PointLight: append(&scene.light_sources.point_lights, v)
+            case resource.DirectionalLight: append(&scene.light_sources.directional_lights, v)
+            case resource.SpotLight: append(&scene.light_sources.spot_lights, v)
+        }
+    }
+}
 
 
 //
