@@ -11,6 +11,7 @@ import "../camera"
 import glutils "../utils/gl_utils"
 
 import glm "core:math/linalg/glsl"
+import "core:time"
 import "core:log"
 
 // Game structure is defined here, e.g. defining the game loop, polling events, etc.
@@ -31,7 +32,8 @@ EnoGame :: struct {
     state: GAME_STATE,
     game_data: rawptr, // Use to store arbitrary information, for example render pipelines between before_frame and every_frame calls
     controller: control.Controller,
-    resource_manager: resource.ResourceManager
+    resource_manager: resource.ResourceManager,
+    meta_data: GameMetaData
 }
 
 /*
@@ -55,14 +57,22 @@ run_game :: proc() {
     }
 
     for Game.state == .RUNNING {
+        t_before_frame := time.now()._nsec
+
         control.poll(&Game.controller)
         glutils.frame_setup()
+
         every_ok := Game.every_frame()
+
         if !every_ok {
             dbg.debug_point(dbg.LogLevel.ERROR, "False received from every_frame procedure. Terminating")
             return
         }
+
+        Game.meta_data.last_delta = time.now()._nsec - t_before_frame
+        update_metadata_elapsed(&Game.meta_data)
     }
+
 }
 
 
@@ -87,16 +97,12 @@ init_game_with_scene :: proc(scene: ^ecs.Scene, window: win.WindowTarget, every_
     Game.before_frame = before_frame
     Game.controller = control.init_controller(allocator)
     Game.resource_manager = resource.init_resource_manager(allocator)
+    Game.meta_data.time_started = time.now()._nsec
 }
 
 
 init_game_default_scene :: proc(window: win.WindowTarget, every_frame: frame_loop_proc_, before_frame: before_loop_proc_, allocator := context.allocator) {
-    Game = new(EnoGame, allocator)
-    Game.scene = ecs.init_scene()
-    Game.window = window
-    Game.every_frame = every_frame
-    Game.before_frame = before_frame
-    Game.controller = control.init_controller(allocator)
+    init_game_with_scene(ecs.init_scene(), window, every_frame, before_frame, allocator)
 }
 
 destroy_game :: proc(allocator := context.allocator) {
@@ -204,4 +210,14 @@ HOOK_CLOSE_WINDOW :: proc() -> (hooks: control.Hooks) {
         )
     )
     return
+}
+
+GameMetaData :: struct {
+    time_elapsed: i64,
+    time_started: i64,
+    last_delta: i64
+}
+
+update_metadata_elapsed :: proc(metadata: ^GameMetaData) {
+    metadata.time_elapsed = time.now()._nsec - metadata.time_started
 }

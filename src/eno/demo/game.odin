@@ -10,6 +10,7 @@ import "../standards"
 import "core:log"
 import glm "core:math/linalg/glsl"
 import render "../render"
+import "core:math"
 
 
 // Implement your before_frame and every_frame procedures in a file like this
@@ -22,7 +23,7 @@ GameData :: struct {
 }
 
 every_frame :: proc() -> (ok: bool) {
-
+    set_light_position()
     render.render(&game.Game.resource_manager, (cast(^GameData)game.Game.game_data).render_pipeline, game.Game.scene) or_return
 
     // Swap
@@ -67,4 +68,11 @@ before_frame :: proc() -> (ok: bool) {
     )
 
     return true
+}
+
+set_light_position :: proc() {
+    light := &game.Game.scene.light_sources.point_lights[0]
+    time_seconds := f64(game.Game.meta_data.time_elapsed) / 1.0e9
+    light.position.x = 2.0 * f32(math.sin_f64(time_seconds))
+    light.position.z = 2.0 * f32(math.sin_f64(time_seconds + math.PI / 2))
 }
