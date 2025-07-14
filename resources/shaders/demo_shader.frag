@@ -146,6 +146,7 @@ vec3 calculateReflectance(vec3 BRDF, vec3 N, vec3 L, vec3 radiance) {
 
 void main() {
     vec3 albedo = texture(baseColourTexture, texCoords).rgb;
+    albedo *= baseColourFactor.rgb;
     float roughness = texture(pbrMetallicRoughness, texCoords).g;
     float metallic = texture(pbrMetallicRoughness, texCoords).b;
     vec3 fragNormal = normalize(texture(normalTexture, texCoords).rgb);

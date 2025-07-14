@@ -25,17 +25,17 @@ release_model :: proc(model: ^resource.Model) {
     for &mesh in model.meshes do release_mesh(&mesh)
 }
 
-
+// Pretty useless
 transfer_model :: proc(manager: ^resource.ResourceManager, model: resource.Model) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Transferring model")
 
-    for &mesh in model.meshes do transfer_mesh(manager, &mesh)
+    for &mesh in model.meshes do transfer_mesh(&mesh) or_return
 
     return
 }
 
-// Binds all resources but does not set active texture units for materials
-transfer_mesh :: proc(manager: ^resource.ResourceManager, mesh: ^resource.Mesh, loc := #caller_location) -> (ok: bool) {
+@(private)
+transfer_mesh :: proc(mesh: ^resource.Mesh, loc := #caller_location) -> (ok: bool) {
     if mesh.gl_component.vao == nil do create_and_transfer_vao(&mesh.gl_component.vao)
     else do bind_vao(mesh.gl_component.vao.?)
     if mesh.gl_component.vbo == nil do create_and_transfer_vbo(&mesh.gl_component.vbo, mesh) or_return
@@ -43,45 +43,9 @@ transfer_mesh :: proc(manager: ^resource.ResourceManager, mesh: ^resource.Mesh, 
     if mesh.gl_component.ebo == nil do create_and_transfer_ebo(&mesh.gl_component.ebo, mesh) or_return
     else do bind_ebo(mesh.gl_component.ebo.?)
 
-    mat_id, mat_ok := mesh.material.?; if !mat_ok {
-        dbg.debug_point(dbg.LogLevel.ERROR, "material not found for mesh")
-        return
-    }
-    material := resource.get_material(manager, mat_id)
-    if material.lighting_shader != nil {
-        program := resource.get_shader(manager, material.lighting_shader.?)
-        if program.id == nil {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Lighting shader is not yet transferred")
-            return
-        }
-        bind_program(program.id.?)
-    }
-
-    for _, property in material.properties {
-
-        #partial switch v in property.value {
-            case resource.PBRMetallicRoughness:
-                base_colour := resource.get_texture(manager, v.base_colour)
-                transfer_texture(base_colour) or_return
-
-                metallic_roughness := resource.get_texture(manager, v.metallic_roughness)
-                transfer_texture(metallic_roughness) or_return
-
-            case resource.OcclusionTexture:
-                occlusion := resource.get_texture(manager, resource.TextureID(v))
-                transfer_texture(occlusion) or_return
-            case resource.NormalTexture:
-                normal := resource.get_texture(manager, resource.TextureID(v))
-                transfer_texture(normal) or_return
-            case resource.EmissiveTexture:
-                emissive := resource.get_texture(manager, resource.TextureID(v))
-                transfer_texture(emissive) or_return
-        }
-    }
-
-    ok = true
-    return
+    return true
 }
+
 
 /*
     Binds VAO
@@ -205,12 +169,12 @@ GPUTexture :: Maybe(u32)
 
 transfer_texture :: proc(tex: ^resource.Texture, loc := #caller_location) -> (ok: bool) {
 
-    if tex.gpu_texture != nil  do return true
-
     if tex == nil {
         dbg.debug_point(dbg.LogLevel.ERROR, "Texture given as nil", loc=loc)
         return
     }
+
+    if tex.gpu_texture != nil do return true
 
     gpu_tex := make_texture(tex^)
     if gpu_tex == nil {
@@ -230,7 +194,7 @@ make_texture_ :: proc(tex: resource.Texture) -> (texture: GPUTexture) {
     return make_texture_raw(tex.image.w, tex.image.h, tex.image.pixel_data)
 }
 
-make_texture_raw :: proc(w, h: i32, data: rawptr = nil, internal_format: i32 = gl.RGBA16F, lod: i32 = 0, format: u32 = gl.RGBA, type: u32 = gl.UNSIGNED_BYTE) -> (texture: GPUTexture) {
+make_texture_raw :: proc(w, h: i32, data: rawptr = nil, internal_format: i32 = gl.RGBA8, lod: i32 = 0, format: u32 = gl.RGBA, type: u32 = gl.UNSIGNED_BYTE) -> (texture: GPUTexture) {
     dbg.debug_point(dbg.LogLevel.ERROR, "Making new texture")
     id: u32
     gl.GenTextures(1, &id)
@@ -238,7 +202,12 @@ make_texture_raw :: proc(w, h: i32, data: rawptr = nil, internal_format: i32 = g
 
     gl.BindTexture(gl.TEXTURE_2D, id)
     gl.TexImage2D(gl.TEXTURE_2D, lod, internal_format, w, h, 0, format, type, data)
-    gl.GenerateMipmap(gl.TEXTURE_2D)
+    // Todo Check if glPixelStorei is needed to be called for channels
+
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
 
     return
 }
@@ -250,6 +219,10 @@ destroy_texture :: proc(texture: ^GPUTexture) {
 bind_texture :: proc(texture_unit: u32, texture: GPUTexture, loc := #caller_location) -> (ok: bool) {
     if texture == nil {
         dbg.debug_point(dbg.LogLevel.ERROR, "Texture to bind at unit %d is not transferred to gpu", texture_unit, loc=loc)
+        return
+    }
+    if texture_unit > 31 {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Texture unit is greater than 31 - active textures limit exceeded")
         return
     }
 
@@ -372,7 +345,7 @@ transfer_shader :: proc(program: ^shader.ShaderProgram) -> (ok: bool) {
 
         id, compile_ok := gl.compile_shader_from_source(given_shader.source.string_source, shader.conv_gl_shader_type(given_shader.type))
         if !compile_ok {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Could not compile shader source: %s", given_shader.source)
+            dbg.debug_point(dbg.LogLevel.ERROR, "Could not compile shader source of shader type %v", given_shader.type)
             return
         }
         shader_ids[i] = id

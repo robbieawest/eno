@@ -46,7 +46,8 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
         model: ^resource.Model,
         world_comp: ^standards.WorldComponent
     }
-    model_data: [dynamic]ModelWorldPair = make([dynamic]ModelWorldPair)
+    model_data: [dynamic]ModelWorldPair = make([dynamic]ModelWorldPair, context.temp_allocator)
+    defer delete(model_data)
 
     for _, arch_result in query_result {
         models: []^resource.Model
@@ -79,31 +80,73 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
             return
         }
 
-        // todo group calls by material
+        // Group draw calls by material to reduce shader context changes
+        MeshWorldPair :: struct {
+            mesh: ^resource.Mesh,
+            world_comp: ^standards.WorldComponent
+        }
+
+        material_map := make(map[resource.MaterialID][dynamic]MeshWorldPair, context.temp_allocator)
+        defer {
+            for _, v in material_map do delete(v)
+            delete(material_map)
+        }
 
         for &model_pair in model_data {
-            model_mat := standards.model_from_world_component(model_pair.world_comp^)
-            normal_mat := lutils.normal_mat(model_mat)
             for &mesh in model_pair.model.meshes {
-                transfer_mesh(manager, &mesh)
-
                 mat_id, mat_ok := mesh.material.?; if !mat_ok {
-                    dbg.debug_point(dbg.LogLevel.ERROR, "material not found for mesh")
+                    dbg.debug_point(dbg.LogLevel.ERROR, "Material not found for mesh")
                     return
                 }
 
-                material := resource.get_material(manager, mat_id)
-                lighting_shader := resource.get_shader(manager, material.lighting_shader.?)
-                bind_program(lighting_shader.id.?) // todo temporary
+                pair := MeshWorldPair{ &mesh, model_pair.world_comp }
+                if mat_id in material_map {
+                    dyn := &material_map[mat_id]
+                    append(dyn, pair)
+                }
+                else {
+                    dyn := make([dynamic]MeshWorldPair, 1, context.temp_allocator)
+                    dyn[0] = pair
+                    material_map[mat_id] = dyn
+                }
 
-                bind_material_uniforms(manager, material^) or_return
-                update_camera_ubo(scene)
-                update_lights_ssbo(scene)
+            }
+        }
+
+        for mat_id, &mesh_pairs in material_map {
+
+            material := resource.get_material(manager, mat_id)
+
+            // Sanity checks
+            if material == nil {
+                dbg.debug_point(dbg.LogLevel.ERROR, "Material does not exist for material id")
+                return
+            }
+            if material.lighting_shader == nil {
+                dbg.debug_point(dbg.LogLevel.ERROR, "Material lighting shader is not set")
+            }
+
+            lighting_shader := resource.get_shader(manager, material.lighting_shader.?)
+
+            if lighting_shader.id == nil {
+                dbg.debug_point(dbg.LogLevel.ERROR, "Lighting shader is not yet compiled/transferred")
+                return
+            }
+
+            bind_program(lighting_shader.id.?)
+            bind_material_uniforms(manager, material^, lighting_shader) or_return
+            update_camera_ubo(scene) or_return
+            update_lights_ssbo(scene) or_return
+
+            for &mesh_pair in mesh_pairs {
+                model_mat := standards.model_from_world_component(mesh_pair.world_comp^)
+                normal_mat := lutils.normal_mat(model_mat)
+                transfer_mesh(mesh_pair.mesh) or_return
 
                 shader.set_uniform(lighting_shader, standards.MODEL_MAT, model_mat)
                 shader.set_uniform(lighting_shader, standards.NORMAL_MAT, normal_mat)
 
-                issue_single_element_draw_call(mesh.indices_count)
+                issue_single_element_draw_call(mesh_pair.mesh.indices_count)
             }
         }
     }
@@ -118,8 +161,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
     Specifically used in respect to the lighting shader stored inside the material
 */
 @(private)
-bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material) -> (ok: bool) {
-    lighting_shader := resource.get_shader(manager, material.lighting_shader.?)
+bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material, lighting_shader: ^shader.ShaderProgram) -> (ok: bool) {
 
     texture_unit: u32
     infos: resource.MaterialPropertiesInfos
@@ -138,10 +180,12 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                     return
                 }
 
+                transfer_texture(base_colour)
                 bind_texture(texture_unit, base_colour.gpu_texture) or_return
                 shader.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, i32(texture_unit))
                 texture_unit += 1
 
+                transfer_texture(metallic_roughness)
                 bind_texture(texture_unit, metallic_roughness.gpu_texture) or_return
                 shader.set_uniform(lighting_shader, resource.PBR_METALLIC_ROUGHNESS, i32(texture_unit))
                 texture_unit += 1
@@ -155,6 +199,12 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
 
             case resource.EmissiveTexture:
                 emissive_texture := resource.get_texture(manager, resource.TextureID(v))
+                if emissive_texture  == nil {
+                    dbg.debug_point(dbg.LogLevel.ERROR, "Emissive texture unavailable")
+                    return
+                }
+
+                transfer_texture(emissive_texture)
                 bind_texture(texture_unit, emissive_texture.gpu_texture.?) or_return
                 shader.set_uniform(lighting_shader, resource.EMISSIVE_TEXTURE, i32(texture_unit))
                 texture_unit += 1
@@ -166,6 +216,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                     return
                 }
 
+                transfer_texture(occlusion_texture)
                 bind_texture(texture_unit, occlusion_texture.gpu_texture.?) or_return
                 shader.set_uniform(lighting_shader, resource.OCCLUSION_TEXTURE, i32(texture_unit))
                 texture_unit += 1
@@ -177,6 +228,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                     return
                 }
 
+                transfer_texture(normal_texture)
                 bind_texture(texture_unit, normal_texture.gpu_texture.?) or_return
                 shader.set_uniform(lighting_shader, resource.NORMAL_TEXTURE, i32(texture_unit))
                 texture_unit += 1
@@ -351,7 +403,7 @@ create_lighting_shader :: proc(manager: ^resource.ResourceManager, compile: bool
             shader.read_single_shader_source("./resources/shaders/demo_shader.vert", .VERTEX) or_return,
         }
         program := shader.make_shader_program(shaders)
-        if compile do transfer_shader(&program)
+        if compile do transfer_shader(&program) or_return
 
         shader_id := resource.add_shader_to_manager(manager, program)
         material.lighting_shader = shader_id

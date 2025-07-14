@@ -77,6 +77,7 @@ GL_DEBUG_CALLBACK :: proc "c" (source: u32, type: u32, id: u32, severity: u32, l
     if err != mem.Allocator_Error.None do log.errorf("Could not allocate debug stack builder")
 
     s_Message: string = strings.clone_from_cstring(message)
+    defer delete(s_Message)
     fmt.sbprintfln(&builder, "\n************* OpenGL Log **************\nMessage: %s", s_Message)
 
     if DEBUG_FLAGS.DISPLAY_DEBUG_STACK_UNINITIALIZED &&  DEBUG_STACK == nil {
@@ -120,11 +121,11 @@ GL_DEBUG_CALLBACK :: proc "c" (source: u32, type: u32, id: u32, severity: u32, l
             else if DEBUG_FLAGS.PANIC_ON_GL_ERROR do panic("Panic raised on OpenGL error via DebugFlags.PANIC_ON_GL_ERROR")
         }
 
-        if DEBUG_FLAGS.PUSH_GL_LOG_TO_DEBUG_STACK do push_to_debug_stack({ fmt.aprintf("OpenGL Log %s", s_Message), .ERROR})
+        if DEBUG_FLAGS.PUSH_GL_LOG_TO_DEBUG_STACK do push_to_debug_stack({ fmt.aprintf("OpenGL Log %s", s_Message), .ERROR}, copy_str=false)
     case:
         log.warnf("%s", strings.to_string(builder))
 
-        if DEBUG_FLAGS.PUSH_GL_LOG_TO_DEBUG_STACK do push_to_debug_stack({ fmt.aprintf("OpenGL Log %s", s_Message), .WARN})
+        if DEBUG_FLAGS.PUSH_GL_LOG_TO_DEBUG_STACK do push_to_debug_stack({ fmt.aprintf("OpenGL Log %s", s_Message), .WARN }, copy_str=false)
     }
 
 
@@ -167,7 +168,7 @@ StackItem :: struct {
 
 destroy_stack_item :: proc(stack_item: ^StackItem) {
     if stack_item == nil do return
-    delete(stack_item.data.log_info.msg)
+    if len(stack_item.data.log_info.msg) != 0 do delete(stack_item.data.log_info.msg)
     free(stack_item)
 }
 
@@ -195,8 +196,11 @@ init_debug_stack :: proc() {
 
 
 @(private)
-push_to_debug_stack :: proc(log_info: LogInfo, stack := DEBUG_STACK, loc := #caller_location) {
-    debug_info := DebugInfo{ loc, log_info }
+push_to_debug_stack :: proc(log_info: LogInfo, copy_str := true, stack := DEBUG_STACK, loc := #caller_location) {
+    debug_info: DebugInfo
+    copy_str := true
+    if copy_str do debug_info = DebugInfo{ loc, LogInfo{ strings.clone(log_info.msg), log_info.level } }
+    else do debug_info = DebugInfo{ loc, log_info }
     if (stack == nil) {
         log.warn("Debug stack not initialized", location = debug_info.loc)
         return
@@ -275,7 +279,7 @@ r_Debug_point_no_log :: proc(debug_flags := DEBUG_FLAGS, loc := #caller_location
 
 DEBUG_MARKER := " ** Debug Marker ** "
 d_Debug_point_no_log :: proc(debug_flags := DEBUG_FLAGS, loc := #caller_location) {
-    if debug_flags.PUSH_LOGS_TO_DEBUG_STACK do push_to_debug_stack({ strings.clone(DEBUG_MARKER), .INFO }, loc = loc)
+    if debug_flags.PUSH_LOGS_TO_DEBUG_STACK do push_to_debug_stack({ DEBUG_MARKER, .INFO }, loc = loc)
 }
 
 
@@ -288,20 +292,18 @@ r_Debug_point_log :: proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, deb
 }
 
 d_Debug_point_log :: proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, debug_flags := DEBUG_FLAGS, loc := #caller_location) {
-    format_needed := len(fmt_args) == 0
-    out_msg := format_needed ? strings.clone(fmt_msg) : fmt.aprintf(fmt_msg, ..fmt_args)  // clone prevents bad free
-    defer if DEBUG_STACK == nil do delete(out_msg)
+    out_msg := fmt.aprintf(fmt_msg, ..fmt_args)
 
     switch level {
     case .INFO:
         if debug_flags.DISPLAY_INFO do log.info(out_msg, location = loc)
-        if debug_flags.PUSH_INFOS_TO_DEBUG_STACK do push_to_debug_stack({ out_msg, level }, loc = loc)
+        if debug_flags.PUSH_INFOS_TO_DEBUG_STACK do push_to_debug_stack({ out_msg, level }, copy_str=false, loc=loc)
     case .WARN:
         if debug_flags.DISPLAY_WARNING do log.warn(out_msg, location = loc)
-        if debug_flags.PUSH_WARNINGS_TO_DEBUG_STACK do push_to_debug_stack({ out_msg, level }, loc = loc)
+        if debug_flags.PUSH_WARNINGS_TO_DEBUG_STACK do push_to_debug_stack({ out_msg, level }, copy_str=false, loc=loc)
     case .ERROR:
         if debug_flags.DISPLAY_ERROR do log.error(out_msg, location = loc)
-        if debug_flags.PUSH_ERRORS_TO_DEBUG_STACK do push_to_debug_stack({ out_msg, level }, loc = loc)
+        if debug_flags.PUSH_ERRORS_TO_DEBUG_STACK do push_to_debug_stack({ out_msg, level }, copy_str=false, loc=loc)
     }
 }
 
