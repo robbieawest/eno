@@ -117,7 +117,7 @@ query_archetype_test :: proc(t: ^testing.T) {
     arch, _ := ecs.scene_add_default_archetype(scene, "demo_entities")
     manager := resource.init_resource_manager()
 
-    scene_res, _ := resource.extract_gltf_scene(&manager, "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf")
+    scene_res, _ := resource.extract_gltf_scene(&manager, standards.MODEL_RESOURCE_PATH + "SciFiHelmet/glTF/SciFiHelmet.gltf")
     helmet_model := scene_res.models[0].model
     world_properties := scene_res.models[0].world_comp
 

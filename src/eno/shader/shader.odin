@@ -817,7 +817,7 @@ ShaderPath :: struct {
 @(private)
 init_shader_source :: proc(source: string, extension: string) -> (shader: Shader, ok: bool) {
     shader_type := extension_to_shader_type(extension)
-    source := ShaderSource{ string_source = strings.clone(source)}
+    source := ShaderSource{ string_source = strings.clone(source), is_available_as_string = true}
     shader = Shader{ source = source, type = shader_type}
 
     /*
@@ -851,18 +851,20 @@ read_single_shader_source :: proc(full_path: string, shader_type: ShaderType) ->
 read_shader_source :: proc(filenames: ..string) -> (program: ShaderProgram, ok: bool) {
 
     shader_sources: [dynamic]Shader
+    defer delete(shader_sources)
 
     for filename in filenames {
         inv_filename := utils.regex_match(filename, utils.REGEX_FILEPATH_PATTERN)
         if inv_filename {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Filepath contains invalid characters")
+            dbg.debug_point(dbg.LogLevel.ERROR, "Filepath contains invalid characters: %s", filename)
             return
         }
+        dbg.debug_point(dbg.LogLevel.INFO, "Reading shader source at path: %s", filename)
 
         last_ellipse_location := strings.last_index(filename, ".")
         if last_ellipse_location != -1 && !strings.contains(filename[last_ellipse_location:], "/") {
             // Extension given
-            extension := filename[last_ellipse_location:]
+            extension := filename[last_ellipse_location+1:]
 
             if slice.contains(ACCEPTED_SHADER_EXTENSIONS, extension) {
                 source, err := futils.read_file_source(filename); defer delete(source);
@@ -872,6 +874,7 @@ read_shader_source :: proc(filenames: ..string) -> (program: ShaderProgram, ok: 
             }
             else {
                 dbg.debug_point(dbg.LogLevel.ERROR, "Shader extension not accepted: %s", extension)
+                return
             }
         }
         else {
@@ -889,6 +892,7 @@ read_shader_source :: proc(filenames: ..string) -> (program: ShaderProgram, ok: 
                 else if err == .FileReadError {
                     file_found = true
                     dbg.debug_point(dbg.LogLevel.ERROR, "Error occurred while reading the contents of file. Filename: \"%s\"", full_path)
+                    return
                 }
             }
 
@@ -896,6 +900,7 @@ read_shader_source :: proc(filenames: ..string) -> (program: ShaderProgram, ok: 
                 cwd := os.get_current_directory()
                 defer delete(cwd)
                 dbg.debug_point(dbg.LogLevel.ERROR, "File could not be found from the current directory. File path: \"%s\", Current directory: \"%s\"", filename, cwd)
+                return
             }
         }
 
@@ -903,6 +908,7 @@ read_shader_source :: proc(filenames: ..string) -> (program: ShaderProgram, ok: 
 
     if len(shader_sources) == 0 {
         dbg.debug_point(dbg.LogLevel.ERROR, "Failed to read any shader file sources")
+        return
     }
 
     program = make_shader_program(shader_sources[:])

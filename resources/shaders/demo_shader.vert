@@ -43,6 +43,6 @@ void main() {
     cameraPosition = TBN * Camera.position;
 
     // TBN will be used to translate light positions to tangent space in fragment shader
-    // - this is biting the bullet, sending a fixed buffer of light positions from vertex -> fragment is more complex and the performance benefit is
+    // - this is biting the bullet, sending a fixed buffer of tangent light positions from vertex -> fragment is more complex and the performance benefit is
     // dubious
 }

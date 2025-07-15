@@ -5,6 +5,7 @@ import stbi "vendor:stb/image"
 
 import "../standards"
 import dbg "../debug"
+import futils "../file_utils"
 
 import "core:strings"
 import glm "core:math/linalg/glsl"
@@ -76,10 +77,11 @@ Mesh :: struct {
     indices_count: int,
     layout: VertexLayout,
     material: Maybe(MaterialID),
-    gl_component: GLComponent
+    gl_component: GLComponent,
+    is_billboard: bool
 }
 
-GLComponent :: struct {
+GLComponent :: struct {  // If I ever move to glMultiDrawElementsIndirect and grouping VAOs by vertex attribute permutations then this will change
     vao: VertexArrayObject,
     vbo: VertexBufferObject,
     ebo: ElementBufferObject
@@ -93,6 +95,50 @@ ElementBufferObject :: Maybe(u32)
 destroy_mesh :: proc(mesh: ^Mesh) {
     delete(mesh.vertex_data)
     delete(mesh.index_data)
+    delete(mesh.layout)
+}
+
+// Does not transfer
+texture_from_path :: proc(manager: ^ResourceManager, name: string, path: string, path_base: string = "") -> (id: TextureID, ok: bool) {
+    futils.check_path(path) or_return
+    texture: Texture
+    texture.image = load_image_from_uri(path, path_base) or_return
+    texture.name = strings.clone(name)
+    return add_texture_to_manager(manager, texture), true
+}
+
+// Does not transfer
+create_billboard_model_from_path :: proc(manager: ^ResourceManager, texture_name: string, texture_path: string, texture_path_base: string = "") -> (model: Model, ok: bool) {
+    texture_id := texture_from_path(manager, texture_name, texture_path, texture_path_base) or_return
+    return create_billboard_model_from_id(manager, texture_id)
+}
+
+// Does not transfer
+create_billboard_model_from_id :: proc(manager: ^ResourceManager, texture: TextureID) -> (model: Model, ok: bool) {
+    if get_texture(manager, texture) == nil {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Texture does not map to an existing texture in the manager")
+        return
+    }
+
+    model.meshes = make([dynamic]Mesh, 1)
+    billboard_mesh: Mesh
+    billboard_mesh.is_billboard = true
+    billboard_mesh.vertex_data = make(VertexData)
+    billboard_mesh.index_data = make(IndexData)
+
+    vertices, indices := standards.primitive_square_mesh_data()
+    append_elems(&billboard_mesh.vertex_data, ..vertices[:])
+    append_elems(&billboard_mesh.index_data, ..indices[:])
+    billboard_mesh.vertices_count = len(vertices)
+    billboard_mesh.indices_count = len(indices)
+
+    material: Material
+    material.lighting_shader = get_billboard_lighting_shader(manager) or_return
+    material.properties = make(map[MaterialPropertyInfo]MaterialProperty)
+    material.properties[.BASE_COLOUR_TEXTURE] = { BASE_COLOUR_TEXTURE, BaseColourTexture(texture) }
+
+    ok = true
+    return
 }
 
 
@@ -127,6 +173,7 @@ DOUBLE_SIDED:: "doubleSided"
 UNLIT :: "unlit"
 
 MaterialPropertyInfo :: enum {
+    BASE_COLOUR_TEXTURE,
     PBR_METALLIC_ROUGHNESS,
     PBR_SPECULAR_GLOSSINESS,
     CLEARCOAT,
@@ -165,6 +212,7 @@ PBRMetallicRoughness :: struct {
     roughness_factor: f32
 }
 
+BaseColourTexture :: distinct TextureID
 NormalTexture :: distinct TextureID
 OcclusionTexture :: distinct TextureID
 EmissiveTexture :: distinct TextureID
@@ -192,6 +240,7 @@ AlphaCutoff :: f32
 MaterialProperty :: struct {
     tag: string,
     value: union {
+        BaseColourTexture,
         PBRMetallicRoughness,
         NormalTexture,
         OcclusionTexture,
@@ -286,29 +335,37 @@ load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: str
         }
 
         // Use URI
-        path := utils.concat(gltf_file_location, string(image.uri)); defer delete(path)
-        path_cstr := strings.clone_to_cstring(path); defer delete(path_cstr)
-        result.pixel_data = stbi.load(path_cstr, &result.w, &result.h, &result.channels, 4)
-        if result.pixel_data == nil {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Could not read pixel data from file: %s", image.uri)
-            return
-        }
-        // log.infof("result after load: %#v:", result)
-    }
-    else {
-        // Use buffer
-        image_buffer: [^]byte = transmute([^]byte)(uintptr(image.buffer_view.buffer.data) + uintptr(image.buffer_view.offset))
-        result.pixel_data = stbi.load_from_memory(image_buffer, i32(image.buffer_view.size), &result.w, &result.h, &result.channels, 0)
-        if result.pixel_data == nil {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Could not read pixel data from memory")
-            return
-        }
+        return load_image_from_uri(string(image.uri), gltf_file_location)
     }
 
+    // Use buffer
+    image_buffer: [^]byte = transmute([^]byte)(uintptr(image.buffer_view.buffer.data) + uintptr(image.buffer_view.offset))
+    result.pixel_data = stbi.load_from_memory(image_buffer, i32(image.buffer_view.size), &result.w, &result.h, &result.channels, 0)
+    if result.pixel_data == nil {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not read pixel data from memory")
+        return
+    }
 
     ok = true
     return
 }
+
+// Does not assert validity of uri
+@(private)
+load_image_from_uri :: proc(uri: string, uri_base: string = "") -> (result: Image, ok: bool) {
+    path := len(uri_base) == 0 ? strings.clone(uri) : utils.concat(uri_base, uri); defer delete(path)
+    path_cstr := strings.clone_to_cstring(path); defer delete(path_cstr)
+
+    result.pixel_data = stbi.load(path_cstr, &result.w, &result.h, &result.channels, 4)
+    if result.pixel_data == nil {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not read pixel data from file: %s", uri)
+        return
+    }
+
+    ok = true
+    return
+}
+
 
 LightSourceInformation :: struct {
     name: string,

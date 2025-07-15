@@ -232,6 +232,18 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 bind_texture(texture_unit, normal_texture.gpu_texture.?) or_return
                 shader.set_uniform(lighting_shader, resource.NORMAL_TEXTURE, i32(texture_unit))
                 texture_unit += 1
+            case resource.BaseColourTexture:
+                base_colour := resource.get_texture(manager, resource.TextureID(v))
+                if base_colour == nil {
+                    dbg.debug_point(dbg.LogLevel.ERROR, "Base colour texture unavailable")
+                    return
+                }
+
+                transfer_texture(base_colour)
+                bind_texture(texture_unit, base_colour.gpu_texture) or_return
+                shader.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, i32(texture_unit))
+                texture_unit += 1
+
         }
     }
 
@@ -398,11 +410,7 @@ create_lighting_shader :: proc(manager: ^resource.ResourceManager, compile: bool
         if material.lighting_shader != nil do continue
 
         dbg.debug_point(dbg.LogLevel.INFO, "Creating lighing shader for material: %s", material.name)
-        shaders: []shader.Shader = {
-            shader.read_single_shader_source("./resources/shaders/demo_shader.frag", .FRAGMENT) or_return,
-            shader.read_single_shader_source("./resources/shaders/demo_shader.vert", .VERTEX) or_return,
-        }
-        program := shader.make_shader_program(shaders)
+        program := shader.read_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.frag", standards.SHADER_RESOURCE_PATH + "demo_shader.vert") or_return
         if compile do transfer_shader(&program) or_return
 
         shader_id := resource.add_shader_to_manager(manager, program)
