@@ -37,16 +37,9 @@ before_frame :: proc() -> (ok: bool) {
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
 
     scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf") or_return
-    // Not expecting any lights from this
-    helmet_model := scene_res.models[0].model
-    world_properties := scene_res.models[0].world_comp
+    log.infof("num model meshes: %#v", len(scene_res.models[0].model.meshes))
 
-    ecs.archetype_add_entity(game.Game.scene, arch, "helmet_entity",
-        ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, ecs.serialize_data(&helmet_model, size_of(resource.Model))),
-        ecs.make_ecs_component_data(standards.WORLD_COMPONENT.label, standards.WORLD_COMPONENT.type, ecs.serialize_data(&world_properties, size_of(standards.WorldComponent))),
-        ecs.make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, ecs.serialize_data(true, size_of(bool)))
-    ) or_return
-
+    ecs.add_models_to_arch(game.Game.scene, arch, ..scene_res.models[:]) or_return
 
     game_data := new(GameData)
     render_passes := make([dynamic]render.RenderPass)
@@ -73,6 +66,7 @@ before_frame :: proc() -> (ok: bool) {
 set_light_position :: proc() {
     light := &game.Game.scene.light_sources.point_lights[0]
     time_seconds := f64(game.Game.meta_data.time_elapsed) / 1.0e9
-    light.position.x = 2.0 * f32(math.sin_f64(time_seconds))
-    light.position.z = 2.0 * f32(math.sin_f64(time_seconds + math.PI / 2))
+    time_seconds *= 2
+    light.position.x = 1.0 * f32(math.sin_f64(time_seconds))
+    light.position.z = 1.0 * f32(math.sin_f64(time_seconds + math.PI / 2))
 }

@@ -2,10 +2,12 @@ package ecs
 
 import dbg "../debug"
 import "../utils"
+import "../resource"
 
 import "core:mem"
 import "core:testing"
 import "core:log"
+import standards "../standards"
 
 SceneQuery :: union {
     ArchetypeQuery,  // To use the same query on all archetypes
@@ -136,6 +138,24 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
 }
 
 
+add_models_to_arch :: proc(scene: ^Scene, archetype: ^Archetype, models: ..resource.ModelWorldPair) -> (ok: bool) {
+    if standards.WORLD_COMPONENT.label not_in archetype.components_label_match ||
+        resource.MODEL_COMPONENT.label not_in archetype.components_label_match ||
+        standards.VISIBLE_COMPONENT.label not_in archetype.components_label_match {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Archetype must have isVisible, world and model components")
+        return
+    }
+
+    for &model_pair in models {
+        archetype_add_entity(scene, archetype, model_pair.model.name,
+            make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, serialize_data(&model_pair.model, size_of(resource.Model))),
+            make_ecs_component_data(standards.WORLD_COMPONENT.label, standards.WORLD_COMPONENT.type, serialize_data(&model_pair.world_comp, size_of(standards.WorldComponent))),
+            make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, serialize_data(true, size_of(bool)))
+        ) or_return
+    }
+
+    return true
+}
 
 
 

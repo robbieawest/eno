@@ -207,7 +207,6 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
 
     if cmat.has_pbr_metallic_roughness {
         base_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.base_color_texture.texture, gltf_file_location) or_return
-        log.infof("base tex: %#v", base_tex)
         met_rough_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.metallic_roughness_texture.texture, gltf_file_location) or_return
 
         base_tex_id := add_texture_to_manager(manager, base_tex)
@@ -266,7 +265,8 @@ Image :: struct {
 }
 
 texture_from_cgltf_texture :: proc(texture: ^cgltf.texture, gltf_file_location: string) -> (result: Texture, ok: bool) {
-    log.infof("cgltf texture: %#v", texture)
+    //log.infof("cgltf texture: %#v", texture)
+    if texture == nil do return result, true
     return Texture {
         strings.clone_from_cstring(texture.name),
         load_image_from_cgltf_image(texture.image_, gltf_file_location) or_return,
@@ -275,7 +275,7 @@ texture_from_cgltf_texture :: proc(texture: ^cgltf.texture, gltf_file_location: 
 }
 
 load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: string) -> (result: Image, ok: bool) {
-    log.infof("cgltf image: %#v", image)
+    //log.infof("cgltf image: %#v", image)
     if image.name != nil do result.name = strings.clone_from_cstring(image.name)
     dbg.debug_point(dbg.LogLevel.INFO, "Reading cgltf image: %s", image.uri)
 
@@ -288,12 +288,12 @@ load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: str
         // Use URI
         path := utils.concat(gltf_file_location, string(image.uri)); defer delete(path)
         path_cstr := strings.clone_to_cstring(path); defer delete(path_cstr)
-        result.pixel_data = stbi.load(path_cstr, &result.w, &result.h, &result.channels, 0)
+        result.pixel_data = stbi.load(path_cstr, &result.w, &result.h, &result.channels, 4)
         if result.pixel_data == nil {
             dbg.debug_point(dbg.LogLevel.ERROR, "Could not read pixel data from file: %s", image.uri)
             return
         }
-        log.infof("result after load: %#v:", result)
+        // log.infof("result after load: %#v:", result)
     }
     else {
         // Use buffer

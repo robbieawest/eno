@@ -11,7 +11,7 @@ layout(std430, binding = 1) buffer LightBuf {
 struct LightSourceInformation {
     vec3 colour;
     float _pad;
-    vec3 position;
+    vec3 position;  // World space
     float intensity;
 };
 
@@ -72,10 +72,11 @@ PointLight getPointLight(uint index) {
 }
 
 
-in vec3 position;  // World
-in vec3 normal;  // World
+in vec3 position;  // Tangent space
+in vec3 normal;  // Tangent space
 in vec2 texCoords;
-in vec3 cameraPosition;  // World
+in vec3 cameraPosition;  // Tangent space
+in mat3 TBN;
 out vec4 Colour;
 
 uniform sampler2D baseColourTexture;
@@ -88,6 +89,10 @@ uniform sampler2D normalTexture;
 uniform sampler2D emissiveTexture;
 
 float PI = 3.14159265358979323;
+
+vec3 convertToTangentSpace(vec3 v) {
+    return TBN * v;
+}
 
 float DistributionGGX(vec3 N, vec3 H, float roughness) {
     float a = roughness*roughness;
@@ -149,11 +154,13 @@ void main() {
     albedo *= baseColourFactor.rgb;
     float roughness = texture(pbrMetallicRoughness, texCoords).g;
     float metallic = texture(pbrMetallicRoughness, texCoords).b;
-    vec3 fragNormal = normalize(texture(normalTexture, texCoords).rgb);
+    vec3 fragNormal = normalize(texture(normalTexture, texCoords).rgb * 2.0 - 1.0);
     vec3 occlusion = texture(occlusionTexture, texCoords).rgb;
 
-    vec3 geomNormal = normalize(normal);
+    vec3 geomNormal = normalize(TBN * normal);
     vec3 viewDir = normalize(cameraPosition - position);
+
+    vec3 normal = fragNormal;
 
     uint spotLightSize = 64;
     uint directionalLightSize = 48;
@@ -164,14 +171,16 @@ void main() {
     uint bufIndex = Lights.numSpotLights * spotLightSize + Lights.numDirectionalLights * directionalLightSize;
     for (uint i = 0; i < Lights.numPointLights; i++) {
         PointLight light = getPointLight(bufIndex);
-        vec3 lightDir = normalize(light.lightInformation.position - position);
+        vec3 lightPos = convertToTangentSpace(light.lightInformation.position);
+        vec3 lightDir = normalize(lightPos - position);
+        float lightDist = length(lightDir);
+
         vec3 halfVec = normalize(lightDir + viewDir);
 
-        float lightDist = length(lightDir);
         vec3 radiance = light.lightInformation.colour / (lightDist * lightDist);
 
-        vec3 BRDF = calculateBRDF(geomNormal, viewDir, lightDir, halfVec, albedo, roughness * roughnessFactor, metallic * metallicFactor);
-        vec3 reflectance = calculateReflectance(BRDF, geomNormal, lightDir, radiance);
+        vec3 BRDF = calculateBRDF(normal, viewDir, lightDir, halfVec, albedo, roughness * roughnessFactor, metallic * metallicFactor);
+        vec3 reflectance = calculateReflectance(BRDF, normal, lightDir, radiance);
         lightOutputted += reflectance;
 
         bufIndex += pointLightSize;

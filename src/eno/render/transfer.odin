@@ -195,7 +195,7 @@ make_texture_ :: proc(tex: resource.Texture) -> (texture: GPUTexture) {
 }
 
 make_texture_raw :: proc(w, h: i32, data: rawptr = nil, internal_format: i32 = gl.RGBA8, lod: i32 = 0, format: u32 = gl.RGBA, type: u32 = gl.UNSIGNED_BYTE) -> (texture: GPUTexture) {
-    dbg.debug_point(dbg.LogLevel.ERROR, "Making new texture")
+    dbg.debug_point(dbg.LogLevel.INFO, "Making new texture")
     id: u32
     gl.GenTextures(1, &id)
     texture = id

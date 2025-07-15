@@ -35,7 +35,7 @@ add_shader_to_manager :: proc(manager: ^ResourceManager, program: shader.ShaderP
 }
 
 add_material_to_manager :: proc(manager: ^ResourceManager, material: Material) -> MaterialID {
-    log.infof("mat: %#v", material)
+    // log.infof("mat: %#v", material)
     new_id := u32(len(manager.materials))
     manager.materials[new_id] = material
     return new_id
