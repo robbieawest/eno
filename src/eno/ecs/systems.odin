@@ -19,9 +19,15 @@ ArchetypeQuery :: struct {
     components: []ComponentQuery
 }
 
+QueryAction :: enum {
+    NO_QUERY_BUT_INCLUDE,
+    QUERY_NO_INCLUDE,
+    QUERY_AND_INCLUDE,
+}
+
 ComponentQuery :: struct {
     label: string,
-    include: bool,
+    action: QueryAction,
     data: rawptr  // Give as nil to query by existence of label
 }
 
@@ -84,7 +90,10 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResu
 
 query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result: ArchetypeQueryResult) {
     for component_query in query.components {
-        if component_query.label not_in archetype.components_label_match do return {} // Skip archetype
+        if (component_query.action == .QUERY_AND_INCLUDE || component_query.action == .QUERY_NO_INCLUDE) &&
+            component_query.label not_in archetype.components_label_match {
+            return {} // Skip archetype
+        }
     }
 
     result.data = archetype_get_entity_data(archetype)
@@ -100,13 +109,13 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
     entities_to_be_filtered := make([dynamic]Entity)
 
     component_remove_map := make(map[string]bool, archetype.n_Components)
-    for comp_label, _ in archetype.components_label_match do component_remove_map[comp_label] = true
 
     for component_query in query.components {
-        comp_ind := archetype.components_label_match[component_query.label]
+        comp_ind, comp_ok := archetype.components_label_match[component_query.label]
+        if !comp_ok do continue  // In the case of .NO_QUERY_BUT_INCLUDE
 
-        component_data: [dynamic][dynamic]byte = result.data[comp_ind]
         if component_query.data != nil {
+            component_data: [dynamic][dynamic]byte = result.data[comp_ind]
             for component, i in component_data {
                 if mem.compare_ptrs(raw_data(component), component_query.data, len(component)) != 0 {
                     // The map chain is to give as much context later when ultimately removing the entities
@@ -115,7 +124,7 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
             }
         }
 
-        if component_query.include do component_remove_map[component_query.label] = false
+        component_remove_map[component_query.label] = component_query.action == .QUERY_NO_INCLUDE
     }
 
     // Filter all components via the component_remove_map

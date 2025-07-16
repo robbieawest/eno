@@ -43,6 +43,7 @@ ARCHETYPE_MAX_COMPONENTS :: 0x000FFFFF
 ARCHETYPE_MAX_ENTITIES :: 0x00FFFFFF
 ARCHETYPE_INITIAL_ENTITIES_CAPACITTY :: 100
 Archetype :: struct {
+    label: string,
     n_Entities: u32,
     entities: map[string]Entity,  // Allocated using default heap allocator/context allocator
     n_Components: u32,
@@ -78,6 +79,7 @@ init_scene :: proc() -> (scene: ^Scene) {
 
 // Does not free top level archetype
 destroy_archetype :: proc(archetype: ^Archetype, allocator := context.allocator, loc := #caller_location) {
+    delete(archetype.label)
     delete(archetype.entities, loc)
     delete(archetype.component_info.component_infos, allocator, loc)
     delete(archetype.components_label_match, loc)
@@ -126,7 +128,9 @@ archetype_get_component_data :: proc(archetype: ^Archetype, component_label: str
 @(private)
 archetype_get_entity_data :: proc(archetype: ^Archetype) -> (result: [dynamic][dynamic][dynamic]byte) {
     result = make([dynamic][dynamic][dynamic]byte, len(archetype.components))
+    log.infof("getting data for archetype: %s %v", archetype.label, archetype.components_label_match)
     for i in 0..<len(archetype.components) {
+        log.infof("reading component %d", i)
         comp_data := archetype.components[i]
         comp_size := int(archetype.component_info.component_infos[i].size)
 
@@ -161,6 +165,7 @@ scene_add_archetype :: proc(scene: ^Scene, label: string, component_infos: ..Com
     
 
     archetype: Archetype
+    archetype.label = strings.clone(label)
     for component_info in component_infos {
         archetype.component_info.total_size_per_entity += component_info.size
     }
@@ -217,7 +222,6 @@ archetype_add_entity_checks :: proc(scene: ^Scene, archetype: ^Archetype, entity
 }
 
 
-// Add a way with matched form? CBA
 archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, component_data: ..ECSComponentData) -> (ok: bool) {
     dbg.debug_point(dbg.LogLevel.INFO, "Adding archetype entity: %s", entity_label)
     entity_label := strings.clone(entity_label)
@@ -235,7 +239,7 @@ archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label:
     for data in component_data {
         comp_index, component_exists := archetype.components_label_match[data.label]
         if !component_exists {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Component could not be found")
+            dbg.debug_point(dbg.LogLevel.ERROR, "Component in ECSComponentData could not be found")
             return
         }
 

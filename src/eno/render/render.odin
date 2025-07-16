@@ -35,9 +35,9 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
     // query scene for renderable models
     isVisibleQueryData := true
     query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
-        { label = resource.MODEL_COMPONENT.label, include = true },
-        { label = standards.WORLD_COMPONENT.label, include = true },
-        { label = standards.VISIBLE_COMPONENT.label, data = &isVisibleQueryData }
+        { label = resource.MODEL_COMPONENT.label, action = .QUERY_AND_INCLUDE },
+        { label = standards.WORLD_COMPONENT.label, action = .NO_QUERY_BUT_INCLUDE },
+        { label = standards.VISIBLE_COMPONENT.label, action = .QUERY_NO_INCLUDE, data = &isVisibleQueryData },
     }}
     query_result := ecs.query_scene(scene, query) or_return
 
@@ -59,14 +59,14 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
             case standards.WORLD_COMPONENT.label:
                 world_comps = ecs.components_deserialize_raw(standards.WorldComponent, arch_result.data[comp_ind])
             }
-
         }
+
         if len(models) != len(world_comps) {
             dbg.debug_point(dbg.LogLevel.ERROR, "Received unbalanced input from scene query")
             return
         }
         for i in 0..<len(models) {
-            append(&model_data, ModelWorldPair{ models[i], world_comps[i] })
+            append(&model_data, ModelWorldPair{ models[i], world_comps[i]})
         }
 
     }
@@ -351,8 +351,8 @@ update_lights_ssbo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
     // Query to return only light components
     isVisibleQueryData := true
     query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
-        { label = resource.LIGHT_COMPONENT.label, include = true },
-        { label = standards.VISIBLE_COMPONENT.label, data = &isVisibleQueryData }
+        { label = resource.LIGHT_COMPONENT.label, action = .QUERY_AND_INCLUDE },
+        { label = standards.VISIBLE_COMPONENT.label, action = .QUERY_NO_INCLUDE, data = &isVisibleQueryData }
     }}
     query_result := ecs.query_scene(scene, query) or_return
 

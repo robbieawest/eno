@@ -57,18 +57,21 @@ before_frame :: proc() -> (ok: bool) {
     light_arch := ecs.scene_add_archetype(game.Game.scene, "lights",
         cast(ecs.ComponentInfo)(resource.LIGHT_COMPONENT),
         cast(ecs.ComponentInfo)(resource.MODEL_COMPONENT),
+        cast(ecs.ComponentInfo)(standards.WORLD_COMPONENT),
         cast(ecs.ComponentInfo)(standards.VISIBLE_COMPONENT),
     ) or_return
 
     ecs.archetype_add_entity(game.Game.scene, light_arch, light.name,
         ecs.make_ecs_component_data(resource.LIGHT_COMPONENT.label, resource.LIGHT_COMPONENT.type, resource.Light(light)),
         ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, resource.make_light_billboard(&game.Game.resource_manager) or_return),
+        ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, standards.WORLD_COMPONENT.type, standards.make_world_component(position=light.position)),
         ecs.make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, true),
     )
 
     ecs.archetype_add_entity(game.Game.scene, light_arch, light2.name,
         ecs.make_ecs_component_data(resource.LIGHT_COMPONENT.label, resource.LIGHT_COMPONENT.type, resource.Light(light2)),
         ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, resource.make_light_billboard(&game.Game.resource_manager) or_return),
+        ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, standards.WORLD_COMPONENT.type, standards.make_world_component(position=light2.position)),
         ecs.make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, true),
     )
 

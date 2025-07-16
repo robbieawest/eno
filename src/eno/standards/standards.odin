@@ -21,6 +21,10 @@ WorldComponent :: struct {
     rotation: glm.quat
 }
 
+make_world_component :: proc(position: glm.vec3 = {0.0, 0.0, 0.0}, scale: glm.vec3 = {1.0, 1.0, 1.0}, rotation: glm.quat = 1) -> WorldComponent {
+    return { position, scale, rotation }
+}
+
 model_from_world_component :: proc(world_comp: WorldComponent) -> (model: glm.mat4) {
     model = glm.mat4Scale(world_comp.scale)
     model *= glm.mat4Translate(world_comp.position)
