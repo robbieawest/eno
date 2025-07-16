@@ -33,6 +33,20 @@ ArchetypeQueryResult :: struct {
     data: [dynamic][dynamic][dynamic]byte
 }
 
+// Returns flat component data of the single component
+get_component_from_query_result :: proc(result: SceneQueryResult, $T: typeid, comp_label: string) -> (flat_result: []^T) {
+    result_dyna := make([dynamic]^T)
+    for _, &arch_res in result {
+        comp_ind, comp_ok := arch_res.component_map[comp_label]
+        if !comp_ok do continue
+
+        comp_data := arch_res.data[comp_ind]
+        for &ent_data in comp_data do append(&result_dyna, component_deserialize_raw(T, ent_data[:]))
+    }
+
+    return result_dyna[:]
+}
+
 
 delete_archetype_query_result :: proc(result: ArchetypeQueryResult) {
     for key, _ in result.entity_map do delete(key)
@@ -146,11 +160,11 @@ add_models_to_arch :: proc(scene: ^Scene, archetype: ^Archetype, models: ..resou
         return
     }
 
-    for &model_pair in models {
+    for model_pair in models {
         archetype_add_entity(scene, archetype, model_pair.model.name,
-            make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, serialize_data(&model_pair.model, size_of(resource.Model))),
-            make_ecs_component_data(standards.WORLD_COMPONENT.label, standards.WORLD_COMPONENT.type, serialize_data(&model_pair.world_comp, size_of(standards.WorldComponent))),
-            make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, serialize_data(true, size_of(bool)))
+            make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, model_pair.model),
+            make_ecs_component_data(standards.WORLD_COMPONENT.label, standards.WORLD_COMPONENT.type, model_pair.world_comp),
+            make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, true)
         ) or_return
     }
 

@@ -136,6 +136,7 @@ vec3 calculateBRDF(vec3 N, vec3 V, vec3 L, vec3 H, vec3 albedo, float roughness,
     vec3 fresnelIncidence = mix(vec3(0.04), albedo, metallic);
     vec3 fresnel = FresnelSchlick(H, V, fresnelIncidence);
 
+    // Cook-torrence
     vec3 num = NDF * G * fresnel;
     float denom = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
     vec3 specular = num / denom;
@@ -162,9 +163,9 @@ void main() {
 
     vec3 normal = fragNormal;
 
-    uint spotLightSize = 64;
-    uint directionalLightSize = 48;
-    uint pointLightSize = 32;
+    uint spotLightSize = 16;
+    uint directionalLightSize = 12;
+    uint pointLightSize = 8;
 
     vec3 lightOutputted = vec3(0.0);
 

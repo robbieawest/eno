@@ -21,9 +21,16 @@ ECSComponentData :: struct {
     data: []byte
 }
 
+make_ecs_component_data :: proc{ make_ecs_component_data_raw, make_ecs_component_data_typed }
+
 // Copies everything!
-make_ecs_component_data:: proc(label: string, type: typeid, data: []byte) -> ECSComponentData {
+make_ecs_component_data_raw :: proc(label: string, type: typeid, data: []byte) -> ECSComponentData {
     return {strings.clone(label), type, slice.clone(data) }
+}
+
+// Copies everything!
+make_ecs_component_data_typed :: proc(label: string, type: typeid, data: $T) -> ECSComponentData {
+    return {strings.clone(label), type, serialize_data(data) }
 }
 
 
@@ -39,30 +46,28 @@ ComponentData :: struct ($T: typeid) {
     data: ^T
 }
 
-MatchedComponentData :: struct ($T: typeid) {
-    component_label_match: map[string]u32,
-    component_data: []^$T
-}
-
 
 // Serialization and deserialization
 
-serialize_data :: proc(data: $T, size: int, copy := false) -> []byte {
-    when intrinsics.type_is_pointer(T) {
-        data := transmute([]byte)mem.Raw_Slice{ data, size }
-        return copy ? slice.clone(data) : data
-    }
-    else {
-        // Must copy
-        data := data
-        return slice.clone(transmute([]byte)mem.Raw_Slice{ &data, size })
-    }
+serialize_data :: proc{ serialize_data_pointer, serialize_data_raw }
+
+serialize_data_pointer :: proc(data: ^$T, copy := false) -> []byte {
+    data := transmute([]byte)mem.Raw_Slice{ data, type_info_of(T).size }
+    return copy ? slice.clone(data) : data
 }
+
+serialize_data_raw :: proc(data: $T) -> []byte
+    where !intrinsics.type_is_pointer(T) {
+    // Must copy
+    data := data
+    return slice.clone(transmute([]byte)mem.Raw_Slice{ &data, type_info_of(T).size })
+}
+
 
 // Copies everything in input
 serialize_component :: proc(component: ComponentData($T), copy := false, allocator := context.allocator) -> (ret: ECSComponentData) {
     ret.label = strings.clone(component.label)
-    ret.data = serialize_data(component.data, size_of(T), copy)
+    ret.data = serialize_data(component.data, copy)
     return
 }
 

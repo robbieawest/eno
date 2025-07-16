@@ -61,7 +61,6 @@ Scene :: struct {
     allocated: bool,
     cameras: [dynamic]cam.Camera,
     viewpoint: ^cam.Camera,
-    light_sources: SceneLightSources
 }
 
 // Scene reside on the stack if possible
@@ -72,29 +71,6 @@ init_scene :: proc() -> (scene: ^Scene) {
     scene.archetypes = make([dynamic]Archetype)
     scene.cameras = make([dynamic]cam.Camera)
     return
-}
-
-// Light sources
-
-SceneLightSources :: struct {
-    point_lights: [dynamic]resource.PointLight,
-    directional_lights: [dynamic]resource.DirectionalLight,
-    spot_lights: [dynamic]resource.SpotLight
-}
-
-init_scene_light_sources :: proc() -> SceneLightSources {
-    return { make([dynamic]resource.PointLight), make([dynamic]resource.DirectionalLight), make([dynamic]resource.SpotLight) }
-}
-
-scene_add_lights :: proc(scene: ^Scene, lights: ..union{ resource.PointLight, resource.DirectionalLight, resource.SpotLight }) {
-
-    for light in lights {
-        switch v in light {
-            case resource.PointLight: append(&scene.light_sources.point_lights, v)
-            case resource.DirectionalLight: append(&scene.light_sources.directional_lights, v)
-            case resource.SpotLight: append(&scene.light_sources.spot_lights, v)
-        }
-    }
 }
 
 

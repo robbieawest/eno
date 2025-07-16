@@ -4,6 +4,7 @@ import glm "core:math/linalg/glsl"
 
 SHADER_RESOURCE_PATH :: "./resources/shaders/"
 MODEL_RESOURCE_PATH :: "./resources/models/"
+TEXTURE_RESOURCE_PATH :: "./resources/textures/"
 
 ComponentTemplate :: struct {
     label: string,

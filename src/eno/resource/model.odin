@@ -13,6 +13,7 @@ import "core:log"
 import utils "../utils"
 
 MODEL_COMPONENT := standards.ComponentTemplate{ "Model", Model, size_of(Model) }
+LIGHT_COMPONENT := standards.ComponentTemplate{ "Light", Light, size_of(Light) }
 
 /*
 VertexLayout :: struct {
@@ -100,7 +101,6 @@ destroy_mesh :: proc(mesh: ^Mesh) {
 
 // Does not transfer
 texture_from_path :: proc(manager: ^ResourceManager, name: string, path: string, path_base: string = "") -> (id: TextureID, ok: bool) {
-    futils.check_path(path) or_return
     texture: Texture
     texture.image = load_image_from_uri(path, path_base) or_return
     texture.name = strings.clone(name)
@@ -114,6 +114,7 @@ create_billboard_model_from_path :: proc(manager: ^ResourceManager, texture_name
 }
 
 // Does not transfer
+// Todo use unlit property
 create_billboard_model_from_id :: proc(manager: ^ResourceManager, texture: TextureID) -> (model: Model, ok: bool) {
     if get_texture(manager, texture) == nil {
         dbg.debug_point(dbg.LogLevel.ERROR, "Texture does not map to an existing texture in the manager")
@@ -136,6 +137,10 @@ create_billboard_model_from_id :: proc(manager: ^ResourceManager, texture: Textu
     material.lighting_shader = get_billboard_lighting_shader(manager) or_return
     material.properties = make(map[MaterialPropertyInfo]MaterialProperty)
     material.properties[.BASE_COLOUR_TEXTURE] = { BASE_COLOUR_TEXTURE, BaseColourTexture(texture) }
+
+    id := add_material_to_manager(manager, material)
+    billboard_mesh.material = id
+    model.meshes[0] = billboard_mesh
 
     ok = true
     return
@@ -388,6 +393,24 @@ SpotLight :: struct {
     inner_cone_angle: f32,
     outer_cone_angle: f32,
 }
+
+Light :: union {
+    SpotLight,
+    DirectionalLight,
+    PointLight
+}
+
+make_light_billboard :: proc(manager: ^ResourceManager) -> (model: Model, ok: bool) {
+    if manager.billboard_id == nil {
+        manager.billboard_id = texture_from_path(manager, "light_billboard", "light.png", standards.TEXTURE_RESOURCE_PATH) or_return
+        if manager.billboard_id == nil {
+            dbg.debug_point(dbg.LogLevel.ERROR, "texture_from_path returned nil id")
+            return
+        }
+    }
+    return create_billboard_model_from_id(manager, manager.billboard_id.?)
+}
+
 
 POINT_LIGHT_COMPONENT := standards.ComponentTemplate{ "PointLight", PointLight, size_of(PointLight) }
 DIRECTIONAL_LIGHT_COMPONENT := standards.ComponentTemplate{ "DirectionalLight", DirectionalLight, size_of(DirectionalLight) }

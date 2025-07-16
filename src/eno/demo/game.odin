@@ -23,7 +23,7 @@ GameData :: struct {
 }
 
 every_frame :: proc() -> (ok: bool) {
-    set_light_position()
+    // set_light_position()
     render.render(&game.Game.resource_manager, (cast(^GameData)game.Game.game_data).render_pipeline, game.Game.scene) or_return
 
     // Swap
@@ -52,7 +52,25 @@ before_frame :: proc() -> (ok: bool) {
 
     // todo copy light name internally
     light := resource.PointLight{ "demo_light", true, 1.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 1.0, 1.0, 1.0 } }
-    ecs.scene_add_lights(game.Game.scene, light)
+    light2 := resource.PointLight{ "demo_light2", true, 1.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 1.0, 1.0, 1.0 } }
+
+    light_arch := ecs.scene_add_archetype(game.Game.scene, "lights",
+        cast(ecs.ComponentInfo)(resource.LIGHT_COMPONENT),
+        cast(ecs.ComponentInfo)(resource.MODEL_COMPONENT),
+        cast(ecs.ComponentInfo)(standards.VISIBLE_COMPONENT),
+    ) or_return
+
+    ecs.archetype_add_entity(game.Game.scene, light_arch, light.name,
+        ecs.make_ecs_component_data(resource.LIGHT_COMPONENT.label, resource.LIGHT_COMPONENT.type, light),
+        ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, resource.make_light_billboard(&game.Game.resource_manager) or_return),
+        ecs.make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, true),
+    )
+
+    ecs.archetype_add_entity(game.Game.scene, light_arch, light2.name,
+        ecs.make_ecs_component_data(resource.LIGHT_COMPONENT.label, resource.LIGHT_COMPONENT.type, light2),
+        ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, resource.make_light_billboard(&game.Game.resource_manager) or_return),
+        ecs.make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, true),
+    )
 
     game.add_event_hooks(
         game.HOOK_MOUSE_MOTION(),
@@ -64,9 +82,11 @@ before_frame :: proc() -> (ok: bool) {
 }
 
 set_light_position :: proc() {
+    /*
     light := &game.Game.scene.light_sources.point_lights[0]
     time_seconds := f64(game.Game.meta_data.time_elapsed) / 1.0e9
     time_seconds *= 2
-    light.position.x = 1.0 * f32(math.sin_f64(time_seconds))
-    light.position.z = 1.0 * f32(math.sin_f64(time_seconds + math.PI / 2))
+    light.position.x = 3.0 * f32(math.sin_f64(time_seconds))
+    light.position.z = 3.0 * f32(math.sin_f64(time_seconds + math.PI / 2))
+    */
 }

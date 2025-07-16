@@ -13,7 +13,8 @@ ResourceManager :: struct {
     materials: map[MaterialID]Material,
     shaders: map[ShaderID]shader.ShaderProgram,
     textures: map[TextureID]Texture,
-    billboard_shader: Maybe(ShaderID)
+    billboard_shader: Maybe(ShaderID),  // Hacky, a proper MaterialType would fix this
+    billboard_id: Maybe(TextureID)
 }
 
 init_resource_manager :: proc(allocator := context.allocator) -> ResourceManager {
@@ -21,6 +22,7 @@ init_resource_manager :: proc(allocator := context.allocator) -> ResourceManager
         make(map[MaterialID]Material, allocator=allocator),
         make(map[ShaderID]shader.ShaderProgram, allocator=allocator),
         make(map[TextureID]Texture, allocator=allocator),
+        nil,
         nil
     }
 }

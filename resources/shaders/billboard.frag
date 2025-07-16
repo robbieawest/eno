@@ -6,5 +6,10 @@ in vec2 texCoords;
 out vec4 Colour;
 
 void main() {
-    Colour = texture(baseColourTexture, texCoords);
+    vec4 colour = texture(baseColourTexture, texCoords);
+    if (colour.a < 0.05) {
+        discard;
+    }
+
+    Colour = colour;
 }

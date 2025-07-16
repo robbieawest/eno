@@ -317,7 +317,7 @@ conv_light_information :: proc(info: resource.LightSourceInformation) -> GPULigh
 }
 
 // Returns heap allocated gpu light - make sure to free
-light_to_gpu_light :: proc(light: union{ resource.SpotLight, resource.PointLight, resource.DirectionalLight }) -> (gpu_light: rawptr) {
+light_to_gpu_light :: proc(light: resource.Light) -> (gpu_light: rawptr) {
 
     switch v in light {
         case resource.SpotLight:
@@ -348,12 +348,30 @@ light_to_gpu_light :: proc(light: union{ resource.SpotLight, resource.PointLight
 
 
 update_lights_ssbo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
-    lights_info: ecs.SceneLightSources = scene.light_sources
+    // Query to return only light components
+    isVisibleQueryData := true
+    query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
+        { label = resource.LIGHT_COMPONENT.label, include = true },
+        { label = standards.VISIBLE_COMPONENT.label, data = &isVisibleQueryData }
+    }}
+    query_result := ecs.query_scene(scene, query) or_return
 
-    lights := scene.light_sources
-    num_spot_lights: uint = len(lights.spot_lights)
-    num_directional_lights: uint = len(lights.directional_lights)
-    num_point_lights: uint = len(lights.point_lights)
+    lights := ecs.get_component_from_query_result(query_result, resource.Light, resource.LIGHT_COMPONENT.label)
+    defer delete(lights)
+
+    spot_lights := make([dynamic]^resource.SpotLight)
+    directional_lights := make([dynamic]^resource.DirectionalLight)
+    point_lights := make([dynamic]^resource.PointLight)
+
+    for &light in lights do switch &v in light {
+        case resource.SpotLight: append(&spot_lights, &v)
+        case resource.DirectionalLight: append(&directional_lights, &v)
+        case resource.PointLight: append(&point_lights, &v)
+    }
+
+    num_spot_lights: uint = len(spot_lights)
+    num_directional_lights: uint = len(directional_lights)
+    num_point_lights: uint = len(point_lights)
 
     SPOT_LIGHT_GPU_SIZE :: size_of(SpotLightGPU)
     DIRECTIONAL_LIGHT_GPU_SIZE :: size_of(DirectionalLightGPU)
@@ -363,28 +381,28 @@ update_lights_ssbo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
     directional_light_buffer_size := DIRECTIONAL_LIGHT_GPU_SIZE * num_directional_lights
     point_light_buffer_size := POINT_LIGHT_GPU_SIZE * num_point_lights
 
-    light_ssbo_data: []byte = make([]byte, 32 /* For lengths and pad */ + spot_light_buffer_size + directional_light_buffer_size + point_light_buffer_size)
+    light_ssbo_data: []byte = make([]byte, 32 /* For counts and pad */ + spot_light_buffer_size + directional_light_buffer_size + point_light_buffer_size)
     (transmute(^uint)&light_ssbo_data[0])^ = num_spot_lights
     (transmute(^uint)&light_ssbo_data[4])^ = num_directional_lights
     (transmute(^uint)&light_ssbo_data[8])^ = num_point_lights
 
     current_offset := 16
-    for light in lights.spot_lights {
-        gpu_light := light_to_gpu_light(light)
+    for light in spot_lights {
+        gpu_light := light_to_gpu_light(light^)
         defer free(gpu_light)
         mem.copy(&light_ssbo_data[current_offset], gpu_light, SPOT_LIGHT_GPU_SIZE)
         current_offset += SPOT_LIGHT_GPU_SIZE
     }
 
-    for light in lights.directional_lights {
-        gpu_light := light_to_gpu_light(light)
+    for light in directional_lights {
+        gpu_light := light_to_gpu_light(light^)
         defer free(gpu_light)
         mem.copy(&light_ssbo_data[current_offset], gpu_light, DIRECTIONAL_LIGHT_GPU_SIZE)
         current_offset += DIRECTIONAL_LIGHT_GPU_SIZE
     }
 
-    for light in lights.point_lights {
-        gpu_light := light_to_gpu_light(light)
+    for light in point_lights {
+        gpu_light := light_to_gpu_light(light^)
         defer free(gpu_light)
         mem.copy(&light_ssbo_data[current_offset], gpu_light, POINT_LIGHT_GPU_SIZE)
         current_offset += POINT_LIGHT_GPU_SIZE
