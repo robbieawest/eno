@@ -51,8 +51,8 @@ before_frame :: proc() -> (ok: bool) {
     ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
 
     // todo copy light name internally
-    light := resource.PointLight{ "demo_light", true, 1.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 1.0, 1.0, 1.0 } }
-    light2 := resource.PointLight{ "demo_light2", true, 1.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 1.0, 1.0, 1.0 } }
+    light := resource.PointLight{ "demo_light", true, 1.0, glm.vec3{ 0.0, 1.0, 0.0 }, glm.vec3{ 1.0, 1.0, 1.0 } }
+    light2 := resource.PointLight{ "demo_light2", true, 1.0, glm.vec3{ 1.0, 0.0, 0.0 }, glm.vec3{ 1.0, 1.0, 1.0 } }
 
     light_arch := ecs.scene_add_archetype(game.Game.scene, "lights",
         cast(ecs.ComponentInfo)(resource.LIGHT_COMPONENT),
@@ -61,13 +61,13 @@ before_frame :: proc() -> (ok: bool) {
     ) or_return
 
     ecs.archetype_add_entity(game.Game.scene, light_arch, light.name,
-        ecs.make_ecs_component_data(resource.LIGHT_COMPONENT.label, resource.LIGHT_COMPONENT.type, light),
+        ecs.make_ecs_component_data(resource.LIGHT_COMPONENT.label, resource.LIGHT_COMPONENT.type, resource.Light(light)),
         ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, resource.make_light_billboard(&game.Game.resource_manager) or_return),
         ecs.make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, true),
     )
 
     ecs.archetype_add_entity(game.Game.scene, light_arch, light2.name,
-        ecs.make_ecs_component_data(resource.LIGHT_COMPONENT.label, resource.LIGHT_COMPONENT.type, light2),
+        ecs.make_ecs_component_data(resource.LIGHT_COMPONENT.label, resource.LIGHT_COMPONENT.type, resource.Light(light2)),
         ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, resource.make_light_billboard(&game.Game.resource_manager) or_return),
         ecs.make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, true),
     )

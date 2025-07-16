@@ -83,6 +83,9 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResu
 }
 
 query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result: ArchetypeQueryResult) {
+    for component_query in query.components {
+        if component_query.label not_in archetype.components_label_match do return {} // Skip archetype
+    }
 
     result.data = archetype_get_entity_data(archetype)
     result.component_map = utils.copy_map(archetype.components_label_match)
@@ -100,8 +103,7 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
     for comp_label, _ in archetype.components_label_match do component_remove_map[comp_label] = true
 
     for component_query in query.components {
-        comp_ind, comp_exists := archetype.components_label_match[component_query.label]
-        if !comp_exists do return {} // Skip archetype
+        comp_ind := archetype.components_label_match[component_query.label]
 
         component_data: [dynamic][dynamic]byte = result.data[comp_ind]
         if component_query.data != nil {
