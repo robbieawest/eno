@@ -23,7 +23,7 @@ GameData :: struct {
 }
 
 every_frame :: proc() -> (ok: bool) {
-    // set_light_position()
+    set_light_position() or_return
     render.render(&game.Game.resource_manager, (cast(^GameData)game.Game.game_data).render_pipeline, game.Game.scene) or_return
 
     // Swap
@@ -37,8 +37,8 @@ before_frame :: proc() -> (ok: bool) {
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
 
     scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf") or_return
-
     ecs.add_models_to_arch(game.Game.scene, arch, ..scene_res.models[:]) or_return
+
 
     game_data := new(GameData)
     render_passes := make([dynamic]render.RenderPass)
@@ -50,7 +50,7 @@ before_frame :: proc() -> (ok: bool) {
     ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
 
     // todo copy light name internally
-    light := resource.PointLight{ "demo_light", true, 1.0, glm.vec3{ 0.0, 1.0, 0.0 }, glm.vec3{ 5.0, 0.0, 0.0 } }
+    light := resource.PointLight{ "demo_light", true, 1.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 3.0, 0.0, 0.0 } }
     light_comp := standards.make_world_component(position=light.position)
     light2 := resource.PointLight{ "demo_light2", true, 1.0, glm.vec3{ 1.0, 0.0, 0.0 }, glm.vec3{ -5.0, 0.0, 0.0 } }
     light_comp2 := standards.make_world_component(position=light2.position)
@@ -85,12 +85,26 @@ before_frame :: proc() -> (ok: bool) {
     return true
 }
 
-set_light_position :: proc() {
-    /*
-    light := &game.Game.scene.light_sources.point_lights[0]
+set_light_position :: proc() -> (ok: bool) {
+    isVisibleQueryData := true
+    query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
+        { label = resource.LIGHT_COMPONENT.label, action = .QUERY_AND_INCLUDE },
+        { label = standards.WORLD_COMPONENT.label, action = .NO_QUERY_BUT_INCLUDE },
+        { label = standards.VISIBLE_COMPONENT.label, action = .QUERY_NO_INCLUDE, data = &isVisibleQueryData }
+    }}
+    query_result := ecs.query_scene(game.Game.scene, query) or_return
+
+    lights := ecs.get_component_from_query_result(query_result, resource.Light, resource.LIGHT_COMPONENT.label)
+    worlds := ecs.get_component_from_query_result(query_result, standards.WorldComponent, standards.WORLD_COMPONENT.label)
+    defer { delete(lights); delete(worlds) }
+
+    light := &lights[0].(resource.PointLight)
     time_seconds := f64(game.Game.meta_data.time_elapsed) / 1.0e9
     time_seconds *= 2
     light.position.x = 3.0 * f32(math.sin_f64(time_seconds))
     light.position.z = 3.0 * f32(math.sin_f64(time_seconds + math.PI / 2))
-    */
+
+    worlds[0].position = light.position
+
+    return true
 }

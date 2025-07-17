@@ -28,15 +28,16 @@ void main() {
     gl_Position = Camera.m_Project * Camera.m_View * vec4(position, 1.0);
 
     // Tangent space
-    normal = m_Normal * aNormal;
+    normal = normalize(m_Normal * aNormal);
 
     float bitangentSign = aTangent.w;
-    vec3 tangent = m_Normal * vec3(aTangent);
-    vec3 bitangent = cross(normal, tangent) * bitangentSign;
+    vec3 tangent = normalize(m_Normal * vec3(aTangent));
+    // vec3 tangent = normalize(cross(normal, vec3(0.0, 1.0, 1.0)));  // approximation
 
     // Orthogonalize tangent to normal
     tangent = normalize(tangent - dot(tangent, normal) * normal);
-    TBN = mat3(tangent, bitangent, normal);
+    vec3 bitangent = cross(normal, tangent) * bitangentSign;
+    TBN = transpose(mat3(tangent, bitangent, normal));
 
     // Apply TBN to outgoing values
     position = TBN * position;

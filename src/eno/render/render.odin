@@ -159,15 +159,15 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
 
 
 apply_billboard_rotation :: proc(cam_position: glm.vec3, world: standards.WorldComponent, cylindrical := true) -> standards.WorldComponent {
-    start := glm.vec3{ 0.0, 0.0, -1.0 }
-    dest := glm.normalize(cam_position - world.position)
+     start := glm.vec3{ 0.0, 0.0, -1.0 }
+    // start := glm.normalize(world.position)
+     dest := glm.normalize(cam_position - world.position)
+    // dest := glm.normalize(cam_position)
 
     if cylindrical do dest.y = 0.0
-
     dot := glm.dot(start, dest)
     angle := glm.acos(dot)
 
-    /*
     if dot > 0.999 {
         return { world.position, world.scale, 1.0 }
     }
@@ -176,17 +176,19 @@ apply_billboard_rotation :: proc(cam_position: glm.vec3, world: standards.WorldC
         quat := glm.quatAxisAngle(glm.normalize(glm.cross(start, axis)), glm.PI)
         return { world.position, world.scale, quat }
     }
-    */
 
     axis := glm.normalize(glm.cross(start, dest))
 
-
+    return { world.position, world.scale, glm.quatAxisAngle(axis, angle) }
     /*
     world := world
-    world.rotation = glm.quatFromMat4(glm.mat4LookAt(glm.vec3{ 0.0, 0.0, 1.0 }, world.position - cam_position, glm.vec3{0.0, 1.0, 0.0} ))
+    xyz := glm.cross(start, dest)
+    world.rotation.x = xyz.x
+    world.rotation.y = xyz.y
+    world.rotation.z = xyz.z
+    world.rotation.w = glm.sqrt((glm.pow(glm.length(start), 2) * glm.pow(glm.length(dest), 2))) + glm.dot(start, dest)
+    return world
     */
-
-    return { world.position, world.scale, glm.quatAxisAngle(axis, angle) }
 }
 
 model_and_normal :: proc(mesh: ^resource.Mesh, world: ^standards.WorldComponent, cam: ^cam.Camera) -> (model: glm.mat4, normal: glm.mat3) {
