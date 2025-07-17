@@ -10,6 +10,6 @@ void main() {
     if (colour.a < 0.05) {
         discard;
     }
-
+    colour = vec4(0.0, 0.9, 0.0, 1.0);
     Colour = colour;
 }

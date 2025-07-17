@@ -29,7 +29,7 @@ MeshAttributeInfo :: struct {
     element_type: MeshElementType,  // Describes the direct datatype of each element (vec2, vec3 etc)
     data_type: MeshComponentType,
     byte_stride: u32,  // Describes attribute length in bytes
-    float_stride: u32,  // Describes attribute length in number of floats (f32) (byte_stride / 8)
+    float_stride: u32,  // Describes attribute length in number of floats (f32) (byte_stride / 4)
     name: string
 }
 
@@ -96,20 +96,21 @@ ElementBufferObject :: Maybe(u32)
 destroy_mesh :: proc(mesh: ^Mesh) {
     delete(mesh.vertex_data)
     delete(mesh.index_data)
+    for attr_info in mesh.layout do delete(attr_info.name)
     delete(mesh.layout)
 }
 
 // Does not transfer
-texture_from_path :: proc(manager: ^ResourceManager, name: string, path: string, path_base: string = "") -> (id: TextureID, ok: bool) {
+texture_from_path :: proc(manager: ^ResourceManager, name: string, path: string, path_base: string = "", flip_image := false) -> (id: TextureID, ok: bool) {
     texture: Texture
-    texture.image = load_image_from_uri(path, path_base) or_return
+    texture.image = load_image_from_uri(path, path_base, flip_image) or_return
     texture.name = strings.clone(name)
     return add_texture_to_manager(manager, texture), true
 }
 
 // Does not transfer
 create_billboard_model_from_path :: proc(manager: ^ResourceManager, texture_name: string, texture_path: string, texture_path_base: string = "") -> (model: Model, ok: bool) {
-    texture_id := texture_from_path(manager, texture_name, texture_path, texture_path_base) or_return
+    texture_id := texture_from_path(manager, texture_name, texture_path, texture_path_base, flip_image = true) or_return
     return create_billboard_model_from_id(manager, texture_id)
 }
 
@@ -122,16 +123,9 @@ create_billboard_model_from_id :: proc(manager: ^ResourceManager, texture: Textu
     }
 
     model.meshes = make([dynamic]Mesh, 1)
-    billboard_mesh: Mesh
-    billboard_mesh.is_billboard = true
-    billboard_mesh.vertex_data = make(VertexData)
-    billboard_mesh.index_data = make(IndexData)
 
-    vertices, indices := standards.primitive_square_mesh_data()
-    append_elems(&billboard_mesh.vertex_data, ..vertices[:])
-    append_elems(&billboard_mesh.index_data, ..indices[:])
-    billboard_mesh.vertices_count = len(vertices)
-    billboard_mesh.indices_count = len(indices)
+    billboard_mesh := primitive_square_mesh_data()
+    billboard_mesh.is_billboard = true
 
     material: Material
     material.lighting_shader = get_billboard_lighting_shader(manager) or_return
@@ -145,6 +139,35 @@ create_billboard_model_from_id :: proc(manager: ^ResourceManager, texture: Textu
     ok = true
     return
 }
+
+// Primitive meshes
+
+// Does not give a material
+primitive_square_mesh_data :: proc() -> (mesh: Mesh) {
+    mesh.vertex_data = make(VertexData)
+    mesh.index_data = make(IndexData)
+    append_elems(&mesh.vertex_data,
+        -1, 1, 0,  0.0, 1.0,
+        1, 1, 0,  1.0, 1.0,
+        -1, -1, 0,  0.0, 0.0,
+        1, -1, 0,  1.0, 0.0
+    )
+    append_elems(&mesh.index_data,
+        0, 1, 2,
+        2, 1, 3
+    )
+    mesh.vertices_count = len(mesh.vertex_data)
+    mesh.indices_count = len(mesh.index_data)
+    mesh.layout = make(#soa[dynamic]MeshAttributeInfo)
+    append_soa_elems(&mesh.layout,
+        MeshAttributeInfo{ .position, .vec3, .f32, 12, 3, strings.clone("aPosition")},
+        MeshAttributeInfo{ .texcoord, .vec2, .f32, 8, 2, strings.clone("aTexCoords")}
+    )
+
+    return
+}
+
+//
 
 
 // Textures and materials
@@ -319,7 +342,6 @@ Image :: struct {
 }
 
 texture_from_cgltf_texture :: proc(texture: ^cgltf.texture, gltf_file_location: string) -> (result: Texture, ok: bool) {
-    //log.infof("cgltf texture: %#v", texture)
     if texture == nil do return result, true
     return Texture {
         strings.clone_from_cstring(texture.name),
@@ -344,6 +366,7 @@ load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: str
     }
 
     // Use buffer
+    // todo not tested, mimeType MUST be used via spec
     image_buffer: [^]byte = transmute([^]byte)(uintptr(image.buffer_view.buffer.data) + uintptr(image.buffer_view.offset))
     result.pixel_data = stbi.load_from_memory(image_buffer, i32(image.buffer_view.size), &result.w, &result.h, &result.channels, 0)
     if result.pixel_data == nil {
@@ -357,9 +380,12 @@ load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: str
 
 // Does not assert validity of uri
 @(private)
-load_image_from_uri :: proc(uri: string, uri_base: string = "") -> (result: Image, ok: bool) {
+load_image_from_uri :: proc(uri: string, uri_base: string = "", flip_image := false) -> (result: Image, ok: bool) {
     path := len(uri_base) == 0 ? strings.clone(uri) : utils.concat(uri_base, uri); defer delete(path)
     path_cstr := strings.clone_to_cstring(path); defer delete(path_cstr)
+
+    if flip_image do stbi.set_flip_vertically_on_load(1)
+    defer if flip_image do stbi.set_flip_vertically_on_load(0)
 
     result.pixel_data = stbi.load(path_cstr, &result.w, &result.h, &result.channels, 4)
     if result.pixel_data == nil {
@@ -402,7 +428,7 @@ Light :: union {
 
 make_light_billboard :: proc(manager: ^ResourceManager) -> (model: Model, ok: bool) {
     if manager.billboard_id == nil {
-        manager.billboard_id = texture_from_path(manager, "light_billboard", "light.png", standards.TEXTURE_RESOURCE_PATH) or_return
+        manager.billboard_id = texture_from_path(manager, "light_billboard", "light.png", standards.TEXTURE_RESOURCE_PATH, flip_image = true) or_return
         if manager.billboard_id == nil {
             dbg.debug_point(dbg.LogLevel.ERROR, "texture_from_path returned nil id")
             return

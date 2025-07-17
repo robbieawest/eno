@@ -7,7 +7,7 @@ import "../utils"
 import dbg "../debug"
 import "../standards"
 import lutils "../utils/linalg_utils"
-import "../camera"
+import cam "../camera"
 
 import "core:strings"
 import "core:fmt"
@@ -129,7 +129,8 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
             lighting_shader := resource.get_shader(manager, material.lighting_shader.?)
 
             if lighting_shader.id == nil {
-                dbg.debug_point(dbg.LogLevel.ERROR, "Lighting shader is not yet compiled/transferred")
+                dbg.debug_point(dbg.LogLevel.INFO, "Compiling and transferring lighting shader in render")
+                transfer_shader(lighting_shader) or_return
                 return
             }
 
@@ -139,8 +140,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
             update_lights_ssbo(scene) or_return
 
             for &mesh_pair in mesh_pairs {
-                model_mat := standards.model_from_world_component(mesh_pair.world_comp^)
-                normal_mat := lutils.normal_mat(model_mat)
+                model_mat, normal_mat := model_and_normal(mesh_pair.mesh, mesh_pair.world_comp, scene.viewpoint)
                 transfer_mesh(mesh_pair.mesh) or_return
 
                 shader.set_uniform(lighting_shader, standards.MODEL_MAT, model_mat)
@@ -155,6 +155,45 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
     }
 
     return true
+}
+
+
+apply_billboard_rotation :: proc(cam_position: glm.vec3, world: standards.WorldComponent, cylindrical := true) -> standards.WorldComponent {
+    start := glm.vec3{ 0.0, 0.0, -1.0 }
+    dest := glm.normalize(cam_position - world.position)
+
+    if cylindrical do dest.y = 0.0
+
+    dot := glm.dot(start, dest)
+    angle := glm.acos(dot)
+
+    /*
+    if dot > 0.999 {
+        return { world.position, world.scale, 1.0 }
+    }
+    else if dot < -0.999 {
+        axis := glm.vec3{ 0.0, 1.0, 0.0 }
+        quat := glm.quatAxisAngle(glm.normalize(glm.cross(start, axis)), glm.PI)
+        return { world.position, world.scale, quat }
+    }
+    */
+
+    axis := glm.normalize(glm.cross(start, dest))
+
+
+    /*
+    world := world
+    world.rotation = glm.quatFromMat4(glm.mat4LookAt(glm.vec3{ 0.0, 0.0, 1.0 }, world.position - cam_position, glm.vec3{0.0, 1.0, 0.0} ))
+    */
+
+    return { world.position, world.scale, glm.quatAxisAngle(axis, angle) }
+}
+
+model_and_normal :: proc(mesh: ^resource.Mesh, world: ^standards.WorldComponent, cam: ^cam.Camera) -> (model: glm.mat4, normal: glm.mat3) {
+    world_comp := mesh.is_billboard ? apply_billboard_rotation(cam.position, world^) : world^
+    model = standards.model_from_world_component(world_comp)
+    normal = lutils.normal_mat(model)
+    return
 }
 
 /*
@@ -247,7 +286,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
         }
     }
 
-    shader.set_uniform(lighting_shader, resource.MATERIAL_INFOS, transmute(u32)infos)
+    // shader.set_uniform(lighting_shader, resource.MATERIAL_INFOS, transmute(u32)infos)
     return true
 }
 
@@ -271,8 +310,8 @@ update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
     camera_buffer_data := CameraBufferData {
         viewpoint.position,
         0,
-        camera.camera_look_at(viewpoint),
-        camera.get_perspective(viewpoint)
+        cam.camera_look_at(viewpoint),
+        cam.get_perspective(viewpoint)
     }
 
     if RENDER_CONTEXT.camera_ubo == nil {
@@ -483,6 +522,7 @@ create_forward_lighting_shader :: proc(
     vertex_source := make([dynamic]string)
     defer shader.destroy_function_source(vertex_source[:])
 
+    /*
     // Add shader input/output for both vertex and fragment
     for attribute_info in attribute_infos {
         input_pair := shader.GLSLPair{ glsl_type_from_attribute(attribute_info) or_return, attribute_info.name}
@@ -551,6 +591,7 @@ create_forward_lighting_shader :: proc(
 
     if inc_occlusion_texture do append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, resource.OCCLUSION_TEXTURE })
 
+    */
 
 
     ok = true
@@ -560,4 +601,3 @@ create_forward_lighting_shader :: proc(
 MODEL_MATRIX_UNIFORM :: "m_Model"
 VIEW_MATRIX_UNIFORM :: "m_View"
 PROJECTION_MATRIX_UNIFORM :: "m_Projection"
-NORMAL_MATRIX_UNIFORM :: "m_Normal"

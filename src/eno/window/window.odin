@@ -40,6 +40,10 @@ initialize_window :: proc(width, height: i32, window_tag: string, extra_params: 
     }
 
     SDL.CreateRenderer(window, -1, SDL.RENDERER_ACCELERATED)
+    if (SDL.GL_SetSwapInterval(1) < 0) {
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not set VSYNC to on")
+        return
+    }
 
 	if window == nil {
         dbg.debug_point(dbg.LogLevel.ERROR, "Could not initialize SDL window")

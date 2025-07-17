@@ -29,7 +29,7 @@ DEFAULT_FOV: f32 : 45
 DEFAULT_ASPECT : f32 : 1.77
 DEFAULT_NEAR_PLANE : f32: 0.1
 DEFAULT_FAR_PLANE : f32: 100.0
-DEFAULT_MOVSPD : f32 : 1.0
+DEFAULT_MOVSPD : f32 : 0.00001
 DEFAULT_MOVAMP : [3]f32 : { 1.0, 1.0, 1.0 }
 DEFAULT_PITCH : f32 : 0.0
 DEFAULT_YAW : f32 : 0.0
@@ -74,14 +74,14 @@ get_camera_perspective :: proc(camera: ^Camera) -> glm.mat4 {
 }
 
 
-move :: proc(camera: ^Camera, direction: [3]f32) {
+move :: proc(camera: ^Camera, direction: [3]f32, dt: i64) {
     assert(camera != nil)
-    camera.position += apply_movement_modulation(camera, direction)
+    camera.position += apply_movement_modulation(camera, direction, dt)
 }
 
-move_unmodulated :: proc(camera: ^Camera, direction: [3]f32) {
+move_unmodulated :: proc(camera: ^Camera, direction: [3]f32, dt: i64) {
     assert(camera != nil)
-    camera.position += direction
+    camera.position += direction * f32(dt)
 }
 
 /*
@@ -89,7 +89,7 @@ move_unmodulated :: proc(camera: ^Camera, direction: [3]f32) {
     Used for keyboard controls for example
     May be buggy for values which are not normalized or are not WASD directions
 */
-move_with_yaw :: proc(camera: ^Camera, direction: [3]f32) {
+move_with_yaw :: proc(camera: ^Camera, direction: [3]f32, dt: i64) {
     assert(camera != nil)
 
      direction_without_y := [3]f32{ direction[0], 0.0, direction[2] }
@@ -102,7 +102,7 @@ move_with_yaw :: proc(camera: ^Camera, direction: [3]f32) {
     new_direction_angle := angle_from_default_towards + glm.radians(camera.yaw)
     new_direction := [3]f32{ length * glm.cos(new_direction_angle),  direction[1], length * glm.sin(new_direction_angle) }
 
-    move(camera, new_direction)
+    move(camera, new_direction, dt)
 }
 
 MOVE_SPEED_SCALING :: 0.00025
@@ -110,7 +110,7 @@ MOVE_SPEED_SCALING :: 0.00025
     camera unchecked
 */
 @(private)
-apply_movement_modulation :: proc(camera: ^Camera, direction: [3]f32) -> [3]f32 {
-    vec := direction * camera.move_speed * MOVE_SPEED_SCALING
+apply_movement_modulation :: proc(camera: ^Camera, direction: [3]f32, dt: i64) -> [3]f32 {
+    vec := direction * camera.move_speed * MOVE_SPEED_SCALING * f32(dt)
     return { camera.move_amp.x * vec.x, camera.move_amp.y * vec.y, camera.move_amp.z * vec.z }
 }

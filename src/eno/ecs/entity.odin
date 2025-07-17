@@ -128,9 +128,7 @@ archetype_get_component_data :: proc(archetype: ^Archetype, component_label: str
 @(private)
 archetype_get_entity_data :: proc(archetype: ^Archetype) -> (result: [dynamic][dynamic][dynamic]byte) {
     result = make([dynamic][dynamic][dynamic]byte, len(archetype.components))
-    log.infof("getting data for archetype: %s %v", archetype.label, archetype.components_label_match)
     for i in 0..<len(archetype.components) {
-        log.infof("reading component %d", i)
         comp_data := archetype.components[i]
         comp_size := int(archetype.component_info.component_infos[i].size)
 

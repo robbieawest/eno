@@ -7,7 +7,6 @@ import "core:log"
 import "core:testing"
 
 main :: proc() {
-
     context.logger = log.create_console_logger()
     log.info("Starting Demo")
 

@@ -71,6 +71,11 @@ run_game :: proc() {
 
         Game.meta_data.last_delta = time.now()._nsec - t_before_frame
         update_metadata_elapsed(&Game.meta_data)
+
+        // Ensure maximum frame rate
+        //sleep_nanos := (1 / 60) * 1e9 - (time.now()._nsec - t_before_frame)
+        //time.sleep(time.Duration(sleep_nanos))
+        //time.sleep(1e7)
     }
 
 }
@@ -153,32 +158,32 @@ HOOKS_CAMERA_MOVEMENT :: proc() -> (hooks: control.Hooks) {
     append_elems(&hooks,
         control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .W }),
-            proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, 0.0, -1.0 }) },
+            proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, 0.0, -1.0 }, Game.meta_data.last_delta) },
             viewpoint
         ),
         control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .A }),
-            proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ -1.0, 0.0, 0.0 }) },
+            proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ -1.0, 0.0, 0.0 }, Game.meta_data.last_delta) },
             viewpoint
         ),
         control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .S }),
-            proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, 0.0, 1.0 }) },
+            proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, 0.0, 1.0 }, Game.meta_data.last_delta) },
             viewpoint
         ),
         control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .D }),
-            proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 1.0, 0.0, 0.0 }) },
+            proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 1.0, 0.0, 0.0 }, Game.meta_data.last_delta) },
             viewpoint
         ),
         control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .SPACE }),
-            proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, 1.0, 0.0 }) },
+            proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, 1.0, 0.0 }, Game.meta_data.last_delta) },
             viewpoint
         ),
         control.make_hook(
             control.make_hook_identifier(key_states = []SDL.Scancode{ .LCTRL }),
-            proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, -1.0, 0.0 }) },
+            proc(_: ^SDL.Event, cam_data: rawptr) { camera.move_with_yaw(cast(^camera.Camera)cam_data, glm.vec3{ 0.0, -1.0, 0.0 }, Game.meta_data.last_delta) },
             viewpoint
         ),
     )

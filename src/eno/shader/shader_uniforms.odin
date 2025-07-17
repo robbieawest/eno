@@ -34,7 +34,7 @@ get_uniform_location :: proc(program: ^ShaderProgram, label: string) -> (locatio
     // Not found in cache
     location, ok = get_uniform_location_without_cache(program, label)
     if !ok {
-        // dbg.debug_point(dbg.LogLevel.ERROR, "Could not get uniform location \"%s\"", label)
+        dbg.debug_point(dbg.LogLevel.ERROR, "Could not get uniform location \"%s\"", label)
         return
     }
 
