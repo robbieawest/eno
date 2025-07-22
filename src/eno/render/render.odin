@@ -55,9 +55,9 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
         for comp_label, comp_ind in arch_result.component_map {
             switch comp_label {
             case resource.MODEL_COMPONENT.label:
-                models = ecs.components_deserialize_raw(resource.Model, arch_result.data[comp_ind])
+                models = ecs.components_deserialize_raw(resource.Model, arch_result.data[comp_ind]) or_return
             case standards.WORLD_COMPONENT.label:
-                world_comps = ecs.components_deserialize_raw(standards.WorldComponent, arch_result.data[comp_ind])
+                world_comps = ecs.components_deserialize_raw(standards.WorldComponent, arch_result.data[comp_ind]) or_return
             }
         }
 
@@ -397,7 +397,7 @@ update_lights_ssbo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
     }}
     query_result := ecs.query_scene(scene, query) or_return
 
-    lights := ecs.get_component_from_query_result(query_result, resource.Light, resource.LIGHT_COMPONENT.label)
+    lights := ecs.get_component_from_query_result(query_result, resource.Light, resource.LIGHT_COMPONENT.label) or_return
     defer delete(lights)
 
     spot_lights := make([dynamic]^resource.SpotLight)

@@ -41,7 +41,7 @@ serialize_test :: proc(t: ^testing.T) {
     log.infof("out f1: %f, f2: %f", out_f1, out_f2)
 
     // test deserialization
-    deserialize_ret := component_deserialize(TestPositionComponent, comp)
+    deserialize_ret, _ := component_deserialize(TestPositionComponent, comp)
     log.infof("deserialize ret: %#v", deserialize_ret)
    
     // extract data from any type
@@ -69,7 +69,7 @@ serialize_many_test :: proc(t: ^testing.T) {
     log.infof("serialize many ret: %#v", serialize_ret)
    
     expected := []TestPositionComponent{component, component1, component2}
-    deserialize_many_ret := components_deserialize(TestPositionComponent, ..serialize_ret)
+    deserialize_many_ret, _ := components_deserialize(TestPositionComponent, ..serialize_ret)
     defer {
         for ret in deserialize_many_ret {
             free(ret.data)

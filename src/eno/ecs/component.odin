@@ -82,41 +82,55 @@ components_serialize :: proc(allocator := context.allocator, $T: typeid, input: 
 }
 
 
-component_deserialize_raw :: proc($T: typeid, bytearr: []byte, copy := false) -> (out: ^T) {
+component_deserialize_raw :: proc($T: typeid, bytearr: []byte, copy := false, loc := #caller_location) -> (out: ^T, ok: bool) {
+    if len(bytearr) != type_info_of(T).size {
+        dbg.log(.ERROR, "Size of component type does not match given data", loc=loc)
+        return
+    }
+
     new_data: ^T = cast(^T)raw_data(bytearr)
     if copy do mem.copy(out, new_data, size_of(T))
     else do out = new_data
+
+    ok = true
     return
 }
 
-component_deserialize:: proc($T: typeid, component: ECSComponentData, copy := false) -> (component_data: ComponentData(T)) {
-    data: ^T = component_deserialize_raw(T, component.data)
+component_deserialize :: proc($T: typeid, component: ECSComponentData, copy := false, loc := #caller_location) -> (component_data: ComponentData(T), ok: bool) {
+    data: ^T = component_deserialize_raw(T, component.data, copy, loc) or_return
     component_data = ComponentData(T){ label = component.label, data = data }
+
+    ok = true
     return
 }
 
 components_deserialize_raw :: proc{ components_deserialize_raw_slice, components_deserialize_raw_dyna }
 
-components_deserialize_raw_slice :: proc($T: typeid, components_data: [][]byte, copy := false) -> (ret: []^T) {
+components_deserialize_raw_slice :: proc($T: typeid, components_data: [][]byte, copy := false, loc := #caller_location) -> (ret: []^T, ok: bool) {
     ret = make([]^T, 0, len(components_data))
-    for comp_data in components_data do append(&ret, component_deserialize_raw(T, comp_data, copy))
+    for comp_data in components_data do append(&ret, component_deserialize_raw(T, comp_data, copy, loc) or_return)
+
+    ok = true
     return
 }
 
-components_deserialize_raw_dyna :: proc($T: typeid, components_data: [dynamic][dynamic]byte, copy := false) -> (ret: []^T) {
+components_deserialize_raw_dyna :: proc($T: typeid, components_data: [dynamic][dynamic]byte, copy := false, loc := #caller_location) -> (ret: []^T, ok: bool) {
     ret = make([]^T, len(components_data))
-    for comp_data, i in components_data do ret[i] = component_deserialize_raw(T, comp_data[:], copy)
+    for comp_data, i in components_data do ret[i] = component_deserialize_raw(T, comp_data[:], copy, loc) or_return
+
+    ok = true
     return
 }
 
 
-components_deserialize :: proc($T: typeid, components_data: ..ECSComponentData, copy := false) -> (ret: []ComponentData(T)) {
+components_deserialize :: proc($T: typeid, components_data: ..ECSComponentData, copy := false, loc := #caller_location) -> (ret: []ComponentData(T), ok: bool) {
     ret = make([]ComponentData(T), len(components_data))
 
     for i := 0; i < len(components_data); i += 1 {
-        ret[i] = component_deserialize(T, components_data[i])
+        ret[i] = component_deserialize(T, components_data[i], copy, loc) or_return
     }
 
+    ok = true
     return
 }
 

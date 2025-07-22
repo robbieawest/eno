@@ -40,17 +40,17 @@ ArchetypeQueryResult :: struct {
 }
 
 // Returns flat component data of the single component
-get_component_from_query_result :: proc(result: SceneQueryResult, $T: typeid, comp_label: string) -> (flat_result: []^T) {
+get_component_from_query_result :: proc(result: SceneQueryResult, $T: typeid, comp_label: string) -> (flat_result: []^T, ok: bool) {
     result_dyna := make([dynamic]^T)
     for _, &arch_res in result {
         comp_ind, comp_ok := arch_res.component_map[comp_label]
         if !comp_ok do continue
 
         comp_data := arch_res.data[comp_ind]
-        for &ent_data in comp_data do append(&result_dyna, component_deserialize_raw(T, ent_data[:]))
+        for &ent_data in comp_data do append(&result_dyna, component_deserialize_raw(T, ent_data[:]) or_return)
     }
 
-    return result_dyna[:]
+    return result_dyna[:], true
 }
 
 

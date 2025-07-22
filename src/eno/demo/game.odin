@@ -94,8 +94,8 @@ set_light_position :: proc() -> (ok: bool) {
     }}
     query_result := ecs.query_scene(game.Game.scene, query) or_return
 
-    lights := ecs.get_component_from_query_result(query_result, resource.Light, resource.LIGHT_COMPONENT.label)
-    worlds := ecs.get_component_from_query_result(query_result, standards.WorldComponent, standards.WORLD_COMPONENT.label)
+    lights := ecs.get_component_from_query_result(query_result, resource.Light, resource.LIGHT_COMPONENT.label) or_return
+    worlds := ecs.get_component_from_query_result(query_result, standards.WorldComponent, standards.WORLD_COMPONENT.label) or_return
     defer { delete(lights); delete(worlds) }
 
     light := &lights[0].(resource.PointLight)
