@@ -58,7 +58,7 @@ serialize_many_test :: proc(t: ^testing.T) {
     component1 := TestPositionComponent{ 0.32, 59.81 }; p_Component1 := &component1
     component2 := TestPositionComponent{ -0.32, 159.81 }; p_Component2 := &component2
 
-    serialize_ret: []ECSComponentData = components_serialize(context.allocator, TestPositionComponent,
+    serialize_ret: []ECSComponentData = components_serialize(TestPositionComponent,
         ComponentData(TestPositionComponent) { "component 0", p_Component },
         ComponentData(TestPositionComponent) { "component 1", p_Component1 },
         ComponentData(TestPositionComponent) { "component 2", p_Component2 },

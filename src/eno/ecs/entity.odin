@@ -117,8 +117,8 @@ scene_get_archetype :: proc(scene: ^Scene, archetype_label: string) -> (archetyp
     Why does this return [dynamic] instead of slice? No clue
 */
 @(private)
-archetype_get_entity_data :: proc(archetype: ^Archetype) -> (result: [dynamic][dynamic][dynamic]byte, ok: bool) {
-    result = make([dynamic][dynamic][dynamic]byte, len(archetype.components))
+archetype_get_entity_data :: proc(archetype: ^Archetype, allocator := context.allocator) -> (result: [dynamic][dynamic][dynamic]byte, ok: bool) {
+    result = make([dynamic][dynamic][dynamic]byte, len(archetype.components), allocator)
     for i in 0..<len(archetype.components) {
         comp_data := archetype.components[i]
         comp_size := int(archetype.component_info.component_infos[i].size)

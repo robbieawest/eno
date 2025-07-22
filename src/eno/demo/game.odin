@@ -28,6 +28,7 @@ every_frame :: proc() -> (ok: bool) {
 
     // Swap
     ok = win.swap_window_bufs(game.Game.window); if !ok do log.errorf("could not swap bufs")
+    free_all(context.temp_allocator)
     return
 }
 
@@ -93,11 +94,9 @@ set_light_position :: proc() -> (ok: bool) {
         { label = standards.VISIBLE_COMPONENT.label, action = .QUERY_NO_INCLUDE, data = &isVisibleQueryData }
     }}
     query_result := ecs.query_scene(game.Game.scene, query) or_return
-    defer ecs.destroy_scene_query_result(query_result)
 
     lights := ecs.get_component_from_query_result(query_result, resource.Light, resource.LIGHT_COMPONENT.label) or_return
     worlds := ecs.get_component_from_query_result(query_result, standards.WorldComponent, standards.WORLD_COMPONENT.label) or_return
-    defer { delete(lights); delete(worlds) }
 
     light := &lights[0].(resource.PointLight)
     time_seconds := f64(game.Game.meta_data.time_elapsed) / 1.0e9

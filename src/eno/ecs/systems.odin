@@ -41,8 +41,8 @@ ArchetypeQueryResult :: struct {
 }
 
 // Returns flat component data of the single component
-get_component_from_query_result :: proc(result: SceneQueryResult, $T: typeid, comp_label: string) -> (flat_result: []^T, ok: bool) {
-    result_dyna := make([dynamic]^T)
+get_component_from_query_result :: proc(result: SceneQueryResult, $T: typeid, comp_label: string, allocator := context.temp_allocator) -> (flat_result: []^T, ok: bool) {
+    result_dyna := make([dynamic]^T, allocator)
     for _, &arch_res in result {
         comp_ind, comp_ok := arch_res.component_map[comp_label]
         if !comp_ok do continue
@@ -73,13 +73,13 @@ destroy_archetype_query_result :: proc(result: ArchetypeQueryResult) {
     delete(result.data)
 }
 
-
-query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResult, ok: bool) {
-    result = make(SceneQueryResult)
+// Defaults to temp allocator
+query_scene :: proc(scene: ^Scene, query: SceneQuery, allocator := context.temp_allocator) -> (result: SceneQueryResult, ok: bool) {
+    result = make(SceneQueryResult, allocator=allocator)
     switch v in query {
         case ArchetypeQuery:
             for label, ind in scene.archetype_label_match {
-                result[strings.clone(label)] = query_archetype(&scene.archetypes[ind], v) or_return
+                result[strings.clone(label, allocator=allocator)] = query_archetype(&scene.archetypes[ind], v, allocator) or_return
             }
         case map[string]ArchetypeQuery:
             for archetype_label, archetype_query in v {
@@ -88,7 +88,7 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResu
                     dbg.log(dbg.LogLevel.ERROR, "Archetype label %s does not map to an existing archetype", archetype_label)
                     return
                 }
-                result[strings.clone(archetype_label)] = query_archetype(archetype, archetype_query) or_return
+                result[strings.clone(archetype_label, allocator=allocator)] = query_archetype(archetype, archetype_query, allocator) or_return
             }
     }
 
@@ -96,7 +96,7 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResu
     return
 }
 
-query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result: ArchetypeQueryResult, ok: bool) {
+query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, allocator := context.temp_allocator) -> (result: ArchetypeQueryResult, ok: bool) {
     for component_query in query.components {
         if (component_query.action == .QUERY_AND_INCLUDE || component_query.action == .QUERY_NO_INCLUDE) &&
             component_query.label not_in archetype.components_label_match {
@@ -104,11 +104,11 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
         }
     }
 
-    result.data = archetype_get_entity_data(archetype) or_return
-    result.component_map = utils.copy_map(archetype.components_label_match)
-    result.entity_map = utils.copy_map(archetype.entities)
+    result.data = archetype_get_entity_data(archetype, allocator) or_return
+    result.component_map = utils.copy_map(archetype.components_label_match, allocator)
+    result.entity_map = utils.copy_map(archetype.entities, allocator)
 
-    entity_index_to_label_map := make(map[u32]string, len(result.entity_map))
+    entity_index_to_label_map := make(map[u32]string, len(result.entity_map), allocator=allocator)
     for label, entity in result.entity_map do entity_index_to_label_map[entity.archetype_column] = label
 
     if len(query.components) == 0 && len(query.entities) == 0 do return
@@ -116,7 +116,8 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
     // Filter result
     entities_to_be_filtered := make([dynamic]Entity)
 
-    component_remove_map := make(map[string]bool, archetype.n_Components)
+    component_remove_map := make(map[string]bool, archetype.n_Components, allocator)
+    defer delete(component_remove_map)
 
     for component_query in query.components {
         comp_ind, comp_ok := archetype.components_label_match[component_query.label]
