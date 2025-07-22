@@ -111,22 +111,13 @@ scene_get_archetype :: proc(scene: ^Scene, archetype_label: string) -> (archetyp
     return &scene.archetypes[archetype_index], true
 }
 
-// Unchecked component_label, should really not use unless it is already verified
-archetype_get_component_data :: proc(archetype: ^Archetype, component_label: string, m: u32, n: u32) -> (component_data: []byte) {
-    
-    component_index := archetype.components_label_match[component_label]
-
-    comp_data: ^[dynamic]byte = &archetype.components[component_index]
-    return comp_data[m:min(n, u32(len(comp_data)))]
-}
-
 /*
     Return all archetype data but instead split by specific entity parts
     This form is very workable, and is used in querying
     Why does this return [dynamic] instead of slice? No clue
 */
 @(private)
-archetype_get_entity_data :: proc(archetype: ^Archetype) -> (result: [dynamic][dynamic][dynamic]byte) {
+archetype_get_entity_data :: proc(archetype: ^Archetype) -> (result: [dynamic][dynamic][dynamic]byte, ok: bool) {
     result = make([dynamic][dynamic][dynamic]byte, len(archetype.components))
     for i in 0..<len(archetype.components) {
         comp_data := archetype.components[i]
@@ -135,9 +126,13 @@ archetype_get_entity_data :: proc(archetype: ^Archetype) -> (result: [dynamic][d
         result[i] = make([dynamic][dynamic]byte, archetype.n_Entities)
         for j in 0..<int(archetype.n_Entities) {
             individual_component_start := j * comp_size
-            result[i][j] = utils.slice_to_dynamic(comp_data[individual_component_start:individual_component_start + comp_size])
+
+            comp_res := utils.safe_slice(comp_data, individual_component_start, individual_component_start + comp_size) or_return
+            result[i][j] = utils.slice_to_dynamic(comp_res)
         }
     }
+
+    ok = true
     return
 }
 

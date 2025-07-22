@@ -71,7 +71,7 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResu
     switch v in query {
         case ArchetypeQuery:
             for label, ind in scene.archetype_label_match {
-                result[label] = query_archetype(&scene.archetypes[ind], v)
+                result[label] = query_archetype(&scene.archetypes[ind], v) or_return
             }
         case map[string]ArchetypeQuery:
             for archetype_label, archetype_query in v {
@@ -80,7 +80,7 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResu
                     dbg.log(dbg.LogLevel.ERROR, "Archetype label %s does not map to an existing archetype", archetype_label)
                     return
                 }
-                query_archetype(archetype, archetype_query)
+                query_archetype(archetype, archetype_query) or_return
             }
     }
 
@@ -88,22 +88,22 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResu
     return
 }
 
-query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result: ArchetypeQueryResult) {
+query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result: ArchetypeQueryResult, ok: bool) {
     for component_query in query.components {
         if (component_query.action == .QUERY_AND_INCLUDE || component_query.action == .QUERY_NO_INCLUDE) &&
             component_query.label not_in archetype.components_label_match {
-            return {} // Skip archetype
+            return {}, true // Skip archetype
         }
     }
 
-    result.data = archetype_get_entity_data(archetype)
+    result.data = archetype_get_entity_data(archetype) or_return
     result.component_map = utils.copy_map(archetype.components_label_match)
     result.entity_map = utils.copy_map(archetype.entities)
 
     entity_index_to_label_map := make(map[u32]string, len(result.entity_map))
     for label, entity in result.entity_map do entity_index_to_label_map[entity.archetype_column] = label
 
-    if len(query.components) == 0 && len(query.entities) == 0 do return result
+    if len(query.components) == 0 && len(query.entities) == 0 do return
 
     // Filter result
     entities_to_be_filtered := make([dynamic]Entity)
@@ -159,6 +159,7 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery) -> (result
         last_column = int(entity.archetype_column)
     }
 
+    ok = true
     return
 }
 

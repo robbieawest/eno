@@ -135,11 +135,11 @@ query_archetype_test :: proc(t: ^testing.T) {
 
     isVisibleQueryData := true
     query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
-        { label = resource.MODEL_COMPONENT.label, include = true },
-        { label = standards.WORLD_COMPONENT.label, include = true },
-        { label = standards.VISIBLE_COMPONENT.label, data = &isVisibleQueryData }
+        { label = resource.MODEL_COMPONENT.label, action = .QUERY_AND_INCLUDE },
+        { label = standards.WORLD_COMPONENT.label, action = .QUERY_AND_INCLUDE },
+        { label = standards.VISIBLE_COMPONENT.label, action = .QUERY_NO_INCLUDE, data = &isVisibleQueryData }
     }}
-    query_result := ecs.query_archetype(arch, query)
+    query_result, _ := ecs.query_archetype(arch, query)
 
     log.infof("query result: %#v", query_result)
 }
