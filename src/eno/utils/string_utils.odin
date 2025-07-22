@@ -186,7 +186,7 @@ regex_match_no_flags :: proc(grammar: string, pattern: string) -> (matched: bool
 regex_match_flags :: proc(grammar: string, pattern: string, flags: regex.Flags) -> (matched: bool) {
     expression, err := regex.create(pattern, { .No_Capture })
     if err != nil {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not create regex match iterator, defaulting to no match")
+        dbg.log(.ERROR, "Could not create regex match iterator, defaulting to no match")
         return
     }
 

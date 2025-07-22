@@ -21,9 +21,9 @@ cache_checked_uniform_get :: proc(program: ^ShaderProgram, label: string) -> (lo
 
 
 get_uniform_location :: proc(program: ^ShaderProgram, label: string) -> (location: i32 , ok: bool) {
-    dbg.debug_point()
+    dbg.log()
     if program.id == nil {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not get uniform, program is not yet expressed")
+        dbg.log(.ERROR, "Could not get uniform, program is not yet expressed")
         return
     }
 
@@ -34,7 +34,7 @@ get_uniform_location :: proc(program: ^ShaderProgram, label: string) -> (locatio
     // Not found in cache
     location, ok = get_uniform_location_without_cache(program, label)
     if !ok {
-        // dbg.debug_point(dbg.LogLevel.ERROR, "Could not get uniform location \"%s\"", label)
+        // dbg.debug_point(.ERROR, "Could not get uniform location \"%s\"", label)
         return
     }
 
@@ -47,7 +47,7 @@ get_uniform_location :: proc(program: ^ShaderProgram, label: string) -> (locatio
 get_uniform_location_without_cache :: proc(program: ^ShaderProgram, label: string) -> (location: UniformLocation, ok: bool) {
 
     if program.id == nil {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Shader program not yet created")
+        dbg.log(.ERROR, "Shader program not yet created")
         return
     }
 
@@ -64,13 +64,13 @@ get_uniform_location_without_cache :: proc(program: ^ShaderProgram, label: strin
 register_uniform :: proc(program: ^ShaderProgram, label: string) -> (ok: bool) {
 
     if _, uniform_is_cached := cache_checked_uniform_get(program, label); uniform_is_cached {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Uniform \"%s\" already exists")
+        dbg.log(.ERROR, "Uniform \"%s\" already exists")
         return
     }
 
     location: UniformLocation; location, ok = get_uniform_location_without_cache(program, label)
     if !ok {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not get uniform location \"%s\"", label)
+        dbg.log(.ERROR, "Could not get uniform location \"%s\"", label)
         return
     }
 
@@ -185,11 +185,11 @@ set_vector_uniform :: proc(
     where  T == i32 || T == u32 || T == f32 || T == f64
 {
     if len(args) % count != 0 {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Number of args must be divisible by count")
+        dbg.log(.ERROR, "Number of args must be divisible by count")
         return
     }
 
-    invalid :: proc() -> bool { dbg.debug_point(dbg.LogLevel.ERROR, "Combination of args and count is invalid. num_args: %d, count: %d", len(args), count); return }
+    invalid :: proc() -> bool { dbg.log(.ERROR, "Combination of args and count is invalid. num_args: %d, count: %d", len(args), count); return }
 
     location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
     switch T {

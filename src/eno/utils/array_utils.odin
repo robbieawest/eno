@@ -52,12 +52,12 @@ remove_from_dynamic :: proc(arr: ^$T/[dynamic]$E, indices: ..int) -> (ok: bool) 
 
     for index, j in indices {
         if sorted_check_duplicate(indices, j) {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Index %d is a duplicate, ignoring", index)
+            dbg.log(.ERROR, "Index %d is a duplicate, ignoring", index)
             continue
         }
 
         if !index_in_bounds(index, len(arr)) {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Index %d is out of range of length %d", index, len(arr))
+            dbg.log(.ERROR, "Index %d is out of range of length %d", index, len(arr))
             return
         }
 

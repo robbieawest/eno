@@ -77,7 +77,7 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResu
             for archetype_label, archetype_query in v {
                 archetype, archetype_exists := scene_get_archetype(scene, archetype_label)
                 if !archetype_exists {
-                    dbg.debug_point(dbg.LogLevel.ERROR, "Archetype label %s does not map to an existing archetype", archetype_label)
+                    dbg.log(dbg.LogLevel.ERROR, "Archetype label %s does not map to an existing archetype", archetype_label)
                     return
                 }
                 query_archetype(archetype, archetype_query)
@@ -167,7 +167,7 @@ add_models_to_arch :: proc(scene: ^Scene, archetype: ^Archetype, models: ..resou
     if standards.WORLD_COMPONENT.label not_in archetype.components_label_match ||
         resource.MODEL_COMPONENT.label not_in archetype.components_label_match ||
         standards.VISIBLE_COMPONENT.label not_in archetype.components_label_match {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Archetype must have isVisible, world and model components")
+        dbg.log(dbg.LogLevel.ERROR, "Archetype must have isVisible, world and model components")
         return
     }
 

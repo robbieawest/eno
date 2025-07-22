@@ -10,27 +10,18 @@ import "core:log"
 import "core:c"
 import "core:strings"
 
-// This file defines how eno interacts with the windower (SDL implemented currently)
-
-Windower :: enum { SDL, GLFW }
-CURRENT_WINDOWER: Windower = .SDL
-
 WINDOW_WIDTH: i32 = 1280
 WINDOW_HEIGHT: i32 = 720 
-
 
 WindowTarget :: ^SDL.Window
 
 initialize_window :: proc(width, height: i32, window_tag: string, extra_params: ..i32) -> (win_ret: WindowTarget) {
-    dbg.init_debug_stack()
-    dbg.debug_point(dbg.LogLevel.INFO, "Initializing SDL window")
-
     window: ^SDL.Window
     c_window_tag := strings.clone_to_cstring(window_tag)
     
     if len(extra_params) != 0 {
         if len(extra_params) != 2 {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Not enough params given to initialize SDL window")
+            dbg.log(.ERROR, "Not enough params given to initialize SDL window")
             return
         }
 
@@ -41,12 +32,12 @@ initialize_window :: proc(width, height: i32, window_tag: string, extra_params: 
 
     SDL.CreateRenderer(window, -1, SDL.RENDERER_ACCELERATED)
     if (SDL.GL_SetSwapInterval(1) < 0) {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not set VSYNC to on")
+        dbg.log(.ERROR, "Could not set VSYNC to on")
         return
     }
 
 	if window == nil {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not initialize SDL window")
+        dbg.log(.ERROR, "Could not initialize SDL window")
         return
 	}
 
@@ -59,6 +50,9 @@ initialize_window :: proc(width, height: i32, window_tag: string, extra_params: 
 
     sdl_setup_gl_versioning()
     glutils.opengl_setup()
+
+    dbg.init_debug()
+    dbg.log(.INFO, "Initialized SDL window")
 
     win_ret = window
     return
@@ -75,7 +69,7 @@ sdl_setup_gl_versioning :: proc() {
 
 
 destroy_window :: proc(window_target: WindowTarget) {
-    dbg.debug_point(dbg.LogLevel.INFO, "Destroying SDL window")
+    dbg.log(.INFO, "Destroying SDL window")
     SDL.DestroyWindow(window_target)
 }
 
@@ -98,7 +92,7 @@ get_window_resolution :: proc(window_target: WindowTarget) -> (res: WindowResolu
         sdl_err := SDL.GetRendererOutputSize(SDL.GetRenderer(window_target), &x, &y)
         if sdl_err != 0 {
             last_sdl_err: cstring = SDL.GetError()
-            dbg.debug_point(dbg.LogLevel.ERROR, "Failed to get fullscreen resolution, SDL error: %s", last_sdl_err)
+            dbg.log(.ERROR, "Failed to get fullscreen resolution, SDL error: %s", last_sdl_err)
             return
         }
         res = WindowResolution { u32(x), u32(y) }
@@ -108,7 +102,7 @@ get_window_resolution :: proc(window_target: WindowTarget) -> (res: WindowResolu
         sdl_err := SDL.GetDesktopDisplayMode(0, &display_mode)
         if sdl_err != 0 {
             last_sdl_err: cstring = SDL.GetError()
-            dbg.debug_point(dbg.LogLevel.ERROR, "Failed to get window resolution, SDL error: %s", last_sdl_err)
+            dbg.log(.ERROR, "Failed to get window resolution, SDL error: %s", last_sdl_err)
             return
         }
 
@@ -156,7 +150,7 @@ set_fullscreen :: proc(window_target: WindowTarget) -> (ok: bool) {
     sdl_err := SDL.SetWindowFullscreen(window_target, SDL.WINDOW_FULLSCREEN)
     if sdl_err != 0 {
         last_sdl_err: cstring = SDL.GetError()
-        dbg.debug_point(dbg.LogLevel.ERROR, "Error while enabling fullscreen, sdl error: %s", last_sdl_err)
+        dbg.log(.ERROR, "Error while enabling fullscreen, sdl error: %s", last_sdl_err)
         return
     }
 

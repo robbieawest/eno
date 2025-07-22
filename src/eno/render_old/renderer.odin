@@ -14,11 +14,11 @@ draw_indexed_entities_arch :: proc(archetype: ^ecs.Archetype, entity_labels: ..s
 
     for draw_properties_comp in draw_properties_ret {
         draw_properties: ^gpu.DrawProperties = draw_properties_comp.data
-        //dbg.debug_point(dbg.LogLevel.INFO, "Drawing properties: %#v", draw_properties)
+        //dbg.debug_point(.INFO, "Drawing properties: %#v", draw_properties)
 
         b_is_drawable := gpu.component_is_drawable(draw_properties.gpu_component)
         if b_is_drawable != 0 {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Could not draw entity, draw properties are not yet fully expressed")
+            dbg.debug_point(.ERROR, "Could not draw entity, draw properties are not yet fully expressed")
             return
         }
 

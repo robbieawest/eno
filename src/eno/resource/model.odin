@@ -118,7 +118,7 @@ create_billboard_model_from_path :: proc(manager: ^ResourceManager, texture_name
 // Todo use unlit property
 create_billboard_model_from_id :: proc(manager: ^ResourceManager, texture: TextureID) -> (model: Model, ok: bool) {
     if get_texture(manager, texture) == nil {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Texture does not map to an existing texture in the manager")
+        dbg.log(.ERROR, "Texture does not map to an existing texture in the manager")
         return
     }
 
@@ -279,7 +279,7 @@ MaterialProperty :: struct {
 
 // Assumes the resource manager is properly initialized
 eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.material, gltf_file_location: string) -> (material: Material, ok: bool) {
-    dbg.debug_point(dbg.LogLevel.INFO, "Converting cgltf material: %s", cmat.name)
+    dbg.log(.INFO, "Converting cgltf material: %s", cmat.name)
     if cmat.name != nil do material.name = strings.clone_from_cstring(cmat.name)
 
     if cmat.has_pbr_metallic_roughness {
@@ -353,11 +353,11 @@ texture_from_cgltf_texture :: proc(texture: ^cgltf.texture, gltf_file_location: 
 load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: string) -> (result: Image, ok: bool) {
     //log.infof("cgltf image: %#v", image)
     if image.name != nil do result.name = strings.clone_from_cstring(image.name)
-    dbg.debug_point(dbg.LogLevel.INFO, "Reading cgltf image: %s", image.uri)
+    dbg.log(.INFO, "Reading cgltf image: %s", image.uri)
 
     if image.buffer_view == nil {
         if image.uri == nil {
-            dbg.debug_point(dbg.LogLevel.ERROR, "CGLTF image does not have any data attached, URI or buffer data")
+            dbg.log(.ERROR, "CGLTF image does not have any data attached, URI or buffer data")
             return
         }
 
@@ -370,7 +370,7 @@ load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: str
     image_buffer: [^]byte = transmute([^]byte)(uintptr(image.buffer_view.buffer.data) + uintptr(image.buffer_view.offset))
     result.pixel_data = stbi.load_from_memory(image_buffer, i32(image.buffer_view.size), &result.w, &result.h, &result.channels, 0)
     if result.pixel_data == nil {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not read pixel data from memory")
+        dbg.log(.ERROR, "Could not read pixel data from memory")
         return
     }
 
@@ -389,7 +389,7 @@ load_image_from_uri :: proc(uri: string, uri_base: string = "", flip_image := fa
 
     result.pixel_data = stbi.load(path_cstr, &result.w, &result.h, &result.channels, 4)
     if result.pixel_data == nil {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not read pixel data from file: %s", uri)
+        dbg.log(.ERROR, "Could not read pixel data from file: %s", uri)
         return
     }
 
@@ -430,7 +430,7 @@ make_light_billboard :: proc(manager: ^ResourceManager) -> (model: Model, ok: bo
     if manager.billboard_id == nil {
         manager.billboard_id = texture_from_path(manager, "light_billboard", "light.png", standards.TEXTURE_RESOURCE_PATH, flip_image = true) or_return
         if manager.billboard_id == nil {
-            dbg.debug_point(dbg.LogLevel.ERROR, "texture_from_path returned nil id")
+            dbg.log(.ERROR, "texture_from_path returned nil id")
             return
         }
     }

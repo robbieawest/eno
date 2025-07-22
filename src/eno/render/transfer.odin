@@ -27,7 +27,7 @@ release_model :: proc(model: ^resource.Model) {
 
 // Pretty useless
 transfer_model :: proc(manager: ^resource.ResourceManager, model: resource.Model) -> (ok: bool) {
-    dbg.debug_point(dbg.LogLevel.INFO, "Transferring model")
+    dbg.log(.INFO, "Transferring model")
 
     for &mesh in model.meshes do transfer_mesh(&mesh) or_return
 
@@ -92,7 +92,7 @@ create_and_transfer_vbo_maybe :: proc(vbo: ^Maybe(u32), data: ^resource.Mesh) ->
 @(private)
 create_and_transfer_vbo_raw :: proc(vbo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
     if len(data.vertex_data) == 0 {
-        dbg.debug_point(dbg.LogLevel.ERROR, "No vertices given to express");
+        dbg.log(.ERROR, "No vertices given to express");
         return
     }
 
@@ -140,9 +140,9 @@ create_and_transfer_ebo_maybe :: proc(ebo: ^Maybe(u32), data: ^resource.Mesh) ->
 
 @(private)
 create_and_transfer_ebo_raw :: proc(ebo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
-    dbg.debug_point(dbg.LogLevel.INFO, "Expressing gl mesh indices")
+    dbg.log(.INFO, "Expressing gl mesh indices")
     if len(data.index_data) == 0 {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Cannot express 0 indices")
+        dbg.log(.ERROR, "Cannot express 0 indices")
         return
     }
 
@@ -170,7 +170,7 @@ GPUTexture :: Maybe(u32)
 transfer_texture :: proc(tex: ^resource.Texture, loc := #caller_location) -> (ok: bool) {
 
     if tex == nil {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Texture given as nil", loc=loc)
+        dbg.log(.ERROR, "Texture given as nil", loc=loc)
         return
     }
 
@@ -178,7 +178,7 @@ transfer_texture :: proc(tex: ^resource.Texture, loc := #caller_location) -> (ok
 
     gpu_tex := make_texture(tex^)
     if gpu_tex == nil {
-        dbg.debug_point(dbg.LogLevel.ERROR, "make_texture returned nil texture")
+        dbg.log(dbg.LogLevel.ERROR, "make_texture returned nil texture")
         return
     }
 
@@ -195,7 +195,7 @@ make_texture_ :: proc(tex: resource.Texture) -> (texture: GPUTexture) {
 }
 
 make_texture_raw :: proc(w, h: i32, data: rawptr = nil, internal_format: i32 = gl.RGBA8, lod: i32 = 0, format: u32 = gl.RGBA, type: u32 = gl.UNSIGNED_BYTE) -> (texture: GPUTexture) {
-    dbg.debug_point(dbg.LogLevel.INFO, "Making new texture")
+    dbg.log(dbg.LogLevel.INFO, "Making new texture")
     id: u32
     gl.GenTextures(1, &id)
     texture = id
@@ -218,11 +218,11 @@ destroy_texture :: proc(texture: ^GPUTexture) {
 
 bind_texture :: proc(texture_unit: u32, texture: GPUTexture, loc := #caller_location) -> (ok: bool) {
     if texture == nil {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Texture to bind at unit %d is not transferred to gpu", texture_unit, loc=loc)
+        dbg.log(dbg.LogLevel.ERROR, "Texture to bind at unit %d is not transferred to gpu", texture_unit, loc=loc)
         return
     }
     if texture_unit > 31 {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Texture unit is greater than 31 - active textures limit exceeded")
+        dbg.log(dbg.LogLevel.ERROR, "Texture unit is greater than 31 - active textures limit exceeded")
         return
     }
 
@@ -285,7 +285,7 @@ ShaderBuffer :: struct {
 }
 
 make_shader_buffer :: proc(data: rawptr, data_size: int, type: ShaderBufferType, shader_binding: u32, usage: BufferUsage) -> (buffer: ShaderBuffer) {
-    dbg.debug_point(dbg.LogLevel.INFO, "Creating shader buffer of type: %v and binding: %d", type, shader_binding)
+    dbg.log(dbg.LogLevel.INFO, "Creating shader buffer of type: %v and binding: %d", type, shader_binding)
 
     id: u32
     gl.GenBuffers(1, &id)
@@ -328,7 +328,7 @@ transfer_buffer_data_of_target :: proc(target: u32, data: rawptr, #any_int data_
 
 // Shaders
 transfer_shader :: proc(program: ^shader.ShaderProgram) -> (ok: bool) {
-    dbg.debug_point(dbg.LogLevel.INFO, "Transferring shader program")
+    dbg.log(dbg.LogLevel.INFO, "Transferring shader program")
 
     if program.id != nil do return true
 
@@ -337,15 +337,15 @@ transfer_shader :: proc(program: ^shader.ShaderProgram) -> (ok: bool) {
 
     i := 0
     for _, &given_shader in program.shaders {
-        dbg.debug_point(dbg.LogLevel.INFO, "Compiling shader of type %v", given_shader.type)
+        dbg.log(dbg.LogLevel.INFO, "Compiling shader of type %v", given_shader.type)
         if !given_shader.source.is_available_as_string || len(given_shader.source.string_source) == 0 {
-            dbg.debug_point(dbg.LogLevel.INFO, "Shader source was not provided prior to transfer_shader, building new")
+            dbg.log(dbg.LogLevel.INFO, "Shader source was not provided prior to transfer_shader, building new")
             shader.supply_shader_source(&given_shader) or_return
         }
 
         id, compile_ok := gl.compile_shader_from_source(given_shader.source.string_source, shader.conv_gl_shader_type(given_shader.type))
         if !compile_ok {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Could not compile shader source of shader type %v", given_shader.type)
+            dbg.log(dbg.LogLevel.ERROR, "Could not compile shader source of shader type %v", given_shader.type)
             return
         }
         shader_ids[i] = id
@@ -358,7 +358,7 @@ transfer_shader :: proc(program: ^shader.ShaderProgram) -> (ok: bool) {
 
 attach_program :: proc(program: shader.ShaderProgram, loc := #caller_location) {
     if program_id, id_ok := utils.unwrap_maybe(program.id); !id_ok {
-        dbg.debug_point(dbg.LogLevel.INFO, "Shader program not yet created")
+        dbg.log(dbg.LogLevel.INFO, "Shader program not yet created")
         return
     }
     else{

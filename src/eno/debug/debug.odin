@@ -14,27 +14,18 @@ import "base:runtime"
 DebugMode :: enum {
     RELEASE, DEBUG
 }
-DEBUG_MODE: DebugMode = .DEBUG
+DEBUG_MODE : DebugMode : .DEBUG
 
-// Creates debug stack if nil
-ENABLE_DEBUG :: proc() {
-    DEBUG_MODE = .DEBUG
-    debug_point_log = d_Debug_point_log
-    debug_point_no_log = d_Debug_point_no_log
-
-    gl.Enable(gl.DEBUG_OUTPUT)
-    gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
-}
-
-// Clears debug stack
-ENABLE_RELEASE :: proc() {
-    DEBUG_MODE = .RELEASE
-    debug_point_log = r_Debug_point_log
-    debug_point_no_log = r_Debug_point_no_log
-
-    gl.Disable(gl.DEBUG_OUTPUT)
-    gl.Disable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
-    destroy_debug_stack()
+init_debug :: proc() {
+    when DEBUG_MODE == .RELEASE {
+        gl.Disable(gl.DEBUG_OUTPUT)
+        gl.Disable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
+    }
+    else {
+        init_debug_stack()
+        gl.Enable(gl.DEBUG_OUTPUT)
+        gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
+    }
 }
 
 
@@ -267,31 +258,25 @@ destroy_debug_stack :: proc() {
 }
 
 
-debug_point :: proc { debug_point_no_log, debug_point_log }
+log :: proc(
+    level: LogLevel = .INFO,
+    fmt_msg: string = "",
+    fmt_args: ..any,
+    debug_flags := DEBUG_FLAGS,
+    loc := #caller_location
+) {
+    when DEBUG_MODE == .RELEASE do return
 
-@(private)
-p_Debug_point_no_log :: #type proc(debug_flags := DEBUG_FLAGS, loc := #caller_location)
-debug_point_no_log: p_Debug_point_no_log = DEBUG_MODE == .RELEASE ? r_Debug_point_no_log : d_Debug_point_no_log
-
-r_Debug_point_no_log :: proc(debug_flags := DEBUG_FLAGS, loc := #caller_location) {
-    // Do nothing
+    if len(fmt_msg) == 0 do debug_point_no_log(level, debug_flags, loc)
+    else do debug_point_log(level, fmt_msg, ..fmt_args, debug_flags=debug_flags, loc=loc)
 }
 
 DEBUG_MARKER := " ** Debug Marker ** "
-d_Debug_point_no_log :: proc(debug_flags := DEBUG_FLAGS, loc := #caller_location) {
-    if debug_flags.PUSH_LOGS_TO_DEBUG_STACK do push_to_debug_stack({ DEBUG_MARKER, .INFO }, loc = loc)
+debug_point_no_log :: proc(level: LogLevel = .INFO, debug_flags := DEBUG_FLAGS, loc := #caller_location) {
+    if debug_flags.PUSH_LOGS_TO_DEBUG_STACK do push_to_debug_stack({ DEBUG_MARKER, level }, loc = loc)
 }
 
-
-@(private)
-p_Debug_point_log :: #type proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, debug_flags := DEBUG_FLAGS, loc := #caller_location)
-debug_point_log: p_Debug_point_log = DEBUG_MODE == .RELEASE ? r_Debug_point_log : d_Debug_point_log
-
-r_Debug_point_log :: proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, debug_flags := DEBUG_FLAGS, loc := #caller_location) {
-    // Do nothing
-}
-
-d_Debug_point_log :: proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, debug_flags := DEBUG_FLAGS, loc := #caller_location) {
+debug_point_log :: proc(level: LogLevel, fmt_msg: string, fmt_args: ..any, debug_flags := DEBUG_FLAGS, loc := #caller_location) {
     out_msg := fmt.aprintf(fmt_msg, ..fmt_args)
 
     switch level {

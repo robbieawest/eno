@@ -46,7 +46,7 @@ parse_attribute_name :: proc(attribute_info: resource.MeshAttributeInfo, allocat
     if len(attribute_info.name) == 0 {
         reflected_name, reflect_ok := reflect.enum_name_from_value(attribute_info.type)
         if !reflect_ok {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Could not get layout name")
+            dbg.log(.ERROR, "Could not get layout name")
             return
         }
 
@@ -61,7 +61,7 @@ glsl_type_from_attribute :: proc(attribute_info: resource.MeshAttributeInfo) -> 
 
     switch attribute_info.element_type {
     case .invalid:
-        dbg.debug_point(dbg.LogLevel.ERROR, "Invalid attribute element type")
+        dbg.log(.ERROR, "Invalid attribute element type")
         return
     case .scalar: glsl_type = convert_component_type_to_glsl_type(attribute_info.data_type) or_return
     case .vec2: glsl_type = .vec2
@@ -85,7 +85,7 @@ glsl_type_from_attribute :: proc(attribute_info: resource.MeshAttributeInfo) -> 
 convert_component_type_to_glsl_type :: proc(component_type: resource.MeshComponentType) -> (type: shader.GLSLDataType, ok: bool) {
     switch component_type {
         case .invalid, .i8, .i16, .u8, .u16:
-            dbg.debug_point(dbg.LogLevel.ERROR, "Invalid component type when attempting to convert to GLSL type")
+            dbg.log(.ERROR, "Invalid component type when attempting to convert to GLSL type")
             return
         case .f32: type = .float
         case .u32: type = .uint
@@ -101,7 +101,7 @@ convert_component_type_to_glsl_type :: proc(component_type: resource.MeshCompone
 generate_glsl_struct :: proc(type: typeid, allocator := context.allocator) -> (glsl_struct: ShaderStruct, ok: bool) {
 
     if !reflect.is_struct(type_info_of(type)) {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Gotten type which does not represent a struct")
+        dbg.debug_point(.ERROR, "Gotten type which does not represent a struct")
         return
     }
 
@@ -115,7 +115,7 @@ _generate_glsl_struct_recurse :: proc(type: typeid, allocator := context.allocat
 
     name_builder := strings.builder_make(allocator)
     _, io_err := reflect.write_typeid(&name_builder, type); if io_err != io.Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "IO Error when generating GLSL struct name")
+        dbg.debug_point(.ERROR, "IO Error when generating GLSL struct name")
         return
     }
     glsl_struct.name = strings.to_string(name_builder)

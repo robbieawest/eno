@@ -269,14 +269,14 @@ add_bindings_of_type :: proc(shader: ^ShaderInfo, type: BindingType, buffer_obje
     }
 
     err := reserve(exist_objects, len(buffer_objects)); if err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate memory for bindings")
+        dbg.log(.ERROR, "Could not allocate memory for bindings")
         return
     }
 
     for buffer_object in buffer_objects {
         for exist_object in exist_objects {
             if strings.compare(buffer_object.name, exist_object.name) == 0 {
-                dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate binding name: %s", buffer_object.name)
+                dbg.log(.ERROR, "Attempting to add duplicate binding name: %s", buffer_object.name)
                 return
             }
         }
@@ -303,15 +303,15 @@ add_io :: proc(shader: ^ShaderInfo, is_input: bool, ios: ..GLSLPair) -> (ok: boo
     exist_ios := is_input ? &shader.inputs : &shader.outputs
 
     err := reserve(exist_ios, len(ios)); if err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate memory for new inputs")
+        dbg.log(.ERROR, "Could not allocate memory for new inputs")
         return
     }
 
     for io in ios {
         for exist_ios in exist_ios {
             if strings.compare(io.name, exist_ios  .name) == 0 {
-                if is_input do dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate input name: %s", io.name)
-                else do dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate output name: %s", io.name)
+                if is_input do dbg.log(.ERROR, "Attempting to add duplicate input name: %s", io.name)
+                else do dbg.log(.ERROR, "Attempting to add duplicate output name: %s", io.name)
                 return
             }
         }
@@ -326,13 +326,13 @@ add_io :: proc(shader: ^ShaderInfo, is_input: bool, ios: ..GLSLPair) -> (ok: boo
 
 add_uniforms :: proc(shader: ^ShaderInfo, uniforms: ..GLSLPair) -> (ok: bool) {
     err := reserve(&shader.uniforms, len(uniforms)); if err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate uniforms")
+        dbg.log(.ERROR, "Could not allocate uniforms")
         return
     }
 
     for uniform in uniforms {
         err = add_uniform(shader, uniform); if err != mem.Allocator_Error.None {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate uniforms")
+            dbg.log(.ERROR, "Could not allocate uniforms")
             return
         }
     }
@@ -345,7 +345,7 @@ add_uniforms :: proc(shader: ^ShaderInfo, uniforms: ..GLSLPair) -> (ok: bool) {
 add_uniform :: proc(shader: ^ShaderInfo, new_uniform: GLSLPair) -> (err: mem.Allocator_Error) {
     for uniform in shader.uniforms {
         if strings.compare(uniform.name, new_uniform.name) == 0 {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate uniform name: %s", uniform.name)
+            dbg.log(.ERROR, "Attempting to add duplicate uniform name: %s", uniform.name)
             return
         }
     }
@@ -359,13 +359,13 @@ add_uniform :: proc(shader: ^ShaderInfo, new_uniform: GLSLPair) -> (err: mem.All
 
 add_structs :: proc(shader: ^ShaderInfo, structs: ..ShaderStruct) -> (ok: bool) {
     err := reserve(&shader.structs, len(structs)); if err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate structs")
+        dbg.log(.ERROR, "Could not allocate structs")
         return
     }
 
     for shader_struct in structs {
         ok = add_struct(shader, shader_struct); if !ok {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate structs")
+            dbg.log(.ERROR, "Could not allocate structs")
             return
         }
     }
@@ -379,7 +379,7 @@ add_struct :: proc(shader: ^ShaderInfo, new_struct: ShaderStruct) -> (ok: bool) 
 
     for shader_struct in shader.structs {
         if strings.compare(shader_struct.name, new_struct.name) == 0 {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate struct name: %s", shader_struct.name)
+            dbg.log(.ERROR, "Attempting to add duplicate struct name: %s", shader_struct.name)
             return
         }
     }
@@ -392,13 +392,13 @@ add_struct :: proc(shader: ^ShaderInfo, new_struct: ShaderStruct) -> (ok: bool) 
 
 add_functions :: proc(shader: ^ShaderInfo, functions: ..ShaderFunction) -> (ok: bool) {
     err := reserve(&shader.functions, len(functions)); if err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate functions")
+        dbg.log(.ERROR, "Could not allocate functions")
         return
     }
 
     for function in functions {
         ok = add_function(shader, function); if !ok {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Could not allocate functions")
+            dbg.log(.ERROR, "Could not allocate functions")
             return
         }
     }
@@ -411,7 +411,7 @@ add_functions :: proc(shader: ^ShaderInfo, functions: ..ShaderFunction) -> (ok: 
 add_function :: proc(shader: ^ShaderInfo, new_function: ShaderFunction) -> (ok: bool) {
     for function in shader.functions {
         if strings.compare(function.label, new_function.label) == 0 {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Attempting to add duplicate function label: %s", function.label)
+            dbg.log(.ERROR, "Attempting to add duplicate function label: %s", function.label)
             return
         }
     }
@@ -465,7 +465,7 @@ ShaderProgram :: struct {
 
 // Does not copy incoming shaders
 make_shader_program:: proc(shaders: []Shader) -> (program: ShaderProgram) {
-    dbg.debug_point()
+    dbg.log()
     program.shaders = make(map[ShaderType]Shader)
     program.uniform_cache = make(ShaderUniformCache)
     add_shaders_to_program(&program, shaders)
@@ -474,16 +474,16 @@ make_shader_program:: proc(shaders: []Shader) -> (program: ShaderProgram) {
 
 // Does not copy incoming shaders
 add_shaders_to_program :: proc(program: ^ShaderProgram, shaders: []Shader) {
-    dbg.debug_point()
+    dbg.log()
     for shader in shaders {
         if shader.type in program.shaders {
-            dbg.debug_point(dbg.LogLevel.WARN, "Shader of existing type attempted to be added to program, ignoring")
+            dbg.log(.WARN, "Shader of existing type attempted to be added to program, ignoring")
         } else do program.shaders[shader.type] = shader
     }
 }
 
 destroy_shader_program :: proc(program: ShaderProgram) {
-    dbg.debug_point()
+    dbg.log()
     for _, shader in program.shaders do destroy_shader(shader)
     delete(program.shaders)
 }
@@ -526,12 +526,12 @@ build_shader_from_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (
     Uses glsl version 430 core
 */
 supply_shader_source :: proc(shader: ^Shader) -> (ok: bool) {
-    dbg.debug_point(dbg.LogLevel.INFO, "Building Shader Source")
+    dbg.log(.INFO, "Building Shader Source")
     shader_info := shader.source.shader_info
     type := shader.type
 
     builder, err := strings.builder_make(); if err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Allocator error while building shader source")
+        dbg.log(.ERROR, "Allocator error while building shader source")
         return
     }
 
@@ -684,7 +684,7 @@ typeid_to_glsl_type :: proc(type: typeid) -> (glsl_type: GLSLDataType, ok: bool)
         case glm.mat4x3: glsl_type = .mat4x3
         case glm.mat4x2: glsl_type = .mat4x2
         case:
-            dbg.debug_point(dbg.LogLevel.ERROR, "Unconvertable GLSL type: %v", type)
+            dbg.log(dbg.LogLevel.ERROR, "Unconvertable GLSL type: %v", type)
             return
     }
 
@@ -702,7 +702,7 @@ shader_struct_id_to_string :: proc(shader_info: ShaderInfo, id: ShaderStructID, 
     }
 
     if shader_struct == nil {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Shader struct identifier does not match with a struct in the shader info: %s", id)
+        dbg.log(dbg.LogLevel.ERROR, "Shader struct identifier does not match with a struct in the shader info: %s", id)
         return
     }
     return shader_struct_out_name(shader_struct.(ShaderStruct), loc), true
@@ -753,13 +753,13 @@ extended_glsl_type_to_string :: proc(shader_info: ShaderInfo, type: ExtendedGLSL
 @(private)
 glsl_data_type_to_str :: proc(type: GLSLDataType, loc: runtime.Source_Code_Location) -> (result: string) {
     s_type, invalid_enum := reflect.enum_name_from_value(type); if !invalid_enum {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Internal invalid enum error", loc=loc)
+        dbg.log(dbg.LogLevel.ERROR, "Internal invalid enum error", loc=loc)
         result = strings.clone("*INTERNAL ERROR*")  // Ignore err
     }
 
     err: mem.Allocator_Error
     result, err = strings.clone(s_type); if err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate type as string", loc=loc)
+        dbg.log(dbg.LogLevel.ERROR, "Failed to allocate type as string", loc=loc)
         result = strings.clone("*FAILED TO ALLOCATE*")  // Ignore err
     }
 
@@ -770,7 +770,7 @@ glsl_data_type_to_str :: proc(type: GLSLDataType, loc: runtime.Source_Code_Locat
 shader_struct_out_name :: proc(shader_struct: ShaderStruct, loc: runtime.Source_Code_Location) -> (result: string) {
     err: mem.Allocator_Error
     result, err = strings.clone(shader_struct.name); if err != mem.Allocator_Error.None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to allocate type as string", loc=loc)
+        dbg.log(dbg.LogLevel.ERROR, "Failed to allocate type as string", loc=loc)
         result = strings.clone("*FAILED TO ALLOCATE*")  // Ignore err
     }
 
@@ -833,10 +833,10 @@ init_shader_source :: proc(source: string, extension: string) -> (shader: Shader
 
 
 read_single_shader_source :: proc(full_path: string, shader_type: ShaderType) -> (shader: Shader, ok: bool) {
-    dbg.debug_point(dbg.LogLevel.INFO, "Reading single shader source: %s", full_path)
+    dbg.log(dbg.LogLevel.INFO, "Reading single shader source: %s", full_path)
     source, err := futils.read_file_source(full_path)
     if err != .None {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not read file source for shader")
+        dbg.log(dbg.LogLevel.ERROR, "Could not read file source for shader")
         return
     }
 
@@ -856,10 +856,10 @@ read_shader_source :: proc(filenames: ..string) -> (program: ShaderProgram, ok: 
     for filename in filenames {
         inv_filename := utils.regex_match(filename, utils.REGEX_FILEPATH_PATTERN)
         if inv_filename {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Filepath contains invalid characters: %s", filename)
+            dbg.log(dbg.LogLevel.ERROR, "Filepath contains invalid characters: %s", filename)
             return
         }
-        dbg.debug_point(dbg.LogLevel.INFO, "Reading shader source at path: %s", filename)
+        dbg.log(dbg.LogLevel.INFO, "Reading shader source at path: %s", filename)
 
         last_ellipse_location := strings.last_index(filename, ".")
         if last_ellipse_location != -1 && !strings.contains(filename[last_ellipse_location:], "/") {
@@ -873,7 +873,7 @@ read_shader_source :: proc(filenames: ..string) -> (program: ShaderProgram, ok: 
                 append(&shader_sources, init_shader_source(source, extension) or_return)
             }
             else {
-                dbg.debug_point(dbg.LogLevel.ERROR, "Shader extension not accepted: %s", extension)
+                dbg.log(dbg.LogLevel.ERROR, "Shader extension not accepted: %s", extension)
                 return
             }
         }
@@ -885,13 +885,13 @@ read_shader_source :: proc(filenames: ..string) -> (program: ShaderProgram, ok: 
                 source, err := futils.read_file_source(full_path); defer delete(source)
 
                 if err == .None {
-                    dbg.debug_point(dbg.LogLevel.INFO, "Successfully read file. File path: \"%s\"", full_path)
+                    dbg.log(dbg.LogLevel.INFO, "Successfully read file. File path: \"%s\"", full_path)
                     append(&shader_sources, init_shader_source(source, extension) or_return)
                     file_found = true
                 }
                 else if err == .FileReadError {
                     file_found = true
-                    dbg.debug_point(dbg.LogLevel.ERROR, "Error occurred while reading the contents of file. Filename: \"%s\"", full_path)
+                    dbg.log(dbg.LogLevel.ERROR, "Error occurred while reading the contents of file. Filename: \"%s\"", full_path)
                     return
                 }
             }
@@ -899,7 +899,7 @@ read_shader_source :: proc(filenames: ..string) -> (program: ShaderProgram, ok: 
             if !file_found {
                 cwd := os.get_current_directory()
                 defer delete(cwd)
-                dbg.debug_point(dbg.LogLevel.ERROR, "File could not be found from the current directory. File path: \"%s\", Current directory: \"%s\"", filename, cwd)
+                dbg.log(dbg.LogLevel.ERROR, "File could not be found from the current directory. File path: \"%s\", Current directory: \"%s\"", filename, cwd)
                 return
             }
         }
@@ -907,7 +907,7 @@ read_shader_source :: proc(filenames: ..string) -> (program: ShaderProgram, ok: 
     }
 
     if len(shader_sources) == 0 {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Failed to read any shader file sources")
+        dbg.log(dbg.LogLevel.ERROR, "Failed to read any shader file sources")
         return
     }
 
@@ -933,7 +933,7 @@ handle_file_read_error :: proc(filepath: string, err: futils.FileReadError, loc 
         message = "Successfully read file"
         level = .INFO
     }
-    dbg.debug_point(level, "%s. File path: \"%s\"", message, filepath, loc = loc)
+    dbg.log(level, "%s. File path: \"%s\"", message, filepath, loc = loc)
 
     return
 }

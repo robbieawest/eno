@@ -14,22 +14,22 @@ DEFAULT_OPTIONS: cgltf.options
 load_gltf :: proc(path: string) -> (data: ^cgltf.data, result: cgltf.result) {
     result = .io_error
 
-    dbg.debug_point(dbg.LogLevel.INFO, "Reading gltf file. Path: \"%s\"", path)
+    dbg.log(.INFO, "Reading gltf file. Path: \"%s\"", path)
 
     cpath := strings.clone_to_cstring(path)
 
     data, result = cgltf.parse_file(DEFAULT_OPTIONS, cpath)
 
     if result != .success {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Unable to load gltf file. Path: \"%s\"", path)
+        dbg.log(.ERROR, "Unable to load gltf file. Path: \"%s\"", path)
         return
     }
     if result = cgltf.load_buffers(DEFAULT_OPTIONS, data, cpath); result != .success {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Unable to load default buffers for gltf scenes. Path: \"%s\"", path)
+        dbg.log(.ERROR, "Unable to load default buffers for gltf scenes. Path: \"%s\"", path)
         return
     }
     if result = cgltf.validate(data); result != .success {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Unable to validate imported data for gltf scenes. Path: \"%s\"", path)
+        dbg.log(.ERROR, "Unable to validate imported data for gltf scenes. Path: \"%s\"", path)
         return
     }
 
@@ -77,7 +77,7 @@ extract_gltf_scene_from_path :: proc(manager: ^ResourceManager, path: string, sc
     futils.check_path(path) or_return
     gltf_folder_path, path_ok := futils.file_path_to_folder_path(path)
     if !path_ok {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Given path does not represent a file")
+        dbg.log(.ERROR, "Given path does not represent a file")
         return
     }
 
@@ -92,7 +92,7 @@ extract_gltf_scene_no_path :: proc(manager: ^ResourceManager, data: ^cgltf.data,
     if scene_index == -1 do scene = data.scene
     else {
         if scene_index < 0 || scene_index >= len(data.scenes) {
-            dbg.debug_point(dbg.LogLevel.ERROR, "scene_index is out of range of gltf scenes")
+            dbg.log(.ERROR, "scene_index is out of range of gltf scenes")
             return
         }
         scene = &data.scenes[scene_index]
@@ -113,7 +113,7 @@ extract_gltf_scene_no_path :: proc(manager: ^ResourceManager, data: ^cgltf.data,
         else if node.light != nil {
             switch node.light.type {
                 case .invalid:
-                    dbg.debug_point(dbg.LogLevel.WARN, "Invalid light type found, ignoring")
+                    dbg.debug_point(.WARN, "Invalid light type found, ignoring")
                     continue node_loop
                 case .point:
                     light := LightSourceInformation{
@@ -161,7 +161,7 @@ extract_model :: proc(manager: ^ResourceManager, path: string, model_name: strin
     futils.check_path(path) or_return
     gltf_folder_path, path_ok := futils.file_path_to_folder_path(path)
     if !path_ok {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Given path does not represent a file")
+        dbg.log(.ERROR, "Given path does not represent a file")
         return
     }
 
@@ -225,7 +225,7 @@ extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh, gltf_fil
 extract_vertex_data_from_primitive :: proc(primitive: cgltf.primitive) -> (result: VertexData, ok: bool) {
 
     if len(primitive.attributes) == 0 {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Primitive must have attributes")
+        dbg.log(.ERROR, "Primitive must have attributes")
         return
     }
 
@@ -246,7 +246,7 @@ extract_vertex_data_from_primitive :: proc(primitive: cgltf.primitive) -> (resul
 
             read_res: b32 = cgltf.accessor_read_float(accessor, k, raw_vertex_data, element_size)
             if read_res == false {
-                dbg.debug_point(dbg.LogLevel.ERROR, "Error while reading float from accessor, received boolean false")
+                dbg.log(.ERROR, "Error while reading float from accessor, received boolean false")
                 return
             }
 
@@ -269,7 +269,7 @@ extract_index_data_from_primitive :: proc(primitive: cgltf.primitive) -> (result
         raw_index_data: [^]u32 = raw_data(result[k:k+1])
         read_res: b32 = cgltf.accessor_read_uint(accessor, k, raw_index_data, 1)
         if read_res == false {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Error while reading uint(index) from accessor, received boolean false")
+            dbg.log(.ERROR, "Error while reading uint(index) from accessor, received boolean false")
             return
         }
 
@@ -284,7 +284,7 @@ extract_index_data_from_primitive :: proc(primitive: cgltf.primitive) -> (result
 cgltf_component_type_to_typeid :: proc(type: cgltf.component_type) -> (ret: typeid, ok: bool) {
     switch type {
     case .invalid:
-        dbg.debug_point(dbg.LogLevel.ERROR, "Component type is invalid")
+        dbg.log(.ERROR, "Component type is invalid")
         return
     case .r_8: ret = i8
     case .r_8u: ret = u8

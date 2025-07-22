@@ -41,7 +41,7 @@ EnoGame :: struct {
 */
 run_game :: proc() {
     if Game == nil {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Game not initialized")
+        dbg.log(.ERROR, "Game not initialized")
         return
     }
 
@@ -49,11 +49,11 @@ run_game :: proc() {
 
     before_ok := Game.before_frame()
     if !before_ok {
-        dbg.debug_point(dbg.LogLevel.ERROR, "False received from before_frame procedure. Terminating")
+        dbg.log(.ERROR, "False received from before_frame procedure. Terminating")
         return
     }
     else {
-        dbg.debug_point(dbg.LogLevel.INFO, "before_frame complete, moving to loop")
+        dbg.log(.INFO, "before_frame complete, moving to loop")
     }
 
     for Game.state == .RUNNING {
@@ -65,7 +65,7 @@ run_game :: proc() {
         every_ok := Game.every_frame()
 
         if !every_ok {
-            dbg.debug_point(dbg.LogLevel.ERROR, "False received from every_frame procedure. Terminating")
+            dbg.log(.ERROR, "False received from every_frame procedure. Terminating")
             return
         }
 
@@ -150,7 +150,7 @@ scale_mouse_relative :: proc(xrel: f32, yrel: f32) -> (xout: f32, yout: f32) {
 HOOKS_CAMERA_MOVEMENT :: proc() -> (hooks: control.Hooks) {
     viewpoint := Game.scene.viewpoint
     if viewpoint == nil {
-        dbg.debug_point(dbg.LogLevel.INFO, "Cannot add camera hooks without scene viewpoint")
+        dbg.log(.INFO, "Cannot add camera hooks without scene viewpoint")
         return
     }
 

@@ -183,13 +183,13 @@ StencilMask :: RenderMask{ .STENCIL }
 draw_framebuffer_to_screen :: proc(frame_buffer: ^FrameBuffer, attachment_id: u32, w, h: i32, interpolation: u32 = gl.NEAREST) {
     frame_buffer_id, id_ok := frame_buffer.id.?
     if !id_ok {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Frame buffer not yet created")
+        dbg.log(.ERROR, "Frame buffer not yet created")
         return
     }
 
     attachment, attachment_ok := &frame_buffer.attachments[attachment_id]
     if !attachment_ok {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Attachment ID: %d is invalid or not bound to the framebuffer", attachment_id)
+        dbg.log(.ERROR, "Attachment ID: %d is invalid or not bound to the framebuffer", attachment_id)
         return
     }
 
@@ -227,11 +227,11 @@ make_attachment :: proc(
 ) -> (ok: bool) {
     n_attachments := get_n_attachments(frame_buffer, type)
     if type != .COLOUR && n_attachments >= 1 {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Number of %s texture attachments exceeds 0", strings.to_lower(reflect.enum_name_from_value(type) or_return))
+        dbg.log(.ERROR, "Number of %s texture attachments exceeds 0", strings.to_lower(reflect.enum_name_from_value(type) or_return))
         return
     }
     else if n_attachments >= gl.MAX_COLOR_ATTACHMENTS {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Number of colour texture attachments exceeds max: %d", gl.MAX_COLOR_ATTACHMENTS)
+        dbg.log(.ERROR, "Number of colour texture attachments exceeds max: %d", gl.MAX_COLOR_ATTACHMENTS)
         return
     }
 
@@ -257,7 +257,7 @@ make_attachment :: proc(
     else {
         texture := make_texture(frame_buffer.w, frame_buffer.h, internal_format=texture_internal_format, format=format, type=texture_backing_type, lod = lod)
         if texture == nil {
-            dbg.debug_point(dbg.LogLevel.ERROR, "make texture returned a nil texture")
+            dbg.log(.ERROR, "make texture returned a nil texture")
             return
         }
 

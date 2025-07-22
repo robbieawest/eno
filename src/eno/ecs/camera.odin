@@ -16,7 +16,7 @@ scene_add_camera :: proc(scene: ^Scene, camera: cam.Camera) {
 
 scene_remove_camera :: proc(scene: ^Scene, camera_index: int) -> (ok: bool) {
     if camera_index < 0 || camera_index >= len(scene.cameras) {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Camera index out of range")
+        dbg.log(.ERROR, "Camera index out of range")
         return
     }
     if scene.viewpoint == &scene.cameras[camera_index] {
@@ -30,7 +30,7 @@ scene_remove_camera :: proc(scene: ^Scene, camera_index: int) -> (ok: bool) {
             }
         }
         if i == len(scene.cameras) {
-            dbg.debug_point(dbg.LogLevel.ERROR, "No camera to replace as scene viewpoint")
+            dbg.log(.ERROR, "No camera to replace as scene viewpoint")
             return
         }
     }

@@ -89,7 +89,7 @@ read_source_test :: proc(t: ^testing.T) {
 
 check_path :: proc(path: string, loc := #caller_location) -> (ok: bool) {
     ok = os.is_dir(path) || os.is_file(path)
-    if !ok do dbg.debug_point(dbg.LogLevel.ERROR, "Path is not valid: %s", path, loc=loc)
+    if !ok do dbg.log(.ERROR, "Path is not valid: %s", path, loc=loc)
     return
 }
 

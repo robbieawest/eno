@@ -72,10 +72,10 @@ push_front_elems :: proc(queue_in: ^$Q/queue.Queue($T), elems: ..T) -> (err: Que
 
 handle_queue_error :: proc(err: QueueError, loc := #caller_location) {
     switch err {
-    case .No_Space: dbg.debug_point(dbg.LogLevel.ERROR, "Error while manipulating queue: No space to perform operation", loc = loc)
-    case .Not_Enough_Elems: dbg.debug_point(dbg.LogLevel.ERROR, "Error while manipulating queue: Not enough elements to perform operation", loc = loc)
-    case .Allocator_Err: dbg.debug_point(dbg.LogLevel.ERROR, "Error while manipulating queue: Allocator error")
-    case .Unknown: dbg.debug_point(dbg.LogLevel.ERROR, "Breaking error while attempting to manipulate queue")
+    case .No_Space: dbg.log(.ERROR, "Error while manipulating queue: No space to perform operation", loc = loc)
+    case .Not_Enough_Elems: dbg.log(.ERROR, "Error while manipulating queue: Not enough elements to perform operation", loc = loc)
+    case .Allocator_Err: dbg.log(.ERROR, "Error while manipulating queue: Allocator error")
+    case .Unknown: dbg.log(.ERROR, "Breaking error while attempting to manipulate queue")
     case .None:
     }
 }

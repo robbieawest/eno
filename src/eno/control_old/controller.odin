@@ -75,11 +75,11 @@ EventType :: enum u32 {
 
 conv_event_type :: proc(type: SDL.EventType) -> (conv: EventType) {
     name, ok := reflect.enum_name_from_value(type); if !ok {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not convert enum")
+        dbg.log(.ERROR, "Could not convert enum")
         return
     }
     conv, ok = reflect.enum_from_name(EventType, name); if !ok {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Could not convert enum")
+        dbg.log(.ERROR, "Could not convert enum")
     }
     return
 }

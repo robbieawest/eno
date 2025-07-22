@@ -62,7 +62,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
         }
 
         if len(models) != len(world_comps) {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Received unbalanced input from scene query")
+            dbg.log(.ERROR, "Received unbalanced input from scene query")
             return
         }
         for i in 0..<len(models) {
@@ -76,7 +76,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
         // Make single element draw call per mesh
         ok = create_lighting_shader(manager, true)
         if !ok {
-            dbg.debug_point(dbg.LogLevel.ERROR, "Lighting shader failed to create")
+            dbg.log(.ERROR, "Lighting shader failed to create")
             return
         }
 
@@ -95,7 +95,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
         for &model_pair in model_data {
             for &mesh in model_pair.model.meshes {
                 mat_id, mat_ok := mesh.material.?; if !mat_ok {
-                    dbg.debug_point(dbg.LogLevel.ERROR, "Material not found for mesh")
+                    dbg.log(.ERROR, "Material not found for mesh")
                     return
                 }
 
@@ -119,17 +119,17 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
 
             // Sanity checks
             if material == nil {
-                dbg.debug_point(dbg.LogLevel.ERROR, "Material does not exist for material id")
+                dbg.log(.ERROR, "Material does not exist for material id")
                 return
             }
             if material.lighting_shader == nil {
-                dbg.debug_point(dbg.LogLevel.ERROR, "Material lighting shader is not set")
+                dbg.log(.ERROR, "Material lighting shader is not set")
             }
 
             lighting_shader := resource.get_shader(manager, material.lighting_shader.?)
 
             if lighting_shader.id == nil {
-                dbg.debug_point(dbg.LogLevel.INFO, "Compiling and transferring lighting shader in render")
+                dbg.log(.INFO, "Compiling and transferring lighting shader in render")
                 transfer_shader(lighting_shader) or_return
                 return
             }
@@ -212,12 +212,12 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
             case resource.PBRMetallicRoughness:
                 base_colour := resource.get_texture(manager, v.base_colour)
                 if base_colour == nil {
-                    dbg.debug_point(dbg.LogLevel.ERROR, "PBR Metallic Roughness base colour texture unavailable")
+                    dbg.log(dbg.LogLevel.ERROR, "PBR Metallic Roughness base colour texture unavailable")
                     return
                 }
                 metallic_roughness := resource.get_texture(manager, v.metallic_roughness)
                 if metallic_roughness == nil {
-                    dbg.debug_point(dbg.LogLevel.ERROR, "PBR Metallic Roughness metallic roughness texture unavailable")
+                    dbg.log(dbg.LogLevel.ERROR, "PBR Metallic Roughness metallic roughness texture unavailable")
                     return
                 }
 
@@ -241,7 +241,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
             case resource.EmissiveTexture:
                 emissive_texture := resource.get_texture(manager, resource.TextureID(v))
                 if emissive_texture  == nil {
-                    dbg.debug_point(dbg.LogLevel.ERROR, "Emissive texture unavailable")
+                    dbg.log(dbg.LogLevel.ERROR, "Emissive texture unavailable")
                     return
                 }
 
@@ -253,7 +253,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
             case resource.OcclusionTexture:
                 occlusion_texture := resource.get_texture(manager, resource.TextureID(v))
                 if occlusion_texture  == nil {
-                    dbg.debug_point(dbg.LogLevel.ERROR, "Occlusion texture unavailable")
+                    dbg.log(dbg.LogLevel.ERROR, "Occlusion texture unavailable")
                     return
                 }
 
@@ -265,7 +265,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
             case resource.NormalTexture:
                 normal_texture := resource.get_texture(manager, resource.TextureID(v))
                 if normal_texture  == nil {
-                    dbg.debug_point(dbg.LogLevel.ERROR, "Normal texture unavailable")
+                    dbg.log(dbg.LogLevel.ERROR, "Normal texture unavailable")
                     return
                 }
 
@@ -276,7 +276,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
             case resource.BaseColourTexture:
                 base_colour := resource.get_texture(manager, resource.TextureID(v))
                 if base_colour == nil {
-                    dbg.debug_point(dbg.LogLevel.ERROR, "Base colour texture unavailable")
+                    dbg.log(dbg.LogLevel.ERROR, "Base colour texture unavailable")
                     return
                 }
 
@@ -301,11 +301,11 @@ CameraBufferData :: struct #packed {
 }
 
 update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
-    dbg.debug_point()
+    dbg.log()
 
     viewpoint := scene.viewpoint
     if viewpoint == nil {
-        dbg.debug_point(dbg.LogLevel.ERROR, "Scene viewpoint is nil!")
+        dbg.log(dbg.LogLevel.ERROR, "Scene viewpoint is nil!")
         return
     }
 
@@ -383,7 +383,7 @@ light_to_gpu_light :: proc(light: resource.Light) -> (gpu_light: rawptr) {
             gpu_light = p_Light
     }
 
-    if gpu_light == nil do dbg.debug_point(dbg.LogLevel.ERROR, "Nil GPU light information found")
+    if gpu_light == nil do dbg.log(dbg.LogLevel.ERROR, "Nil GPU light information found")
     return
 }
 
@@ -468,7 +468,7 @@ create_lighting_shader :: proc(manager: ^resource.ResourceManager, compile: bool
     for _, &material in manager.materials {
         if material.lighting_shader != nil do continue
 
-        dbg.debug_point(dbg.LogLevel.INFO, "Creating lighing shader for material: %s", material.name)
+        dbg.log(dbg.LogLevel.INFO, "Creating lighing shader for material: %s", material.name)
         program := shader.read_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.frag", standards.SHADER_RESOURCE_PATH + "demo_shader.vert") or_return
         if compile do transfer_shader(&program) or_return
 
