@@ -3,11 +3,12 @@ package ecs
 import dbg "../debug"
 import "../utils"
 import "../resource"
+import "../standards"
 
+import "core:strings"
 import "core:mem"
 import "core:testing"
 import "core:log"
-import standards "../standards"
 
 SceneQuery :: union {
     ArchetypeQuery,  // To use the same query on all archetypes
@@ -54,11 +55,18 @@ get_component_from_query_result :: proc(result: SceneQueryResult, $T: typeid, co
 }
 
 
-delete_archetype_query_result :: proc(result: ArchetypeQueryResult) {
-    for key, _ in result.entity_map do delete(key)
-    delete(result.entity_map)
+destroy_scene_query_result :: proc(result: SceneQueryResult) {
+    for str, arch_res in result {
+        delete(str)
+        destroy_archetype_query_result(arch_res)
+    }
 
-    for key, _ in result.component_map do delete(key)
+    delete(result)
+}
+
+destroy_archetype_query_result :: proc(result: ArchetypeQueryResult) {
+    // Entity and component maps should reference internal string keys
+    delete(result.entity_map)
     delete(result.component_map)
 
     for arr2 in result.data do delete(arr2)
@@ -71,7 +79,7 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResu
     switch v in query {
         case ArchetypeQuery:
             for label, ind in scene.archetype_label_match {
-                result[label] = query_archetype(&scene.archetypes[ind], v) or_return
+                result[strings.clone(label)] = query_archetype(&scene.archetypes[ind], v) or_return
             }
         case map[string]ArchetypeQuery:
             for archetype_label, archetype_query in v {
@@ -80,7 +88,7 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery) -> (result: SceneQueryResu
                     dbg.log(dbg.LogLevel.ERROR, "Archetype label %s does not map to an existing archetype", archetype_label)
                     return
                 }
-                query_archetype(archetype, archetype_query) or_return
+                result[strings.clone(archetype_label)] = query_archetype(archetype, archetype_query) or_return
             }
     }
 

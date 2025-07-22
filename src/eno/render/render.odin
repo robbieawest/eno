@@ -40,6 +40,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
         { label = standards.VISIBLE_COMPONENT.label, action = .QUERY_NO_INCLUDE, data = &isVisibleQueryData },
     }}
     query_result := ecs.query_scene(scene, query) or_return
+    defer ecs.destroy_scene_query_result(query_result)
 
     // flatten into lots of meshes
     ModelWorldPair :: struct {
@@ -396,6 +397,7 @@ update_lights_ssbo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
         { label = standards.VISIBLE_COMPONENT.label, action = .QUERY_NO_INCLUDE, data = &isVisibleQueryData }
     }}
     query_result := ecs.query_scene(scene, query) or_return
+    defer ecs.destroy_scene_query_result(query_result)
 
     lights := ecs.get_component_from_query_result(query_result, resource.Light, resource.LIGHT_COMPONENT.label) or_return
     defer delete(lights)

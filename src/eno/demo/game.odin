@@ -93,6 +93,7 @@ set_light_position :: proc() -> (ok: bool) {
         { label = standards.VISIBLE_COMPONENT.label, action = .QUERY_NO_INCLUDE, data = &isVisibleQueryData }
     }}
     query_result := ecs.query_scene(game.Game.scene, query) or_return
+    defer ecs.destroy_scene_query_result(query_result)
 
     lights := ecs.get_component_from_query_result(query_result, resource.Light, resource.LIGHT_COMPONENT.label) or_return
     worlds := ecs.get_component_from_query_result(query_result, standards.WorldComponent, standards.WORLD_COMPONENT.label) or_return
