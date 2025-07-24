@@ -6,11 +6,13 @@ import stbi "vendor:stb/image"
 import "../standards"
 import dbg "../debug"
 import futils "../file_utils"
+import "../utils"
 
+import "base:runtime"
+import "core:mem"
 import "core:strings"
 import glm "core:math/linalg/glsl"
 import "core:log"
-import utils "../utils"
 
 MODEL_COMPONENT := standards.ComponentTemplate{ "Model", Model, size_of(Model) }
 LIGHT_COMPONENT := standards.ComponentTemplate{ "Light", Light, size_of(Light) }
@@ -335,22 +337,37 @@ Texture :: struct {
     gpu_texture: Maybe(u32)
 }
 
+// Does not release GPU memory
+destroy_texture :: proc(texture: Texture) {
+    delete(texture.name)
+    destroy_image(texture.image)
+}
+
 Image :: struct {
     name: string,
     w, h, channels: i32,
-    pixel_data: rawptr,  // Can be nil for no data
+    pixel_data: rawptr  // Can be nil for no data
 }
 
-texture_from_cgltf_texture :: proc(texture: ^cgltf.texture, gltf_file_location: string) -> (result: Texture, ok: bool) {
+destroy_image :: proc(image: Image) {
+    delete(image.name)
+    destroy_pixel_data(image)
+}
+
+destroy_pixel_data :: proc(image: Image) {
+    stbi.image_free(image.pixel_data)
+}
+
+texture_from_cgltf_texture :: proc(texture: ^cgltf.texture, gltf_file_location: string, allocator := context.allocator) -> (result: Texture, ok: bool) {
     if texture == nil do return result, true
     return Texture {
         strings.clone_from_cstring(texture.name),
-        load_image_from_cgltf_image(texture.image_, gltf_file_location) or_return,
-        nil
+        load_image_from_cgltf_image(texture.image_, gltf_file_location, allocator) or_return,
+        nil,
     }, true
 }
 
-load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: string) -> (result: Image, ok: bool) {
+load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: string, allocator := context.allocator) -> (result: Image, ok: bool) {
     //log.infof("cgltf image: %#v", image)
     if image.name != nil do result.name = strings.clone_from_cstring(image.name)
     dbg.log(.INFO, "Reading cgltf image: %s", image.uri)
@@ -369,6 +386,7 @@ load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: str
     // todo not tested, mimeType MUST be used via spec
     image_buffer: [^]byte = transmute([^]byte)(uintptr(image.buffer_view.buffer.data) + uintptr(image.buffer_view.offset))
     result.pixel_data = stbi.load_from_memory(image_buffer, i32(image.buffer_view.size), &result.w, &result.h, &result.channels, 0)
+
     if result.pixel_data == nil {
         dbg.log(.ERROR, "Could not read pixel data from memory")
         return
@@ -378,9 +396,10 @@ load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: str
     return
 }
 
+
 // Does not assert validity of uri
 @(private)
-load_image_from_uri :: proc(uri: string, uri_base: string = "", flip_image := false) -> (result: Image, ok: bool) {
+load_image_from_uri :: proc(uri: string, uri_base: string = "", flip_image := false, allocator := context.allocator) -> (result: Image, ok: bool) {
     path := len(uri_base) == 0 ? strings.clone(uri) : utils.concat(uri_base, uri); defer delete(path)
     path_cstr := strings.clone_to_cstring(path); defer delete(path_cstr)
 

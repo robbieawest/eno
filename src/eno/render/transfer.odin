@@ -12,35 +12,41 @@ import "core:mem"
 import "base:runtime"
 
 
-// todo look at shaders for this
-release_mesh :: proc(mesh: ^resource.Mesh) {
-    delete(mesh.vertex_data)
-    delete(mesh.index_data)
+release_mesh :: proc(mesh: resource.Mesh) {
+    mesh := mesh
     gl.DeleteVertexArrays(1, &mesh.gl_component.vao.?)
     gl.DeleteBuffers(1, &mesh.gl_component.vbo.?)
     gl.DeleteBuffers(1, &mesh.gl_component.ebo.?)
 }
 
-release_model :: proc(model: ^resource.Model) {
-    for &mesh in model.meshes do release_mesh(&mesh)
+release_model :: proc(model: resource.Model) {
+    for mesh in model.meshes do release_mesh(mesh)
 }
 
 // Pretty useless
-transfer_model :: proc(manager: ^resource.ResourceManager, model: resource.Model) -> (ok: bool) {
+transfer_model :: proc(manager: ^resource.ResourceManager, model: resource.Model, destroy_after_transfer := true) -> (ok: bool) {
     dbg.log(.INFO, "Transferring model")
 
-    for &mesh in model.meshes do transfer_mesh(&mesh) or_return
+    for &mesh in model.meshes do transfer_mesh(&mesh, destroy_after_transfer) or_return
 
     return
 }
 
 @(private)
-transfer_mesh :: proc(mesh: ^resource.Mesh, loc := #caller_location) -> (ok: bool) {
+transfer_mesh :: proc(mesh: ^resource.Mesh, destroy_after_transfer := true, loc := #caller_location) -> (ok: bool) {
     if mesh.gl_component.vao == nil do create_and_transfer_vao(&mesh.gl_component.vao)
     else do bind_vao(mesh.gl_component.vao.?)
-    if mesh.gl_component.vbo == nil do create_and_transfer_vbo(&mesh.gl_component.vbo, mesh) or_return
+
+    if mesh.gl_component.vbo == nil {
+        create_and_transfer_vbo(&mesh.gl_component.vbo, mesh) or_return
+        if destroy_after_transfer do delete(mesh.vertex_data)
+    }
     else do bind_vbo(mesh.gl_component.vbo.?)
-    if mesh.gl_component.ebo == nil do create_and_transfer_ebo(&mesh.gl_component.ebo, mesh) or_return
+
+    if mesh.gl_component.ebo == nil {
+        create_and_transfer_ebo(&mesh.gl_component.ebo, mesh) or_return
+        if destroy_after_transfer do delete(mesh.index_data)
+    }
     else do bind_ebo(mesh.gl_component.ebo.?)
 
     return true
@@ -167,7 +173,7 @@ bind_program :: proc(program: u32) {
 /* 2D single sample texture for gpu package internal use */
 GPUTexture :: Maybe(u32)
 
-transfer_texture :: proc(tex: ^resource.Texture, loc := #caller_location) -> (ok: bool) {
+transfer_texture :: proc(tex: ^resource.Texture, destroy_after_transfer := true, loc := #caller_location) -> (ok: bool) {
 
     if tex == nil {
         dbg.log(.ERROR, "Texture given as nil", loc=loc)
@@ -182,6 +188,8 @@ transfer_texture :: proc(tex: ^resource.Texture, loc := #caller_location) -> (ok
         return
     }
 
+    if tex.image.pixel_data != nil && destroy_after_transfer do resource.destroy_pixel_data(tex.image)
+
     tex.gpu_texture = gpu_tex
 
     return true
@@ -195,14 +203,13 @@ make_texture_ :: proc(tex: resource.Texture) -> (texture: GPUTexture) {
 }
 
 make_texture_raw :: proc(w, h: i32, data: rawptr = nil, internal_format: i32 = gl.RGBA8, lod: i32 = 0, format: u32 = gl.RGBA, type: u32 = gl.UNSIGNED_BYTE) -> (texture: GPUTexture) {
-    dbg.log(dbg.LogLevel.INFO, "Making new texture")
+    dbg.log(.INFO, "Making new texture")
     id: u32
     gl.GenTextures(1, &id)
     texture = id
 
     gl.BindTexture(gl.TEXTURE_2D, id)
     gl.TexImage2D(gl.TEXTURE_2D, lod, internal_format, w, h, 0, format, type, data)
-    // Todo Check if glPixelStorei is needed to be called for channels
 
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
@@ -212,7 +219,7 @@ make_texture_raw :: proc(w, h: i32, data: rawptr = nil, internal_format: i32 = g
     return
 }
 
-destroy_texture :: proc(texture: ^GPUTexture) {
+release_texture :: proc(texture: ^GPUTexture) {
     if id, id_ok := texture.?; id_ok do gl.DeleteTextures(1, &id)
 }
 

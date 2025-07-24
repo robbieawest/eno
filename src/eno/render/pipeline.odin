@@ -84,8 +84,8 @@ Attachment :: struct {
 
 destroy_attachment :: proc(attachment: ^Attachment) {
     switch &data in attachment.data {
-        case GPUTexture: destroy_texture(&data)
-        case RenderBuffer: destroy_render_buffer(&data)
+        case GPUTexture: release_texture(&data)
+        case RenderBuffer: release_render_buffer(&data)
     }
 }
 
@@ -99,7 +99,7 @@ RenderBuffer :: struct {
     id: Maybe(u32)
 }
 
-destroy_render_buffer :: proc(render_buffer: ^RenderBuffer) {
+release_render_buffer :: proc(render_buffer: ^RenderBuffer) {
     if id, id_ok := render_buffer.id.?; id_ok do gl.DeleteRenderbuffers(1, &id)
 }
 
