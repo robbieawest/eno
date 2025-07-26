@@ -65,6 +65,20 @@ init_resource_manager :: proc(allocator := context.allocator) -> ResourceManager
     }
 }
 
+// Allocates buf for material pointers - recommend specifying temp allocator
+get_materials :: proc(manager: ResourceManager, allocator := context.allocator) -> []^Material {
+    mat_dyn := make([dynamic]^Material, allocator)
+
+    for _, bucket in manager.materials {
+        iterator := list.iterator_head(bucket, ResourceNode(Material), "node")
+        for resource_node in list.iterate_next(&iterator) {
+            append(&mat_dyn, &resource_node.resource)
+        }
+    }
+
+    return mat_dyn[:]
+}
+
 // Assumes resource appears at most once in bucket
 // O(N * M) linear + mem compare, M = bytes in T, N = length of bucket
 // Linear memory compare as opposed to pointer compare
@@ -107,6 +121,7 @@ add_resource :: proc(
         resource_node, node_exists := traverse_bucket(bucket^, T, resource)
 
         if node_exists {
+            dbg.log(.INFO, "Increasing reference of resource, hash: %d", hash)
             // References an existing node/resource which is the same
             // Now, increase reference count of that resource and return an ident
 
@@ -119,17 +134,20 @@ add_resource :: proc(
             id.node = uintptr(resource_node)
         }
         else {
+            dbg.log(.INFO, "Hash found, adding new node in resource bucket of type: %v", typeid_of(T))
             node := new(ResourceNode(T), allocator=allocator)
             node.resource = resource
             node.reference_count = 1
 
             list.push_back(bucket, &node.node)
+            dbg.log(.INFO, "Added new node in bucket of hash: %d", hash)
 
             id.hash = hash
             id.node = uintptr(&node)
         }
     }
     else {
+        dbg.log(.INFO, "Hash not found, adding new node in new resource bucket of type: %v", typeid_of(T))
         new_list: list.List
         node := new(ResourceNode(T), allocator=allocator)
         node.resource = resource
@@ -137,9 +155,10 @@ add_resource :: proc(
 
         list.push_back(&new_list, &node.node)
         mapping[hash] = new_list
+        dbg.log(.INFO, "Added new mapping of hash: %d", hash)
 
         id.hash = hash
-        id.node = uintptr(&node)
+        id.node = uintptr(node)
     }
 
     ok = true
@@ -181,6 +200,7 @@ get_resource :: proc(
     mapping: ^ResourceMapping,
     $T: typeid,
     ident: ResourceIdent,
+    loc := #caller_location
 ) -> (resource: ^T, ok: bool) {
     if ident.hash not_in mapping {
         dbg.log(.ERROR, "Ident hash not found in mapping")
@@ -188,19 +208,25 @@ get_resource :: proc(
     }
 
     bucket := mapping[ident.hash]
-    resource_node := traverse_bucket_ptr(bucket, T, ident.node) or_return
+    resource_node, node_found := traverse_bucket_ptr(bucket, T, ident.node)
+    if !node_found {
+        dbg.log(.ERROR, "Node not found in bucket, hash: %d, node: %p, type: %v", ident.hash, rawptr(ident.node), typeid_of(T))
+        dbg.log(.ERROR, "Mapping: %#v", mapping)
+        return
+    }
+
     return &resource_node.resource, true
 }
 
-add_texture_to_manager :: proc(manager: ^ResourceManager, texture: Texture) -> (id: ResourceIdent, ok: bool) {
+add_texture :: proc(manager: ^ResourceManager, texture: Texture) -> (id: ResourceIdent, ok: bool) {
     return add_resource(&manager.textures, Texture, texture, manager.allocator)
 }
 
-add_shader_to_manager :: proc(manager: ^ResourceManager, program: shader.ShaderProgram) -> (id: ResourceIdent, ok: bool) {
+add_shader :: proc(manager: ^ResourceManager, program: shader.ShaderProgram) -> (id: ResourceIdent, ok: bool) {
     return add_resource(&manager.shaders, shader.ShaderProgram, program, manager.allocator)
 }
 
-add_material_to_manager :: proc(manager: ^ResourceManager, material: Material) -> (id: ResourceIdent, ok: bool) {
+add_material :: proc(manager: ^ResourceManager, material: Material) -> (id: ResourceIdent, ok: bool) {
     return add_resource(&manager.materials, Material, material, manager.allocator)
 }
 
@@ -216,14 +242,31 @@ get_shader :: proc(manager: ^ResourceManager, id: ResourceID) -> (program: ^shad
     return get_resource(&manager.shaders, shader.ShaderProgram, utils.unwrap_maybe(id) or_return)
 }
 
+remove_texture :: proc(manager: ^ResourceManager, id: ResourceID) -> (ok: bool) {
+    return remove_resource(&manager.textures, Texture, utils.unwrap_maybe(id) or_return, manager.allocator)
+}
+
+remove_material :: proc(manager: ^ResourceManager, id: ResourceID) -> (ok: bool) {
+    return remove_resource(&manager.materials, Material, utils.unwrap_maybe(id) or_return, manager.allocator)
+}
+
+remove_shader :: proc(manager: ^ResourceManager, id: ResourceID) -> (ok: bool) {
+    return remove_resource(&manager.shaders, shader.ShaderProgram, utils.unwrap_maybe(id) or_return, manager.allocator)
+}
+
 
 // estupido
-get_billboard_lighting_shader :: proc(manager: ^ResourceManager) -> (result: ShaderID, ok: bool) {
-    if manager.billboard_shader == nil || manager.billboard_shader.? not_in manager.shaders {
+get_billboard_lighting_shader :: proc(manager: ^ResourceManager) -> (result: ResourceIdent, ok: bool) {
+
+    shader_ident, shader_ok := manager.billboard_shader.?
+    billboard_shader: ^shader.ShaderProgram
+    if shader_ok do billboard_shader, shader_ok = get_resource(&manager.shaders, shader.ShaderProgram, shader_ident)
+
+    if !shader_ok {
         program := shader.read_shader_source(standards.SHADER_RESOURCE_PATH + "billboard.vert", standards.SHADER_RESOURCE_PATH + "billboard.frag") or_return
-        result = add_shader_to_manager(manager, program)
+        result = add_shader(manager, program) or_return
         manager.billboard_shader = result
         return result, true
     }
-    return manager.billboard_shader.?, true
+    return shader_ident, true
 }

@@ -189,7 +189,7 @@ extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh, gltf_fil
 
         // Set material properties
         if primitive.material != nil {
-            mesh_ret.material = add_material_to_manager(manager, eno_material_from_cgltf_material(manager, primitive.material^, gltf_file_location) or_return)
+            mesh_ret.material = add_material(manager, eno_material_from_cgltf_material(manager, primitive.material^, gltf_file_location) or_return) or_return
         }
 
         // Construct layout

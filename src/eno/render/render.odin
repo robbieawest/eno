@@ -85,7 +85,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
             world_comp: ^standards.WorldComponent
         }
 
-        material_map := make(map[resource.MaterialID][dynamic]MeshWorldPair, context.temp_allocator)
+        material_map := make(map[resource.ResourceIdent][dynamic]MeshWorldPair, context.temp_allocator)
         defer {
             for _, v in material_map do delete(v)
             delete(material_map)
@@ -114,7 +114,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
 
         for mat_id, &mesh_pairs in material_map {
 
-            material := resource.get_material(manager, mat_id)
+            material := resource.get_material(manager, mat_id) or_return
 
             // Sanity checks
             if material == nil {
@@ -125,7 +125,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
                 dbg.log(.ERROR, "Material lighting shader is not set")
             }
 
-            lighting_shader := resource.get_shader(manager, material.lighting_shader.?)
+            lighting_shader := resource.get_shader(manager, material.lighting_shader.?) or_return
 
             if lighting_shader.id == nil {
                 dbg.log(.INFO, "Compiling and transferring lighting shader in render")
@@ -209,12 +209,12 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
         infos += { info }
         switch v in property.value {
             case resource.PBRMetallicRoughness:
-                base_colour := resource.get_texture(manager, v.base_colour)
+                base_colour := resource.get_texture(manager, v.base_colour) or_return
                 if base_colour == nil {
                     dbg.log(dbg.LogLevel.ERROR, "PBR Metallic Roughness base colour texture unavailable")
                     return
                 }
-                metallic_roughness := resource.get_texture(manager, v.metallic_roughness)
+                metallic_roughness := resource.get_texture(manager, v.metallic_roughness) or_return
                 if metallic_roughness == nil {
                     dbg.log(dbg.LogLevel.ERROR, "PBR Metallic Roughness metallic roughness texture unavailable")
                     return
@@ -238,8 +238,8 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 shader.set_uniform(lighting_shader, resource.EMISSIVE_FACTOR, v[0], v[1], v[2])
 
             case resource.EmissiveTexture:
-                emissive_texture := resource.get_texture(manager, resource.TextureID(v))
-                if emissive_texture  == nil {
+                emissive_texture, tex_ok := resource.get_texture(manager, resource.ResourceIdent(v))
+                if !tex_ok || emissive_texture == nil {
                     dbg.log(dbg.LogLevel.ERROR, "Emissive texture unavailable")
                     return
                 }
@@ -250,8 +250,8 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 texture_unit += 1
 
             case resource.OcclusionTexture:
-                occlusion_texture := resource.get_texture(manager, resource.TextureID(v))
-                if occlusion_texture  == nil {
+                occlusion_texture, tex_ok := resource.get_texture(manager, resource.ResourceIdent(v))
+                if !tex_ok || occlusion_texture == nil {
                     dbg.log(dbg.LogLevel.ERROR, "Occlusion texture unavailable")
                     return
                 }
@@ -262,8 +262,8 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 texture_unit += 1
 
             case resource.NormalTexture:
-                normal_texture := resource.get_texture(manager, resource.TextureID(v))
-                if normal_texture  == nil {
+                normal_texture, tex_ok := resource.get_texture(manager, resource.ResourceIdent(v))
+                if !tex_ok || normal_texture  == nil {
                     dbg.log(dbg.LogLevel.ERROR, "Normal texture unavailable")
                     return
                 }
@@ -273,8 +273,8 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 shader.set_uniform(lighting_shader, resource.NORMAL_TEXTURE, i32(texture_unit))
                 texture_unit += 1
             case resource.BaseColourTexture:
-                base_colour := resource.get_texture(manager, resource.TextureID(v))
-                if base_colour == nil {
+                base_colour, tex_ok := resource.get_texture(manager, resource.ResourceIdent(v))
+                if !tex_ok || base_colour == nil {
                     dbg.log(dbg.LogLevel.ERROR, "Base colour texture unavailable")
                     return
                 }
@@ -462,15 +462,17 @@ update_lights_ssbo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
 
 // todo full - this is demo
 create_lighting_shader :: proc(manager: ^resource.ResourceManager, compile: bool) -> (ok: bool) {
+    materials := resource.get_materials(manager^)
+    defer delete(materials)
 
-    for _, &material in manager.materials {
+    for material in materials {
         if material.lighting_shader != nil do continue
 
         dbg.log(dbg.LogLevel.INFO, "Creating lighing shader for material: %s", material.name)
         program := shader.read_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.frag", standards.SHADER_RESOURCE_PATH + "demo_shader.vert") or_return
         if compile do transfer_shader(&program) or_return
 
-        shader_id := resource.add_shader_to_manager(manager, program)
+        shader_id := resource.add_shader(manager, program) or_return
         material.lighting_shader = shader_id
     }
 

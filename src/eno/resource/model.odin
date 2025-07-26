@@ -79,7 +79,7 @@ Mesh :: struct {
     index_data: IndexData,
     indices_count: int,
     layout: VertexLayout,
-    material: Maybe(MaterialID),
+    material: ResourceID,
     gl_component: GLComponent,
     is_billboard: bool
 }
@@ -103,11 +103,11 @@ destroy_mesh :: proc(mesh: ^Mesh) {
 }
 
 // Does not transfer
-texture_from_path :: proc(manager: ^ResourceManager, name: string, path: string, path_base: string = "", flip_image := false) -> (id: TextureID, ok: bool) {
+texture_from_path :: proc(manager: ^ResourceManager, name: string, path: string, path_base: string = "", flip_image := false) -> (id: ResourceIdent, ok: bool) {
     texture: Texture
     texture.image = load_image_from_uri(path, path_base, flip_image) or_return
     texture.name = strings.clone(name)
-    return add_texture_to_manager(manager, texture), true
+    return add_texture(manager, texture)
 }
 
 // Does not transfer
@@ -118,8 +118,8 @@ create_billboard_model_from_path :: proc(manager: ^ResourceManager, texture_name
 
 // Does not transfer
 // Todo use unlit property
-create_billboard_model_from_id :: proc(manager: ^ResourceManager, texture: TextureID) -> (model: Model, ok: bool) {
-    if get_texture(manager, texture) == nil {
+create_billboard_model_from_id :: proc(manager: ^ResourceManager, id: ResourceIdent) -> (model: Model, ok: bool) {
+    texture, tex_ok := get_texture(manager, id); if !tex_ok {
         dbg.log(.ERROR, "Texture does not map to an existing texture in the manager")
         return
     }
@@ -132,9 +132,9 @@ create_billboard_model_from_id :: proc(manager: ^ResourceManager, texture: Textu
     material: Material
     material.lighting_shader = get_billboard_lighting_shader(manager) or_return
     material.properties = make(map[MaterialPropertyInfo]MaterialProperty)
-    material.properties[.BASE_COLOUR_TEXTURE] = { BASE_COLOUR_TEXTURE, BaseColourTexture(texture) }
+    material.properties[.BASE_COLOUR_TEXTURE] = { BASE_COLOUR_TEXTURE, BaseColourTexture(id) }
 
-    id := add_material_to_manager(manager, material)
+    id := add_material(manager, material) or_return
     billboard_mesh.material = id
     model.meshes[0] = billboard_mesh
 
@@ -231,21 +231,21 @@ Material :: struct {
     properties: map[MaterialPropertyInfo]MaterialProperty,
     double_sided: bool,
     unlit: bool,
-    lighting_shader: Maybe(ShaderID)
+    lighting_shader: ResourceID
 }
 
 PBRMetallicRoughness :: struct {
-    base_colour: TextureID,
-    metallic_roughness: TextureID,
+    base_colour: ResourceIdent,
+    metallic_roughness: ResourceIdent,
     base_colour_factor: [4]f32,
     metallic_factor: f32,
     roughness_factor: f32
 }
 
-BaseColourTexture :: distinct TextureID
-NormalTexture :: distinct TextureID
-OcclusionTexture :: distinct TextureID
-EmissiveTexture :: distinct TextureID
+BaseColourTexture :: distinct ResourceIdent
+NormalTexture :: distinct ResourceIdent
+OcclusionTexture :: distinct ResourceIdent
+EmissiveTexture :: distinct ResourceIdent
 EmissiveFactor :: distinct [3]f32
 
 /*
@@ -288,8 +288,8 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
         base_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.base_color_texture.texture, gltf_file_location) or_return
         met_rough_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.metallic_roughness_texture.texture, gltf_file_location) or_return
 
-        base_tex_id := add_texture_to_manager(manager, base_tex)
-        met_rough_id := add_texture_to_manager(manager, met_rough_tex)
+        base_tex_id := add_texture(manager, base_tex) or_return
+        met_rough_id := add_texture(manager, met_rough_tex) or_return
 
         metallic_roughness := PBRMetallicRoughness {
             base_tex_id,
@@ -303,17 +303,17 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
 
     if cmat.normal_texture.texture != nil {
         tex := texture_from_cgltf_texture(cmat.normal_texture.texture, gltf_file_location) or_return
-        tex_id := add_texture_to_manager(manager, tex)
+        tex_id := add_texture(manager, tex) or_return
         material.properties[.NORMAL_TEXTURE] = { NORMAL_TEXTURE, NormalTexture(tex_id) }
     }
     if cmat.occlusion_texture.texture != nil {
         tex := texture_from_cgltf_texture(cmat.occlusion_texture.texture, gltf_file_location) or_return
-        tex_id := add_texture_to_manager(manager, tex)
+        tex_id := add_texture(manager, tex) or_return
         material.properties[.OCCLUSION_TEXTURE] = { OCCLUSION_TEXTURE, OcclusionTexture(tex_id) }
     }
     if cmat.emissive_texture.texture != nil {
         tex := texture_from_cgltf_texture(cmat.emissive_texture.texture, gltf_file_location) or_return
-        tex_id := add_texture_to_manager(manager, tex)
+        tex_id := add_texture(manager, tex) or_return
         material.properties[.EMISSIVE_TEXTURE] = { EMISSIVE_TEXTURE, EmissiveTexture(tex_id) }
         material.properties[.EMISSIVE_FACTOR] = { EMISSIVE_FACTOR, EmissiveFactor(cmat.emissive_factor) }
     }
