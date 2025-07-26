@@ -1,65 +1,223 @@
 package resource
 
 import "../shader"
+import dbg "../debug"
+import "../utils"
 
+import "core:hash"
+import "core:mem"
 import "core:log"
+import "core:container/intrusive/list"
 import standards "../standards"
+import runtime "base:runtime"
 
 // Package defining the resource manager and relevant systems relating to it
 
-ShaderID :: u32  // Referring to full shader pipelines
+// Nullable, just a Maybe(struct{ .. })
+ResourceIdent :: struct {
+    hash: ResourceHash,
+    node: ResourceNodeID
+}
+ResourceID :: Maybe(ResourceIdent)
 
+ResourceNodeID :: uintptr  // To avoid dereferencing - this is just an index which will always point to the correct node
+ResourceHash :: u64
+
+ResourceBucket :: list.List
+ResourceNode :: struct($T: typeid) {
+    node: list.Node,
+    resource: T,
+    reference_count: u32
+}
+
+ResourceMapping :: map[ResourceHash]ResourceBucket
+
+@(private)
+hash_resource :: proc($T: typeid, resource: T) -> ResourceHash {
+    // Extend possible to give different hash routine for a different resource type
+    when T == shader.ShaderProgram || T == Texture || T == Material {
+        resource := resource
+        return hash.fnv64a(transmute([]byte)runtime.Raw_Slice{ &resource, type_info_of(T).size })
+    }
+    else {
+        #panic("Type is invalid in hash")
+    }
+}
+
+// Only add/delete resources via the given procedures
 ResourceManager :: struct {
-    materials: map[MaterialID]Material,
-    shaders: map[ShaderID]shader.ShaderProgram,
-    textures: map[TextureID]Texture,
-    billboard_shader: Maybe(ShaderID),  // Hacky, a proper MaterialType would fix this
-    billboard_id: Maybe(TextureID)
+    materials: ResourceMapping,
+    shaders: ResourceMapping,
+    textures: ResourceMapping,
+    billboard_shader: ResourceID,  // Hacky, a proper MaterialType would fix this
+    billboard_id: ResourceID,  // Texture
+    allocator: mem.Allocator
 }
 
 init_resource_manager :: proc(allocator := context.allocator) -> ResourceManager {
     return ResourceManager {
-        make(map[MaterialID]Material, allocator=allocator),
-        make(map[ShaderID]shader.ShaderProgram, allocator=allocator),
-        make(map[TextureID]Texture, allocator=allocator),
+        make(ResourceMapping, allocator=allocator),
+        make(ResourceMapping, allocator=allocator),
+        make(ResourceMapping, allocator=allocator),
         nil,
-        nil
+        nil,
+        allocator
     }
 }
 
-add_texture_to_manager :: proc(manager: ^ResourceManager, texture: Texture) -> TextureID {
-    new_id := u32(len(manager.textures))
-    manager.textures[new_id] = texture
-    return new_id
+// Assumes resource appears at most once in bucket
+// O(N * M) linear + mem compare, M = bytes in T, N = length of bucket
+// Linear memory compare as opposed to pointer compare
+@(private)
+traverse_bucket :: proc(bucket: list.List, $T: typeid, resource: T) -> (node: ^ResourceNode(T), ok: bool) {
+    iterator := list.iterator_head(bucket, ResourceNode(T), "node")
+
+    for resource_node in list.iterate_next(&iterator) {
+        if utils.equals(resource, resource_node.resource) do return resource_node, true
+    }
+
+    return
 }
 
-add_shader_to_manager :: proc(manager: ^ResourceManager, program: shader.ShaderProgram) -> ShaderID {
-    new_id := u32(len(manager.shaders))
-    manager.shaders[new_id] = program
-    return new_id
+// O(N) linear + pointer compare
+@(private)
+traverse_bucket_ptr :: proc(bucket: list.List, $T: typeid, ptr: uintptr) -> (node: ^ResourceNode(T), ok: bool) {
+    iterator := list.iterator_head(bucket, ResourceNode(T), "node")
+
+    for resource_node in list.iterate_next(&iterator) {
+        if ptr == uintptr(resource_node) do return resource_node, true
+    }
+
+    return
 }
 
-add_material_to_manager :: proc(manager: ^ResourceManager, material: Material) -> MaterialID {
-    new_id := u32(len(manager.materials))
-    manager.materials[new_id] = material
-    return new_id
+@(private)
+add_resource :: proc(
+    mapping: ^ResourceMapping,
+    $T: typeid,
+    resource: T,
+    allocator: mem.Allocator
+) -> (id: ResourceIdent, ok: bool) {
+
+    hash := hash_resource(T, resource)
+
+    // Reused code, could be improved but kiss
+    if hash in mapping {
+        bucket: ^list.List = &mapping[hash]
+        resource_node, node_exists := traverse_bucket(bucket^, T, resource)
+
+        if node_exists {
+            // References an existing node/resource which is the same
+            // Now, increase reference count of that resource and return an ident
+
+            if resource_node.reference_count == max(u32) {
+                dbg.log(.ERROR, "Max reference count")
+                return
+            }
+            resource_node.reference_count += 1
+            id.hash = hash
+            id.node = uintptr(resource_node)
+        }
+        else {
+            node := new(ResourceNode(T), allocator=allocator)
+            node.resource = resource
+            node.reference_count = 1
+
+            list.push_back(bucket, &node.node)
+
+            id.hash = hash
+            id.node = uintptr(&node)
+        }
+    }
+    else {
+        new_list: list.List
+        node := new(ResourceNode(T), allocator=allocator)
+        node.resource = resource
+        node.reference_count = 1
+
+        list.push_back(&new_list, &node.node)
+        mapping[hash] = new_list
+
+        id.hash = hash
+        id.node = uintptr(&node)
+    }
+
+    ok = true
+    return
 }
 
-get_texture :: proc(manager: ^ResourceManager, id: TextureID) -> ^Texture {
-    if id not_in manager.textures do return nil
-    return &manager.textures[id]
+// Does not necessarily free up memory since this uses reference counting
+@(private)
+remove_resource :: proc(
+    mapping: ^ResourceMapping,
+    $T: typeid,
+    ident: ResourceIdent,
+    allocator: mem.Allocator
+) -> (ok: bool) {
+    if ident.hash not_in mapping {
+        dbg.log(.ERROR, "Ident hash not found in mapping")
+        return
+    }
+
+    bucket := mapping[ident.hash]
+    resource_node, resource_exists := traverse_bucket_ptr(bucket, T, ident.node)
+
+    if !resource_exists {
+        dbg.log(.ERROR, "Resource could not be found")
+        return
+    }
+
+    if resource_node.reference_count > 1 do resource_node.reference_count -= 1
+    else {
+        list.remove(&bucket, &resource_node.node)
+        free(resource_node, allocator)
+    }
+
+    return true
 }
 
-get_material :: proc(manager: ^ResourceManager, id: MaterialID) -> ^Material {
-    if id not_in manager.materials do return nil
-    return &manager.materials[id]
+@(private)
+get_resource :: proc(
+    mapping: ^ResourceMapping,
+    $T: typeid,
+    ident: ResourceIdent,
+) -> (resource: ^T, ok: bool) {
+    if ident.hash not_in mapping {
+        dbg.log(.ERROR, "Ident hash not found in mapping")
+        return
+    }
+
+    bucket := mapping[ident.hash]
+    resource_node := traverse_bucket_ptr(bucket, T, ident.node) or_return
+    return &resource_node.resource, true
 }
 
-get_shader :: proc(manager: ^ResourceManager, id: ShaderID) -> ^shader.ShaderProgram{
-    if id not_in manager.shaders do return nil
-    return &manager.shaders[id]
+add_texture_to_manager :: proc(manager: ^ResourceManager, texture: Texture) -> (id: ResourceIdent, ok: bool) {
+    return add_resource(&manager.textures, Texture, texture, manager.allocator)
 }
 
+add_shader_to_manager :: proc(manager: ^ResourceManager, program: shader.ShaderProgram) -> (id: ResourceIdent, ok: bool) {
+    return add_resource(&manager.shaders, shader.ShaderProgram, program, manager.allocator)
+}
+
+add_material_to_manager :: proc(manager: ^ResourceManager, material: Material) -> (id: ResourceIdent, ok: bool) {
+    return add_resource(&manager.materials, Material, material, manager.allocator)
+}
+
+get_texture :: proc(manager: ^ResourceManager, id: ResourceID) -> (texture: ^Texture, ok: bool) {
+    return get_resource(&manager.textures, Texture, utils.unwrap_maybe(id) or_return)
+}
+
+get_material :: proc(manager: ^ResourceManager, id: ResourceID) -> (material: ^Material, ok: bool) {
+    return get_resource(&manager.materials, Material, utils.unwrap_maybe(id) or_return)
+}
+
+get_shader :: proc(manager: ^ResourceManager, id: ResourceID) -> (program: ^shader.ShaderProgram, ok: bool) {
+    return get_resource(&manager.shaders, shader.ShaderProgram, utils.unwrap_maybe(id) or_return)
+}
+
+
+// estupido
 get_billboard_lighting_shader :: proc(manager: ^ResourceManager) -> (result: ShaderID, ok: bool) {
     if manager.billboard_shader == nil || manager.billboard_shader.? not_in manager.shaders {
         program := shader.read_shader_source(standards.SHADER_RESOURCE_PATH + "billboard.vert", standards.SHADER_RESOURCE_PATH + "billboard.frag") or_return

@@ -2,6 +2,8 @@ package utils
 
 import dbg "../debug"
 
+import "core:mem"
+
 copy_map :: proc(m: map[$K]$V, allocator := context.allocator) -> (ret: map[K]V) {
     ret = make(map[K]V, len(m), allocator=allocator)
     for k, v in m do ret[k] = v
@@ -28,4 +30,11 @@ s_safe_slice :: proc(slice: $T/[]$E, #any_int start: int, #any_int end: int, loc
     }
 
     return slice[start:end], true
+}
+
+
+// O(N) memory check where N = num bytes in T
+equals :: proc(a: $T, b: T) -> bool {
+    a := a; b := b
+    return mem.compare_ptrs(&a, &b, type_info_of(T).size) == 0
 }

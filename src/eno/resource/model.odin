@@ -225,7 +225,7 @@ MaterialPropertyInfo :: enum {
 }
 MaterialPropertiesInfos :: bit_set[MaterialPropertyInfo; u32]
 
-MaterialID :: u32
+MaterialID :: u64
 Material :: struct {
     name: string,
     properties: map[MaterialPropertyInfo]MaterialProperty,
@@ -330,7 +330,7 @@ Model :: struct {
     meshes: [dynamic]Mesh,
 }
 
-TextureID :: u32
+TextureID :: u64
 Texture :: struct {
     name: string,
     image: Image,
@@ -368,7 +368,6 @@ texture_from_cgltf_texture :: proc(texture: ^cgltf.texture, gltf_file_location: 
 }
 
 load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: string, allocator := context.allocator) -> (result: Image, ok: bool) {
-    //log.infof("cgltf image: %#v", image)
     if image.name != nil do result.name = strings.clone_from_cstring(image.name)
     dbg.log(.INFO, "Reading cgltf image: %s", image.uri)
 

@@ -14,7 +14,7 @@ import "base:runtime"
 DebugMode :: enum {
     RELEASE, DEBUG
 }
-DEBUG_MODE : DebugMode : .DEBUG
+DEBUG_MODE : DebugMode : #config(ENO_DEBUG, DebugMode.DEBUG)
 
 init_debug :: proc() {
     when DEBUG_MODE == .RELEASE {
