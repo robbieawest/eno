@@ -283,7 +283,6 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 bind_texture(texture_unit, base_colour.gpu_texture) or_return
                 shader.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, i32(texture_unit))
                 texture_unit += 1
-
         }
     }
 

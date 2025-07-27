@@ -234,6 +234,31 @@ Material :: struct {
     lighting_shader: ResourceID
 }
 
+destroy_material :: proc(manager: ^ResourceManager, material: Material, allocator := context.allocator) -> (ok: bool) {
+    ok = true
+    delete(material.name, allocator)
+    for _, property in material.properties {
+        delete(property.tag, allocator)
+
+        #partial switch v in property.value {
+            case PBRMetallicRoughness:
+                ok &= remove_texture(manager, v.metallic_roughness)
+                ok &= remove_texture(manager, v.base_colour)
+            case EmissiveTexture:
+                ok &= remove_texture(manager, ResourceIdent(v))
+            case OcclusionTexture:
+                ok &= remove_texture(manager, ResourceIdent(v))
+            case NormalTexture:
+                ok &= remove_texture(manager, ResourceIdent(v))
+            case BaseColourTexture:
+                ok &= remove_texture(manager, ResourceIdent(v))
+        }
+    }
+
+    return
+}
+
+
 PBRMetallicRoughness :: struct {
     base_colour: ResourceIdent,
     metallic_roughness: ResourceIdent,

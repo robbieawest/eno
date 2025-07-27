@@ -272,21 +272,64 @@ get_billboard_lighting_shader :: proc(manager: ^ResourceManager) -> (result: Res
 }
 
 
+// Allocator for internal temp uses - not for freeing resources, this uses manager.allocator
 clear_unused_resources :: proc(manager: ^ResourceManager, allocator := context.temp_allocator) ->  (ok: bool) {
-    ok |= clear_unused(&manager.materials, Material, manager.allocator, allocator)
-    ok |= clear_unused(&manager.textures, Texture, manager.allocator, allocator)
-    ok |= clear_unused(&manager.shaders, shader.ShaderProgram, manager.allocator, allocator)
+    ok = true
+    ok &= clear(manager, &manager.materials, Material, manager.allocator, allocator, check_reference_zero(Material))
+    ok &= clear(manager, &manager.textures, Texture, manager.allocator, allocator, check_reference_zero(Texture))
+    ok &= clear(manager, &manager.shaders, shader.ShaderProgram, manager.allocator, allocator, check_reference_zero(shader.ShaderProgram))
     return
 }
 
 @(private)
-clear_unused :: proc(
+check_reference_zero :: proc($T: typeid) -> proc(R: ResourceNode(T)) -> bool {
+    return proc(resource: ResourceNode(T)) -> bool {
+        return resource.reference_count == 0
+    }
+}
+
+// Each resource type must not also delete a resource of the same type or it will be icky I think
+// Does not clean up GPU resource, do this with render package
+destroy_manager :: proc(manager: ^ResourceManager, allocator := context.temp_allocator) -> (ok: bool) {
+    ok = true
+    ok &= clear(manager, &manager.materials, Material, manager.allocator, allocator, nil)
+    ok &= clear(manager, &manager.textures, Texture, manager.allocator, allocator, nil)
+    ok &= clear(manager, &manager.shaders, shader.ShaderProgram, manager.allocator, allocator, nil)
+
+    delete(manager.materials)
+    delete(manager.textures)
+    delete(manager.shaders)
+    return
+}
+
+destroy_resource :: proc(manager: ^ResourceManager, resource: $T) {
+    when T == Texture {
+        destroy_texture(resource)
+    }
+    else when T == shader.ShaderProgram {
+        shader.destroy_shader_program(resource)
+    }
+    else when T == Material {
+        destroy_material(manager, resource)
+    }
+    else {
+        #panic("Disallowed resource type")
+    }
+
+}
+
+@(private)
+clear :: proc(
+    manager: ^ResourceManager,
     mapping: ^ResourceMapping,
     $T: typeid,
     allocator: mem.Allocator,
     temp_allocator: mem.Allocator,
+    clear_by: Maybe(proc(R: ResourceNode(T)) -> bool),
     loc := #caller_location
 ) -> (ok: bool) {
+
+    clear_proc, clear_proc_ok := clear_by.?
 
     for hash, &bucket in mapping {
         if bucket.head == nil || bucket.tail == nil {
@@ -298,13 +341,14 @@ clear_unused :: proc(
 
         to_remove := make([dynamic]^ResourceNode(T), temp_allocator); defer delete(to_remove)
         for resource_node in list.iterate_next(&iterator) {
-            if resource_node.reference_count == 0 {
+            if !clear_proc_ok || clear_proc(resource_node^) {
                 append(&to_remove, resource_node)
             }
         }
 
         for &node in to_remove {
             list.remove(&bucket, &node.node)
+            destroy_resource(manager, node.resource)
             alloc_err := free(node, allocator)
             if alloc_err != .None {
                 dbg.log(.ERROR, "Allocator error while freeing resource of type: %v", typeid_of(T), loc=loc)
@@ -315,3 +359,4 @@ clear_unused :: proc(
 
     return true
 }
+
