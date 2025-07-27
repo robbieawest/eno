@@ -72,10 +72,7 @@ run_game :: proc() {
         Game.meta_data.last_delta = time.now()._nsec - t_before_frame
         update_metadata_elapsed(&Game.meta_data)
 
-        // Ensure maximum frame rate
-        //sleep_nanos := (1 / 60) * 1e9 - (time.now()._nsec - t_before_frame)
-        //time.sleep(time.Duration(sleep_nanos))
-        //time.sleep(1e7)
+        resource.clear_unused_resources(&Game.resource_manager) // todo handle bool ret
     }
 
 }
@@ -111,6 +108,7 @@ init_game_default_scene :: proc(window: win.WindowTarget, every_frame: frame_loo
 }
 
 destroy_game :: proc(allocator := context.allocator) {
+    resource.destroy_manager(&Game.resource_manager)
     win.destroy_window(Game.window)
     ecs.destroy_scene(Game.scene, allocator)
     control.destroy_controller(&Game.controller)

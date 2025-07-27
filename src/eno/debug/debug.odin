@@ -2,6 +2,7 @@ package debug
 
 import gl "vendor:OpenGL"
 
+import "core:os"
 import "core:log"
 import "core:strings"
 import "core:fmt"
@@ -333,11 +334,16 @@ sbprint_stack_item :: proc(stack_item: ^StackItem, builder: ^strings.Builder, fl
     else if .LOG_INFO_ONLY in flags {
         debug_info := stack_item.data
         switch debug_info.log_info.level {
-        case .INFO: if .OUT_INFO in flags do fmt.sbprintf(builder, "[%v] : %v : %v\n", debug_info.log_info.level, debug_info.loc, debug_info.log_info.msg)
-        case .WARN: if .OUT_WARN in flags do fmt.sbprintf(builder, "[%v] : %v : %v\n", debug_info.log_info.level, debug_info.loc, debug_info.log_info.msg)
-        case .ERROR: if .OUT_ERROR in flags do fmt.sbprintf(builder, "[%v] : %v : %v\n", debug_info.log_info.level, debug_info.loc, debug_info.log_info.msg)
+        case .INFO: if .OUT_INFO in flags do sbprint_debug_info(builder, debug_info)
+        case .WARN: if .OUT_WARN in flags do sbprint_debug_info(builder, debug_info)
+        case .ERROR: if .OUT_ERROR in flags do sbprint_debug_info(builder, debug_info)
         }
     }
 
     sbprint_stack_item(stack_item.prev, builder, flags)
+}
+
+@(private)
+sbprint_debug_info :: proc(builder: ^strings.Builder, debug_info: DebugInfo) {
+    fmt.sbprintf(builder, "[%v] : [%s:%d:%s()] : %v\n", debug_info.log_info.level, debug_info.loc.file_path, debug_info.loc.line, debug_info.loc.procedure, debug_info.log_info.msg)
 }

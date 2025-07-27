@@ -238,7 +238,7 @@ destroy_material :: proc(manager: ^ResourceManager, material: Material, allocato
     ok = true
     delete(material.name, allocator)
     for _, property in material.properties {
-        delete(property.tag, allocator)
+        // delete(property.tag, allocator) tag expected to be literal
 
         #partial switch v in property.value {
             case PBRMetallicRoughness:
@@ -363,9 +363,9 @@ Texture :: struct {
 }
 
 // Does not release GPU memory
-destroy_texture :: proc(texture: Texture) {
+destroy_texture :: proc(texture: ^Texture) {
     delete(texture.name)
-    destroy_image(texture.image)
+    destroy_image(&texture.image)
 }
 
 Image :: struct {
@@ -374,13 +374,14 @@ Image :: struct {
     pixel_data: rawptr  // Can be nil for no data
 }
 
-destroy_image :: proc(image: Image) {
+destroy_image :: proc(image: ^Image) {
     delete(image.name)
     destroy_pixel_data(image)
 }
 
-destroy_pixel_data :: proc(image: Image) {
-    stbi.image_free(image.pixel_data)
+destroy_pixel_data :: proc(image: ^Image) {
+    if image.pixel_data != nil do stbi.image_free(image.pixel_data)
+    image.pixel_data = nil
 }
 
 texture_from_cgltf_texture :: proc(texture: ^cgltf.texture, gltf_file_location: string, allocator := context.allocator) -> (result: Texture, ok: bool) {

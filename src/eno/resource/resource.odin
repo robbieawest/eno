@@ -50,6 +50,7 @@ ResourceManager :: struct {
     shaders: ResourceMapping,
     textures: ResourceMapping,
     billboard_shader: ResourceID,  // Hacky, a proper MaterialType would fix this
+    // (later) - not just hacky, it breaks reference counting
     billboard_id: ResourceID,  // Texture
     allocator: mem.Allocator
 }
@@ -174,22 +175,30 @@ remove_resource :: proc(
     allocator: mem.Allocator
 ) -> (ok: bool) {
     if ident.hash not_in mapping {
-        dbg.log(.ERROR, "Ident hash not found in mapping")
+        dbg.log(.ERROR, "Ident hash not found in mapping, hash: %d, type: %v", ident.hash, typeid_of(T))
         return
     }
 
-    bucket := mapping[ident.hash]
-    resource_node, resource_exists := traverse_bucket_ptr(bucket, T, ident.node)
+    bucket := &mapping[ident.hash]
+    resource_node, resource_exists := traverse_bucket_ptr(bucket^, T, ident.node)
 
     if !resource_exists {
         dbg.log(.ERROR, "Resource could not be found")
         return
     }
 
-    if resource_node.reference_count > 1 do resource_node.reference_count -= 1
+    if resource_node.reference_count >= 1 {
+        dbg.log(.INFO, "Decreasing reference count of resource of type: %v", typeid_of(T))
+        resource_node.reference_count -= 1
+    }
     else {
-        list.remove(&bucket, &resource_node.node)
+        dbg.log(.INFO, "Deleting resource of type: %v", typeid_of(T))
+        list.remove(bucket, &resource_node.node)
         free(resource_node, allocator)
+
+        if bucket.head == nil || bucket.tail == nil {
+            delete_key(mapping, ident.hash)
+        }
     }
 
     return true
@@ -200,6 +209,7 @@ get_resource :: proc(
     mapping: ^ResourceMapping,
     $T: typeid,
     ident: ResourceIdent,
+    is_shared_reference := false,
     loc := #caller_location
 ) -> (resource: ^T, ok: bool) {
     if ident.hash not_in mapping {
@@ -214,6 +224,8 @@ get_resource :: proc(
         dbg.log(.ERROR, "Mapping: %#v", mapping)
         return
     }
+
+    if is_shared_reference do resource_node.reference_count += 1
 
     return &resource_node.resource, true
 }
@@ -260,7 +272,7 @@ get_billboard_lighting_shader :: proc(manager: ^ResourceManager) -> (result: Res
 
     shader_ident, shader_ok := manager.billboard_shader.?
     billboard_shader: ^shader.ShaderProgram
-    if shader_ok do billboard_shader, shader_ok = get_resource(&manager.shaders, shader.ShaderProgram, shader_ident)
+    if shader_ok do billboard_shader, shader_ok = get_resource(&manager.shaders, shader.ShaderProgram, shader_ident, is_shared_reference=true)
 
     if !shader_ok {
         program := shader.read_shader_source(standards.SHADER_RESOURCE_PATH + "billboard.vert", standards.SHADER_RESOURCE_PATH + "billboard.frag") or_return
@@ -291,6 +303,7 @@ check_reference_zero :: proc($T: typeid) -> proc(R: ResourceNode(T)) -> bool {
 // Each resource type must not also delete a resource of the same type or it will be icky I think
 // Does not clean up GPU resource, do this with render package
 destroy_manager :: proc(manager: ^ResourceManager, allocator := context.temp_allocator) -> (ok: bool) {
+    dbg.log(.INFO, "Destroying manager")
     ok = true
     ok &= clear(manager, &manager.materials, Material, manager.allocator, allocator, nil)
     ok &= clear(manager, &manager.textures, Texture, manager.allocator, allocator, nil)
@@ -302,15 +315,16 @@ destroy_manager :: proc(manager: ^ResourceManager, allocator := context.temp_all
     return
 }
 
-destroy_resource :: proc(manager: ^ResourceManager, resource: $T) {
+@(private)
+destroy_resource :: proc(manager: ^ResourceManager, resource: ^$T) {
     when T == Texture {
         destroy_texture(resource)
     }
     else when T == shader.ShaderProgram {
-        shader.destroy_shader_program(resource)
+        shader.destroy_shader_program(resource^)
     }
     else when T == Material {
-        destroy_material(manager, resource)
+        destroy_material(manager, resource^)
     }
     else {
         #panic("Disallowed resource type")
@@ -328,6 +342,7 @@ clear :: proc(
     clear_by: Maybe(proc(R: ResourceNode(T)) -> bool),
     loc := #caller_location
 ) -> (ok: bool) {
+    if clear_by == nil do dbg.log(.INFO, "Fully clearing mapping of type: %v", typeid_of(T))
 
     clear_proc, clear_proc_ok := clear_by.?
 
@@ -338,23 +353,25 @@ clear :: proc(
         }
 
         iterator := list.iterator_head(bucket, ResourceNode(T), "node")
-
-        to_remove := make([dynamic]^ResourceNode(T), temp_allocator); defer delete(to_remove)
-        for resource_node in list.iterate_next(&iterator) {
+        node := bucket.head
+        for node != nil {
+            resource_node := (^ResourceNode(T))(uintptr(node) - iterator.offset)
             if !clear_proc_ok || clear_proc(resource_node^) {
-                append(&to_remove, resource_node)
+                // Delete
+                dbg.log(.INFO, "Deleting node of type: %v", typeid_of(T))
+                list.remove(&bucket, &resource_node.node)
+                destroy_resource(manager, &resource_node.resource)  // Could potentially delete a node in bucket
+
+                node = node.next
+                alloc_err := free(resource_node, allocator)
+                if alloc_err != .None {
+                    dbg.log(.ERROR, "Allocator error while freeing resource of type: %v", typeid_of(T), loc=loc)
+                    return
+                }
             }
+            else do node = node.next
         }
 
-        for &node in to_remove {
-            list.remove(&bucket, &node.node)
-            destroy_resource(manager, node.resource)
-            alloc_err := free(node, allocator)
-            if alloc_err != .None {
-                dbg.log(.ERROR, "Allocator error while freeing resource of type: %v", typeid_of(T), loc=loc)
-                return
-            }
-        }
     }
 
     return true

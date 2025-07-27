@@ -188,7 +188,7 @@ transfer_texture :: proc(tex: ^resource.Texture, destroy_after_transfer := true,
         return
     }
 
-    if tex.image.pixel_data != nil && destroy_after_transfer do resource.destroy_pixel_data(tex.image)
+    if tex.image.pixel_data != nil && destroy_after_transfer do resource.destroy_pixel_data(&tex.image)
 
     tex.gpu_texture = gpu_tex
 
