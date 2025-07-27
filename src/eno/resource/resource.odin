@@ -270,3 +270,48 @@ get_billboard_lighting_shader :: proc(manager: ^ResourceManager) -> (result: Res
     }
     return shader_ident, true
 }
+
+
+clear_unused_resources :: proc(manager: ^ResourceManager, allocator := context.temp_allocator) ->  (ok: bool) {
+    ok |= clear_unused(&manager.materials, Material, manager.allocator, allocator)
+    ok |= clear_unused(&manager.textures, Texture, manager.allocator, allocator)
+    ok |= clear_unused(&manager.shaders, shader.ShaderProgram, manager.allocator, allocator)
+    return
+}
+
+@(private)
+clear_unused :: proc(
+    mapping: ^ResourceMapping,
+    $T: typeid,
+    allocator: mem.Allocator,
+    temp_allocator: mem.Allocator,
+    loc := #caller_location
+) -> (ok: bool) {
+
+    for hash, &bucket in mapping {
+        if bucket.head == nil || bucket.tail == nil {
+            delete_key(mapping, hash)
+            continue
+        }
+
+        iterator := list.iterator_head(bucket, ResourceNode(T), "node")
+
+        to_remove := make([dynamic]^ResourceNode(T), temp_allocator); defer delete(to_remove)
+        for resource_node in list.iterate_next(&iterator) {
+            if resource_node.reference_count == 0 {
+                append(&to_remove, resource_node)
+            }
+        }
+
+        for &node in to_remove {
+            list.remove(&bucket, &node.node)
+            alloc_err := free(node, allocator)
+            if alloc_err != .None {
+                dbg.log(.ERROR, "Allocator error while freeing resource of type: %v", typeid_of(T), loc=loc)
+                return
+            }
+        }
+    }
+
+    return true
+}
