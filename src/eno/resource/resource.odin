@@ -300,7 +300,7 @@ check_reference_zero :: proc($T: typeid) -> proc(R: ResourceNode(T)) -> bool {
     }
 }
 
-// Each resource type must not also delete a resource of the same type or it will be icky I think
+// Each resource type must not also delete a resource of the same type or it will be icky and potentially breaking
 // Does not clean up GPU resource, do this with render package
 destroy_manager :: proc(manager: ^ResourceManager, allocator := context.temp_allocator) -> (ok: bool) {
     dbg.log(.INFO, "Destroying manager")

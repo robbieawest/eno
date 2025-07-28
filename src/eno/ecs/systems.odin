@@ -181,6 +181,8 @@ add_models_to_arch :: proc(scene: ^Scene, archetype: ^Archetype, models: ..resou
         return
     }
 
+    log.infof("models: %#v", len(models))
+
     for model_pair in models {
         archetype_add_entity(scene, archetype, model_pair.model.name,
             make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, model_pair.model),

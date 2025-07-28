@@ -5,47 +5,169 @@ import gl "vendor:OpenGL"
 import dbg "../debug"
 import "../utils"
 import mutils "../utils/math_utils"
+import "../ecs"
 
 import "core:reflect"
 import "core:strings"
 import "base:intrinsics"
 
-
-RenderPipeline :: struct {
+FrameBufferID :: u32  // Index into RenderPipeline.frame_buffers - checked
+RenderPipeline :: struct($N_bufs: int) {
+    frame_buffers: [N_bufs]FrameBuffer,
     passes: [dynamic]RenderPass
 }
 
 // Default render pipeline has no passes
-make_render_pipeline :: proc(passes: ..RenderPass) -> (ret: RenderPipeline) {
-    ret.passes = make([dynamic]RenderPass, 0, len(passes))
-    append_elems(&ret.passes, ..passes)
+init_render_pipeline :: proc(buffers: [$N]FrameBuffer, allocator := context.allocator) -> (ret: RenderPipeline(N)) {
+    ret.frame_buffers = buffers
+    ret.passes = make([dynamic]RenderPass, allocator=allocator)
     return
 }
 
+add_render_passes :: proc(pipeline: ^RenderPipeline($N), passes: ..RenderPass) -> (ok: bool) {
+    for pass in passes {
+        if pass.frame_buffer >= N {
+            dbg.log(.ERROR, "Render pass framebuffer id '%d' does not correspond to a framebuffer in the pipeline", pass.frame_buffer)
+            return
+        }
+
+        append(&pipeline.passes, pass)
+    }
+}
+
+
+
+// Releases GPU memory
 destroy_pipeline :: proc(pipeline: ^RenderPipeline) {
-    for &pass in pipeline.passes do destroy_render_pass(&pass)
+    for &fbo in pipeline.frame_buffers do destroy_framebuffer(&fbo)
     delete(pipeline.passes)
 }
 
 
-RenderPassType :: enum {
-    LIGHTING,
-    POST
+
+GeometryZSort :: enum u8 {
+    NO_SORT,
+    SORT_Z_ACS,
+    SORT_Z_DESC,
 }
+
+RenderDisableMask :: enum u8 {
+    COL_R,
+    COL_G,
+    COL_B,
+    COL_A,
+    DEPTH,
+    STENCIL
+}
+
+WriteFunc :: enum u8 {
+    NEVER,
+    LESS,
+    EQUAL,
+    LEQUAL,
+    GREATER,
+    NOTEQUAL,
+    GEQUAL,
+    ALWAYS
+}
+
+Face :: enum u8 {
+    FRONT,
+    BACK,
+    FRONT_AND_BACk
+}
+
+PolygonDisplayMode :: enum u8 {
+    FILL,
+    POINT,
+    LINE
+}
+
+PolygonMode :: struct {
+    face: Face,
+    display_mode: PolygonDisplayMode
+}
+
+BlendParameter :: enum u8 {
+    ZERO,
+    ONE,
+    SOURCE,
+    ONE_MINUS_SOURCE,
+    DEST,
+    ONE_MINUS_DEST,
+    SOURCE_ALPHA,
+    ONE_MINUS_SOURCE_ALPHA,
+    DEST_ALPHA,
+    ONE_MINUS_DEST_ALPHA,
+    CONSTANT_COLOUR,
+    ONE_MINUS_CONSTANT_COLOUR,
+    CONSTANT_ALPHA,
+    ONE_MINUS_CONSTANT_ALPHA,
+    ALPHA_SATURATE,
+}
+
+BlendFunc :: struct {
+    source: BlendParameter,
+    dest: BlendParameter
+}
+
+FrontFaceMode :: enum u8 {
+    COUNTER_CLOCKWISE,
+    CLOCKWISE,
+}
+
+RenderPassProperties :: struct {
+    geometry_z_sorting: GeometryZSort,
+    masks: bit_set[RenderDisableMask; u8],
+    blend_func: Maybe(BlendFunc),
+    polygon_mode: Maybe(PolygonMode),
+    front_face: FrontFaceMode,
+    cull_back_face: bool,
+    depth_test: bool,
+    stencil_test: bool,
+}
+
+RenderPassMeshGather :: union #no_nil { ecs.SceneQuery, ^RenderPass }
 
 // Structure may be too simple
 RenderPass :: struct {
-    frame_buffer: FrameBuffer,
-    type: RenderPassType
+    frame_buffer: FrameBufferID,
+    // If ^RenderPass, use the mesh data queried in that render pass
+    // When constructing a render pass, if mesh_gather : ^RenderPass then it will follow back through the references to find a ecs.SceneQuery
+    mesh_gather: RenderPassMeshGather,
+    properties: RenderPassProperties
 }
+
+
+
 
 // Populate this when needed
-make_render_pass :: proc(frame_buffer: FrameBuffer) -> RenderPass {
-    return { frame_buffer , .LIGHTING }
+make_render_pass :: proc(n_frame_buffers: $N, frame_buffer: FrameBufferID, mesh_gather: RenderPassMeshGather, properties: RenderPassProperties = {}) -> (pass: RenderPass, ok: bool) {
+    if frame_buffer >= n_frame_buffers {
+        dbg.log(.ERROR, "Frame buffer points outside of the number of frame buffers")
+        return
+    }
+    pass.frame_buffer = frame_buffer
+    pass.mesh_gather = mesh_gather
+    pass.properties = properties
+
+    if !check_render_pass_gather(pass, 0, n_frame_buffers) {
+        dbg.log(.ERROR, "Render pass mesh gather must end in an ecs.SceneQuery")
+        return
+    }
+
+    ok = true
+    return
 }
 
-destroy_render_pass :: proc(render_pass: ^RenderPass) {
-    destroy_framebuffer(&render_pass.frame_buffer)
+@(private)
+check_render_pass_gather :: proc(pass: ^RenderPass, iteration_curr: int, iteration_limit: int) -> (ok: bool) {
+    if iteration_curr == iteration_limit do return false
+    switch v in pass.mesh_gather {
+        case ecs.SceneQuery: return true
+        case ^RenderPass: return check_render_pass_gather(v, iteration_curr + 1, iteration_limit)
+    }
+    return // Impossible to reach but whatever
 }
 
 
@@ -82,6 +204,7 @@ Attachment :: struct {
     data: AttachmentData
 }
 
+// Releases GPU memory
 destroy_attachment :: proc(attachment: ^Attachment) {
     switch &data in attachment.data {
         case GPUTexture: release_texture(&data)
