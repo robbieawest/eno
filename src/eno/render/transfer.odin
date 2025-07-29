@@ -377,3 +377,99 @@ attach_program :: proc(program: shader.ShaderProgram, loc := #caller_location) {
 issue_single_element_draw_call :: proc(#any_int indices_count: i32) {
     gl.DrawElements(gl.TRIANGLES, indices_count, gl.UNSIGNED_INT, nil)
 }
+
+
+@(private)
+conv_blend_parameter :: proc(param: BlendParameter) -> u32 {
+    switch param {
+        case .ZERO: return gl.ZERO
+        case .ONE: return gl.ONE
+        case .SOURCE: return gl.SRC_COLOR
+        case .ONE_MINUS_SOURCE: return gl.ONE_MINUS_SRC_COLOR
+        case .SOURCE_ALPHA: return gl.SRC_ALPHA
+        case .ONE_MINUS_SOURCE_ALPHA: return gl.ONE_MINUS_SRC_ALPHA
+        case .DEST: return gl.DST_COLOR
+        case .ONE_MINUS_DEST: return gl.ONE_MINUS_DST_COLOR
+        case .DEST_ALPHA: return gl.ONE_MINUS_DST_ALPHA
+        case .ONE_MINUS_DEST_ALPHA: return gl.ONE_MINUS_DST_ALPHA
+        case .CONSTANT_COLOUR: return gl.CONSTANT_COLOR
+        case .ONE_MINUS_CONSTANT_COLOUR: return gl.ONE_MINUS_CONSTANT_COLOR
+        case .CONSTANT_ALPHA: return gl.CONSTANT_ALPHA
+        case .ONE_MINUS_CONSTANT_ALPHA: return gl.ONE_MINUS_CONSTANT_ALPHA
+        case .ALPHA_SATURATE: return gl.SRC_ALPHA_SATURATE
+    }
+    return 0
+}
+
+set_blend_func :: proc(func: BlendFunc) {
+    gl.BlendFunc(conv_blend_parameter(func.source), conv_blend_parameter(func.dest))
+}
+
+set_default_blend_func :: proc() {
+    gl.BlendFunc(gl.ONE, gl.ZERO)
+}
+
+@(private)
+conv_face :: proc(face: Face) -> u32 {
+    switch face {
+        case .FRONT: return gl.FRONT
+        case .BACK: return gl.BACK
+        case .FRONT_AND_BACk: return gl.FRONT_AND_BACK
+    }
+    return 0
+}
+
+cull_geometry_faces :: proc(face: Face) {
+    gl.Enable(gl.CULL_FACE)
+    gl.CullFace(conv_face(face))
+}
+
+set_face_culling :: proc(cull: bool) {
+    // if cull do gl.Enable(gl.CULL_FACE)
+    // else do gl.Disable(gl.CULL_FACE)
+}
+
+set_depth_test :: proc(test: bool) {
+    if test do gl.Enable(gl.DEPTH_TEST)
+     else do gl.Disable(gl.DEPTH_TEST)
+}
+
+set_stencil_test :: proc(test: bool) {
+    if test do gl.Enable(gl.STENCIL_TEST)
+    else do gl.Disable(gl.STENCIL_TEST)
+}
+
+set_front_face :: proc(mode: FrontFaceMode) {
+    if mode == .CLOCKWISE do gl.FrontFace(gl.CW)
+    else do gl.FrontFace(gl.CCW)
+}
+
+enable_colour_writes :: proc(r, g, b, a: bool) {
+    gl.ColorMask(r, g, b, a)
+}
+
+enable_depth_writes :: proc(depth: bool) {
+    gl.DepthMask(depth)
+}
+
+enable_stencil_wrties :: proc(stencil: bool) {
+    gl.StencilMask(stencil ? 0xFF : 0x0)
+}
+
+@(private)
+conv_poly_display_mode :: proc(mode: PolygonDisplayMode) -> u32 {
+    switch mode {
+        case .FILL: return gl.FILL
+        case .LINE: return gl.LINE
+        case .POINT: return gl.POINT
+    }
+    return 0
+}
+
+set_polygon_mode :: proc(mode: PolygonMode) {
+    gl.PolygonMode(conv_face(mode.face), conv_poly_display_mode(mode.display_mode))
+}
+
+set_default_polygon_mode :: proc() {
+    gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL)
+}

@@ -120,7 +120,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
             }
         }
 
-        // todo handle pass properties and framebuffer
+        handle_pass_properties(pipeline, pass)
 
         // render meshes
         for mat_id, &mesh_datas  in material_map {
@@ -163,6 +163,44 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
 
 
     return true
+}
+
+// Handles binding of framebuffer along with enabling of certain settings/tests
+handle_pass_properties :: proc(pipeline: RenderPipeline($N), pass: RenderPass) {
+    if pass.frame_buffer == nil {
+        bind_default_framebuffer()
+    } else do bind_framebuffer(pipeline.frame_buffers[pass.frame_buffer.?])
+
+    properties := pass.properties
+    set_front_face(properties.front_face)
+
+    set_depth_test(!properties.disable_depth_test)
+    set_stencil_test(properties.stencil_test)
+
+    masks := properties.masks
+    enable_colour_writes(
+        .DISABLE_COL_R not_in masks,
+        .DISABLE_COL_G not_in masks,
+        .DISABLE_COL_B not_in masks,
+        .DISABLE_COL_A not_in masks,
+    )
+
+    enable_depth_writes(.DISABLE_DEPTH not_in masks)
+    enable_stencil_wrties(.ENABLE_STENCIL in masks)
+
+
+    if properties.blend_func != nil {
+        set_blend_func(properties.blend_func.?)
+    } else do set_default_blend_func()
+
+    if properties.face_culling != nil {
+        cull_geometry_faces(properties.face_culling.?)
+    } else do set_face_culling(false)
+
+    if properties.polygon_mode != nil {
+        set_polygon_mode(properties.polygon_mode.?)
+    } else do set_default_polygon_mode()
+
 }
 
 

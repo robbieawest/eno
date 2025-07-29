@@ -62,13 +62,17 @@ GeometryZSort :: enum u8 {
     DESC,
 }
 
-RenderDisableMask :: enum u8 {
-    COL_R,
-    COL_G,
-    COL_B,
-    COL_A,
-    DEPTH,
-    STENCIL
+RenderMask :: enum u8 {
+    DISABLE_COL_R,
+    DISABLE_COL_G,
+    DISABLE_COL_B,
+    DISABLE_COL_A,
+    DISABLE_DEPTH,
+    ENABLE_STENCIL
+}
+
+disable_colour :: proc() -> bit_set[RenderMask; u8] {
+    return { .DISABLE_COL_R, .DISABLE_COL_G, .DISABLE_COL_B, .DISABLE_COL_A }
 }
 
 WriteFunc :: enum u8 {
@@ -129,12 +133,12 @@ FrontFaceMode :: enum u8 {
 
 RenderPassProperties :: struct {
     geometry_z_sorting: GeometryZSort,
-    masks: bit_set[RenderDisableMask; u8],
+    masks: bit_set[RenderMask; u8],
     blend_func: Maybe(BlendFunc),
     polygon_mode: Maybe(PolygonMode),
     front_face: FrontFaceMode,
-    cull_back_face: bool,
-    depth_test: bool,
+    face_culling: Maybe(Face),
+    disable_depth_test: bool,
     stencil_test: bool,
 }
 
@@ -272,9 +276,19 @@ gen_framebuffer :: proc(id: ^u32)  {
     gl.GenFramebuffers(1, id)
 }
 
-bind_framebuffer :: proc(frame_buffer: ^FrameBuffer) {
+bind_framebuffer_gen :: proc(frame_buffer: ^FrameBuffer) {
     id, id_ok := frame_buffer.id.?
     if !id_ok do gen_framebuffer(&id)
+    gl.BindFramebuffer(gl.FRAMEBUFFER, id)
+}
+
+bind_framebuffer :: proc(frame_buffer: FrameBuffer) {
+    id, id_ok := frame_buffer.id.?
+    if !id_ok {
+        dbg.log(.ERROR, "Frame buffer could not be bound")
+        return
+    }
+
     gl.BindFramebuffer(gl.FRAMEBUFFER, id)
 }
 
@@ -309,16 +323,6 @@ RenderType :: enum {
     STENCIL = intrinsics.constant_log2(gl.STENCIL_BUFFER_BIT)
 }
 
-RenderMask :: bit_set[RenderType; u32]
-
-render_mask_to_gl_buffer_mask :: proc(type: RenderMask) -> (mask: u32) {
-    return mutils.pow_u32(2, transmute(u32)type)
-    //return u32(math.pow_f32(2, cast(f32)(transmute(u32)type)))
-}
-
-ColourMask :: RenderMask{ .COLOUR }
-DepthMask :: RenderMask{ .DEPTH }
-StencilMask :: RenderMask{ .STENCIL }
 
 /*
     "Draws" framebuffer at the attachment, render mask, interpolation, and w, h to the default framebuffer (sdl back buffer)
@@ -378,7 +382,7 @@ make_attachment :: proc(
         return
     }
 
-    bind_framebuffer(frame_buffer)
+    bind_framebuffer_gen(frame_buffer)
     defer bind_default_framebuffer()
 
     gl_attachment_id: u32 = 0
