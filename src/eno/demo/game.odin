@@ -13,14 +13,16 @@ import glm "core:math/linalg/glsl"
 import render "../render"
 import "core:math"
 
+N_FRAME_BUFFERS :: 0
 
 // Implement your before_frame and every_frame procedures in a file like this
 // Certain operations are done around this every frame, look inside game package
 
 // programmer-defined to be able to store any data
 // set a pointer to Game.game_Data
+
 GameData :: struct {
-    render_pipeline: render.RenderPipeline
+    render_pipeline: render.RenderPipeline(N_FRAME_BUFFERS)
 }
 
 every_frame :: proc() -> (ok: bool) {
@@ -51,9 +53,8 @@ before_frame :: proc() -> (ok: bool) {
 
 
     game_data := new(GameData)
-    render_passes := make([dynamic]render.RenderPass)
-    append_elems(&render_passes, render.RenderPass{}) // default render pass signifies lighting pass
-    game_data.render_pipeline = render.RenderPipeline{ render_passes }
+    game_data.render_pipeline = render.init_render_pipeline()
+    render.add_render_passes(&game_data.render_pipeline, {})
     game.Game.game_data = game_data
 
     // Camera

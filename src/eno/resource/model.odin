@@ -5,7 +5,6 @@ import stbi "vendor:stb/image"
 
 import "../standards"
 import dbg "../debug"
-import futils "../file_utils"
 import "../utils"
 
 import "base:runtime"
@@ -14,8 +13,23 @@ import "core:strings"
 import glm "core:math/linalg/glsl"
 import "core:log"
 
+
 MODEL_COMPONENT := standards.ComponentTemplate{ "Model", Model, size_of(Model) }
 LIGHT_COMPONENT := standards.ComponentTemplate{ "Light", Light, size_of(Light) }
+
+
+// Although used in the INSTANCE_TO_COMPONENT, it is also a field in Mesh
+InstanceTo :: struct {
+    // array of world components?
+}
+
+/*
+    This component is used to instance an entire entity's model data
+    It requres a MODEL_COMPONENT to be available in the entity
+    Making this a component instead of a field in Model seems apt although I'm not sure why
+*/
+INSTANCE_TO_COMPONENT := standards.ComponentTemplate{ "InstanceTo",  InstanceTo, size_of(InstanceTo) }
+
 
 /*
 VertexLayout :: struct {
@@ -81,7 +95,8 @@ Mesh :: struct {
     layout: VertexLayout,
     material: ResourceID,
     gl_component: GLComponent,
-    is_billboard: bool
+    is_billboard: bool,
+    instance_to: Maybe(InstanceTo)  // Todo support EXT_mesh_gpu_instancing gltf extension for this
 }
 
 GLComponent :: struct {  // If I ever move to glMultiDrawElementsIndirect and grouping VAOs by vertex attribute permutations then this will change

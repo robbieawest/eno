@@ -48,8 +48,20 @@ get_component_from_query_result :: proc(result: SceneQueryResult, $T: typeid, co
         if !comp_ok do continue
 
         comp_data := arch_res.data[comp_ind]
-        for &ent_data in comp_data do append(&result_dyna, component_deserialize_raw(T, ent_data[:]) or_return)
+        for &ent_data in comp_data do append(&result_dyna, component_deserialize_raw(T, ent_data[:], allocator=allocator) or_return)
     }
+
+    return result_dyna[:], true
+}
+
+get_component_from_arch_result :: proc(result: ArchetypeQueryResult, $T: typeid, comp_label: string, allocator := context.temp_allocator) -> (flat_result: []^T, ok: bool) {
+    comp_ind, comp_ok := result.component_map[comp_label]
+    if !comp_ok do return
+
+    result_dyna := make([dynamic]^T, allocator)
+
+    comp_data := result.data[comp_ind]
+    for &ent_data in comp_data do append(&result_dyna, component_deserialize_raw(T, ent_data[:], allocator=allocator) or_return)
 
     return result_dyna[:], true
 }

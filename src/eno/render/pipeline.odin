@@ -18,7 +18,16 @@ RenderPipeline :: struct($N_bufs: int) {
 }
 
 // Default render pipeline has no passes
-init_render_pipeline :: proc(buffers: [$N]FrameBuffer, allocator := context.allocator) -> (ret: RenderPipeline(N)) {
+init_render_pipeline :: proc{ init_render_pipeline_no_bufs, init_render_pipeline_bufs }
+
+// Default render pipeline has no passes
+init_render_pipeline_no_bufs :: proc(allocator := context.allocator) -> (ret: RenderPipeline(0)) {
+    ret.passes = make([dynamic]RenderPass, allocator=allocator)
+    return
+}
+
+// Default render pipeline has no passes
+init_render_pipeline_bufs :: proc(buffers: [$N]FrameBuffer, allocator := context.allocator) -> (ret: RenderPipeline(N)) {
     ret.frame_buffers = buffers
     ret.passes = make([dynamic]RenderPass, allocator=allocator)
     return
@@ -26,13 +35,15 @@ init_render_pipeline :: proc(buffers: [$N]FrameBuffer, allocator := context.allo
 
 add_render_passes :: proc(pipeline: ^RenderPipeline($N), passes: ..RenderPass) -> (ok: bool) {
     for pass in passes {
-        if pass.frame_buffer >= N {
+        if pass.frame_buffer != nil && int(pass.frame_buffer.?) >= N {
             dbg.log(.ERROR, "Render pass framebuffer id '%d' does not correspond to a framebuffer in the pipeline", pass.frame_buffer)
             return
         }
 
         append(&pipeline.passes, pass)
     }
+
+    return true
 }
 
 
@@ -127,13 +138,22 @@ RenderPassProperties :: struct {
     stencil_test: bool,
 }
 
-RenderPassMeshGather :: union #no_nil { ecs.SceneQuery, ^RenderPass }
+
+/*
+    Creator is responsible for cleaning render pass queries
+    These strings are component queries with action of QUERY_NO_INCLUDE
+    Meaning you can query that a component must exist, and that it's data must match (provide nil for data rawptr to query by component availability)
+    The label must not be of WORLD_COMPONENT, MODEL_COMPONENT or VISIBLE_COMPONENT
+*/
+RenderPassQuery :: []struct{ label: string, data: rawptr }
+
+RenderPassMeshGather :: union { RenderPassQuery, ^RenderPass }
 
 // Structure may be too simple
 RenderPass :: struct {
-    frame_buffer: FrameBufferID,
+    frame_buffer: Maybe(FrameBufferID),
     // If ^RenderPass, use the mesh data queried in that render pass
-    // When constructing a render pass, if mesh_gather : ^RenderPass then it will follow back through the references to find a ecs.SceneQuery
+    // When constructing a render pass, if mesh_gather : ^RenderPass then it will follow back through the references to find a RenderPassQuery
     mesh_gather: RenderPassMeshGather,
     properties: RenderPassProperties
 }
@@ -142,8 +162,8 @@ RenderPass :: struct {
 
 
 // Populate this when needed
-make_render_pass :: proc(n_frame_buffers: $N, frame_buffer: FrameBufferID, mesh_gather: RenderPassMeshGather, properties: RenderPassProperties = {}) -> (pass: RenderPass, ok: bool) {
-    if frame_buffer >= n_frame_buffers {
+make_render_pass:: proc(n_frame_buffers: $N, frame_buffer: Maybe(FrameBufferID), mesh_gather: RenderPassMeshGather, properties: RenderPassProperties = {}) -> (pass: RenderPass, ok: bool) {
+    if frame_buffer != nil && frame_buffer.? >= n_frame_buffers {
         dbg.log(.ERROR, "Frame buffer points outside of the number of frame buffers")
         return
     }
@@ -164,7 +184,7 @@ make_render_pass :: proc(n_frame_buffers: $N, frame_buffer: FrameBufferID, mesh_
 check_render_pass_gather :: proc(pass: ^RenderPass, iteration_curr: int, iteration_limit: int) -> (ok: bool) {
     if iteration_curr == iteration_limit do return false
     switch v in pass.mesh_gather {
-        case ecs.SceneQuery: return true
+        case RenderPassQuery: return true
         case ^RenderPass: return check_render_pass_gather(v, iteration_curr + 1, iteration_limit)
     }
     return // Impossible to reach but whatever

@@ -11,9 +11,12 @@ import cam "../camera"
 
 import "core:strings"
 import "core:fmt"
+import "base:runtime"
 import glm "core:math/linalg/glsl"
 import "core:mem"
 import "core:log"
+
+
 
 
 RenderContext :: struct {
@@ -23,88 +26,92 @@ RenderContext :: struct {
 
 RENDER_CONTEXT: RenderContext  // Global render context, this is fine really, only stores small amount of persistent external pointing data
 
+@(private)
+ModelData :: struct {
+    model: ^resource.Model,
+    world: ^standards.WorldComponent,
+    instance_to: ^resource.InstanceTo,
+}
 
-render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, scene: ^ecs.Scene) -> (ok: bool) {
+@(private)
+MeshData :: struct {
+    mesh: ^resource.Mesh,
+    world: ^standards.WorldComponent,
+    instance_to: ^resource.InstanceTo
+}
+
+render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N), scene: ^ecs.Scene, temp_allocator := context.temp_allocator) -> (ok: bool) {
 
     /*
         for later:
             instancing done via InstanceTo ecs component
-            batching via combining entities with matching gpu components
     */
 
-    // query scene for renderable models
-    isVisibleQueryData := true
-    query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
-        { label = resource.MODEL_COMPONENT.label, action = .QUERY_AND_INCLUDE },
-        { label = standards.WORLD_COMPONENT.label, action = .NO_QUERY_BUT_INCLUDE },
-        { label = standards.VISIBLE_COMPONENT.label, action = .QUERY_NO_INCLUDE, data = &isVisibleQueryData },
-    }}
-    query_result := ecs.query_scene(scene, query) or_return
-
-    // flatten into lots of meshes
-    ModelWorldPair :: struct {
-        model: ^resource.Model,
-        world_comp: ^standards.WorldComponent
-    }
-    model_data: [dynamic]ModelWorldPair = make([dynamic]ModelWorldPair, context.temp_allocator)
-
-    for _, arch_result in query_result {
-        models: []^resource.Model
-        world_comps: []^standards.WorldComponent
-        for comp_label, comp_ind in arch_result.component_map {
-            switch comp_label {
-            case resource.MODEL_COMPONENT.label:
-                models = ecs.components_deserialize_raw(resource.Model, arch_result.data[comp_ind]) or_return
-            case standards.WORLD_COMPONENT.label:
-                world_comps = ecs.components_deserialize_raw(standards.WorldComponent, arch_result.data[comp_ind]) or_return
-            }
-        }
-
-        if len(models) != len(world_comps) {
-            dbg.log(.ERROR, "Received unbalanced input from scene query")
-            return
-        }
-        for i in 0..<len(models) {
-            append(&model_data, ModelWorldPair{ models[i], world_comps[i]})
-        }
-
+    if len(pipeline.passes) == 0 {
+        dbg.log(.ERROR, "No passes to render")
+        return
     }
 
-    if len(pipeline.passes) == 1 && pipeline.passes[0].type == .LIGHTING {
-        // Render to default framebuffer directly
-        // Make single element draw call per mesh
-        ok = create_lighting_shader(manager, true)
-        if !ok {
-            dbg.log(.ERROR, "Lighting shader failed to create")
-            return
+    ok = create_lighting_shader(manager, true)
+    if !ok {
+        dbg.log(.ERROR, "Lighting shader failed to create")
+        return
+    }
+
+    // todo design system of resource transfer
+
+    // Used for render passes that query their own data
+    mesh_data_map := make(map[^RenderPass][dynamic]ModelData, allocator=temp_allocator)
+    // Used for render passes which point to another render pass's model data
+    mesh_data_references := make(map[^RenderPass]^[dynamic]ModelData, allocator=temp_allocator)
+
+    for &pass in pipeline.passes {
+
+        // Gather model data
+        models_data: ^[dynamic]ModelData
+        switch v in pass.mesh_gather {
+            case ^RenderPass:
+                if v not_in mesh_data_map {
+                    if v not_in mesh_data_references {
+                        dbg.log(.ERROR, "Render pass gather points to a render pass which has not yet been assigned model data, please order the render-passes to fix")
+                        return
+                    }
+
+                    models_data = mesh_data_references[v]
+                    mesh_data_references[v] = models_data
+                }
+            case RenderPassQuery:
+                mesh_data_map[&pass] = query_scene(scene, v, temp_allocator) or_return
+                models_data = &mesh_data_map[&pass]
+            case nil:
+                mesh_data_map[&pass] = query_scene(scene, nil, temp_allocator) or_return
+                models_data = &mesh_data_map[&pass]
+
         }
 
-        // Group draw calls by material to reduce shader context changes
-        MeshWorldPair :: struct {
-            mesh: ^resource.Mesh,
-            world_comp: ^standards.WorldComponent
-        }
+        // todo sort geometry
 
-        material_map := make(map[resource.ResourceIdent][dynamic]MeshWorldPair, context.temp_allocator)
+        // Group into materials and meshes
+        material_map := make(map[resource.ResourceIdent][dynamic]MeshData, temp_allocator)
         defer {
             for _, v in material_map do delete(v)
             delete(material_map)
         }
 
-        for &model_pair in model_data {
-            for &mesh in model_pair.model.meshes {
+        for &model_data in models_data {
+            for &mesh in model_data.model.meshes {
                 mat_id, mat_ok := mesh.material.?; if !mat_ok {
                     dbg.log(.ERROR, "Material not found for mesh")
                     return
                 }
 
-                pair := MeshWorldPair{ &mesh, model_pair.world_comp }
+                pair := MeshData{ &mesh, model_data.world, model_data.instance_to}
                 if mat_id in material_map {
                     dyn := &material_map[mat_id]
                     append(dyn, pair)
                 }
                 else {
-                    dyn := make([dynamic]MeshWorldPair, 1, context.temp_allocator)
+                    dyn := make([dynamic]MeshData, 1, temp_allocator)
                     dyn[0] = pair
                     material_map[mat_id] = dyn
                 }
@@ -112,7 +119,10 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
             }
         }
 
-        for mat_id, &mesh_pairs in material_map {
+        // todo handle pass properties
+
+        // render meshes
+        for mat_id, &mesh_datas  in material_map {
 
             material := resource.get_material(manager, mat_id) or_return
 
@@ -138,22 +148,75 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
             update_camera_ubo(scene) or_return
             update_lights_ssbo(scene) or_return
 
-            for &mesh_pair in mesh_pairs {
-                model_mat, normal_mat := model_and_normal(mesh_pair.mesh, mesh_pair.world_comp, scene.viewpoint)
-                transfer_mesh(mesh_pair.mesh) or_return
+            for &mesh_data in mesh_datas {
+                model_mat, normal_mat := model_and_normal(mesh_data.mesh, mesh_data.world, scene.viewpoint)
+                transfer_mesh(mesh_data.mesh) or_return
 
                 shader.set_uniform(lighting_shader, standards.MODEL_MAT, model_mat)
                 shader.set_uniform(lighting_shader, standards.NORMAL_MAT, normal_mat)
 
-                issue_single_element_draw_call(mesh_pair.mesh.indices_count)
+                issue_single_element_draw_call(mesh_data.mesh.indices_count)
             }
         }
     }
-    else {
-        // figure it out when the need is there
-    }
+
 
     return true
+}
+
+@(private)
+query_scene :: proc(scene: ^ecs.Scene, pass_query: RenderPassQuery, temp_allocator: mem.Allocator) -> (model_data: [dynamic]ModelData, ok: bool) {
+
+    // todo handle pass_query (nil case as well)
+
+    isVisibleQueryData := true
+    query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
+        { label = resource.MODEL_COMPONENT.label, action = .QUERY_AND_INCLUDE },
+        { label = standards.WORLD_COMPONENT.label, action = .QUERY_AND_INCLUDE },
+        { label = resource.INSTANCE_TO_COMPONENT.label, action = .NO_QUERY_BUT_INCLUDE },
+        { label = standards.VISIBLE_COMPONENT.label, action = .QUERY_NO_INCLUDE, data = &isVisibleQueryData },
+    }}
+    query_result := ecs.query_scene(scene, query) or_return
+
+    // flatten into lots of meshes
+    ModelWorldPair :: struct {
+        model: ^resource.Model,
+        world_comp: ^standards.WorldComponent
+    }
+    model_data = make([dynamic]ModelData, temp_allocator)
+
+    for _, arch_result in query_result {
+        models, models_ok := ecs.get_component_from_arch_result(arch_result, resource.Model, resource.MODEL_COMPONENT.label, temp_allocator)
+        if !models_ok {
+            dbg.log(.ERROR, "Models not returned from query")
+            return
+        }
+
+        worlds, worlds_ok := ecs.get_component_from_arch_result(arch_result, standards.WorldComponent, standards.WORLD_COMPONENT.label, temp_allocator)
+        if !worlds_ok {
+            dbg.log(.ERROR, "World components not returned from query")
+            return
+        }
+
+        if len(models) != len(worlds) {
+            dbg.log(.ERROR, "Received unbalanced input from scene query")
+            return
+        }
+
+        instance_tos, instance_tos_ok := ecs.get_component_from_arch_result(arch_result, resource.InstanceTo, resource.INSTANCE_TO_COMPONENT.label, temp_allocator)
+
+        if instance_tos_ok do for i in 0..<len(models) {
+            append(&model_data, ModelData{ models[i], worlds[i], instance_tos[i] })
+        }
+        else do for i in 0..<len(models) {
+            append(&model_data, ModelData{ models[i], worlds[i], nil })
+        }
+
+
+    }
+
+    ok = true
+    return
 }
 
 

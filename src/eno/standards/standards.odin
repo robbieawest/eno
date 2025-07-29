@@ -15,6 +15,7 @@ ComponentTemplate :: struct {
 WORLD_COMPONENT := ComponentTemplate{ "World", WorldComponent, size_of(WorldComponent) } // Of type WorldComponent
 VISIBLE_COMPONENT := ComponentTemplate{ "IsVisible", bool, size_of(bool) }
 
+// Rename to World?
 WorldComponent :: struct {
     position: glm.vec3,
     scale: glm.vec3,
