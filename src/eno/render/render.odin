@@ -9,6 +9,7 @@ import "../standards"
 import lutils "../utils/linalg_utils"
 import cam "../camera"
 
+import "core:slice"
 import "core:strings"
 import "core:fmt"
 import "base:runtime"
@@ -89,7 +90,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
 
         }
 
-        // todo sort geometry
+        if pass.properties.geometry_z_sorting != .NO_SORT do sort_geometry_by_depth(models_data[:], pass.properties.geometry_z_sorting == .ASC)
 
         // Group into materials and meshes
         material_map := make(map[resource.ResourceIdent][dynamic]MeshData, temp_allocator)
@@ -119,7 +120,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
             }
         }
 
-        // todo handle pass properties
+        // todo handle pass properties and framebuffer
 
         // render meshes
         for mat_id, &mesh_datas  in material_map {
@@ -163,6 +164,18 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
 
     return true
 }
+
+
+@(private)
+sort_geometry_by_depth :: proc(models_data: []ModelData, z_asc: bool) {
+    sort_proc := z_asc ? proc(a: ModelData, b: ModelData) -> bool {
+        return a.world.position.z < b.world.position.z
+    } : proc(a: ModelData, b: ModelData) -> bool {
+        return a.world.position.z > b.world.position.z
+    }
+    slice.sort_by(models_data, sort_proc)
+}
+
 
 @(private)
 query_scene :: proc(scene: ^ecs.Scene, pass_query: RenderPassQuery, temp_allocator: mem.Allocator) -> (model_data: [dynamic]ModelData, ok: bool) {

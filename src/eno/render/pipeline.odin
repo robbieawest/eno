@@ -58,8 +58,8 @@ destroy_pipeline :: proc(pipeline: ^RenderPipeline) {
 
 GeometryZSort :: enum u8 {
     NO_SORT,
-    SORT_Z_ACS,
-    SORT_Z_DESC,
+    ASC,
+    DESC,
 }
 
 RenderDisableMask :: enum u8 {
