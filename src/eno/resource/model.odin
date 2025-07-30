@@ -238,16 +238,21 @@ MaterialPropertyInfo :: enum {
     ALPHA_MODE0,
     ALPHA_CUTOFF
 }
-MaterialPropertiesInfos :: bit_set[MaterialPropertyInfo; u32]
+MaterialPropertyInfos :: bit_set[MaterialPropertyInfo; u32]
 
-MaterialID :: u64
 Material :: struct {
     name: string,
-    properties: map[MaterialPropertyInfo]MaterialProperty,
+    type: ResourceID,
+    properties: map[MaterialPropertyInfo]MaterialProperty
+}
+
+MaterialType :: struct {
+    properties: MaterialPropertyInfos,
     double_sided: bool,
     unlit: bool,
-    lighting_shader: ResourceID
+    lighting_shader: ResourceID, // todo check if this needs
 }
+
 
 destroy_material :: proc(manager: ^ResourceManager, material: Material, allocator := context.allocator) -> (ok: bool) {
     ok = true

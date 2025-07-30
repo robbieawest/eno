@@ -318,7 +318,7 @@ model_and_normal :: proc(mesh: ^resource.Mesh, world: ^standards.WorldComponent,
 bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material, lighting_shader: ^shader.ShaderProgram) -> (ok: bool) {
 
     texture_unit: u32
-    infos: resource.MaterialPropertiesInfos
+    infos: resource.MaterialPropertyInfos
     for info, property in material.properties {
         infos += { info }
         switch v in property.value {

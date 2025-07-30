@@ -33,16 +33,27 @@ ResourceNode :: struct($T: typeid) {
 ResourceMapping :: map[ResourceHash]ResourceBucket
 
 @(private)
-hash_resource :: proc($T: typeid, resource: T) -> ResourceHash {
+hash_resource :: proc(resource: $T) -> ResourceHash {
     // Extend possible to give different hash routine for a different resource type
     when T == shader.ShaderProgram || T == Texture || T == Material {
         resource := resource
-        return hash.fnv64a(transmute([]byte)runtime.Raw_Slice{ &resource, type_info_of(T).size })
+        return hash_ptr(&resource)
+    }
+    else when T == MaterialType {
+        hashable: struct{ properties: MaterialPropertyInfos,  double_sided: bool, unlit: bool }
+        hashable = { properties=resource.properties, double_sided=resource.double_sided, unlit=resource.unlit }
+        return hash_ptr(&hashable)
     }
     else {
         #panic("Type is invalid in hash")
     }
 }
+
+@(private)
+hash_ptr :: proc(ptr: ^$T) -> ResourceHash {
+    return hash.fnv64a(transmute([]byte)runtime.Raw_Slice{ ptr, type_info_of(T).size })
+}
+
 
 // Only add/delete resources via the given procedures
 ResourceManager :: struct {
@@ -114,7 +125,7 @@ add_resource :: proc(
     allocator: mem.Allocator
 ) -> (id: ResourceIdent, ok: bool) {
 
-    hash := hash_resource(T, resource)
+    hash := hash_resource(resource)
 
     // Reused code, could be improved but kiss
     if hash in mapping {
@@ -326,10 +337,6 @@ destroy_resource :: proc(manager: ^ResourceManager, resource: ^$T) {
     else when T == Material {
         destroy_material(manager, resource^)
     }
-    else {
-        #panic("Disallowed resource type")
-    }
-
 }
 
 @(private)
