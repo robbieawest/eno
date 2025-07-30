@@ -38,7 +38,22 @@ VertexLayout :: struct {
 }
 */
 
-VertexLayout :: #soa [dynamic]MeshAttributeInfo
+VertexLayout :: struct {
+    infos: []MeshAttributeInfo,
+    // Decides if the VertexLayout should be grouped with duplicates in the resource manager or not
+    // Use when the vertex shader should be unique to layouts with the same mesh attribute infos
+    unique: bool,
+    vertex_shader: ResourceID
+}
+
+destroy_vertex_layout :: proc(manager: ^ResourceManager, layout: VertexLayout) -> (ok: bool) {
+    for attr_info in layout.infos do delete(attr_info.name)
+    delete(layout.infos)
+
+    remove_shader(manager, layout.vertex_shader) or_return
+    return true
+}
+
 
 MeshAttributeInfo :: struct {
     type: MeshAttributeType,  // Describes the type of the attribute (position, normal etc)
@@ -92,8 +107,8 @@ Mesh :: struct {
     vertices_count: int,
     index_data: IndexData,
     indices_count: int,
-    layout: VertexLayout,
-    material: ResourceID,
+    layout: ResourceIdent,
+    material: Material,
     gl_component: GLComponent,
     is_billboard: bool,
     instance_to: Maybe(InstanceTo)  // Todo support EXT_mesh_gpu_instancing gltf extension for this
@@ -110,11 +125,11 @@ VertexBufferObject :: Maybe(u32)
 ElementBufferObject :: Maybe(u32)
 
 // DOES NOT RELEASE GPU MEMORY - USE RENDERER PROCEDURES FOR THIS
-destroy_mesh :: proc(mesh: ^Mesh) {
+destroy_mesh :: proc(manager: ^ResourceManager, mesh: ^Mesh) -> (ok: bool) {
     delete(mesh.vertex_data)
     delete(mesh.index_data)
-    for attr_info in mesh.layout do delete(attr_info.name)
-    delete(mesh.layout)
+    remove_layout(manager, mesh.layout) or_return
+    return true
 }
 
 // Does not transfer
@@ -133,7 +148,8 @@ create_billboard_model_from_path :: proc(manager: ^ResourceManager, texture_name
 
 // Does not transfer
 // Todo use unlit property
-create_billboard_model_from_id :: proc(manager: ^ResourceManager, id: ResourceIdent) -> (model: Model, ok: bool) {
+// todo use special vertex shader
+create_billboard_model_from_id :: proc(manager: ^ResourceManager, id: ResourceIdent, allocator := context.allocator) -> (model: Model, ok: bool) {
     texture, tex_ok := get_texture(manager, id); if !tex_ok {
         dbg.log(.ERROR, "Texture does not map to an existing texture in the manager")
         return
@@ -141,16 +157,23 @@ create_billboard_model_from_id :: proc(manager: ^ResourceManager, id: ResourceId
 
     model.meshes = make([dynamic]Mesh, 1)
 
-    billboard_mesh := primitive_square_mesh_data()
+    billboard_mesh := primitive_square_mesh_data(manager, true, allocator)
     billboard_mesh.is_billboard = true
 
     material: Material
-    material.lighting_shader = get_billboard_lighting_shader(manager) or_return
     material.properties = make(map[MaterialPropertyInfo]MaterialProperty)
     material.properties[.BASE_COLOUR_TEXTURE] = { BASE_COLOUR_TEXTURE, BaseColourTexture(id) }
 
-    id := add_material(manager, material) or_return
-    billboard_mesh.material = id
+    material_type: MaterialType
+    material_type.unlit = true
+    material_type.double_sided = true
+    material_type.properties = { .BASE_COLOUR_TEXTURE }
+    // material_type.lighting_shader = get_billboard_lighting_shader(manager) or_return
+    // ^ needs to change with new shader management
+
+    id := add_material(manager, material_type) or_return
+    material.type = id
+    billboard_mesh.material = material
     model.meshes[0] = billboard_mesh
 
     ok = true
@@ -160,9 +183,9 @@ create_billboard_model_from_id :: proc(manager: ^ResourceManager, id: ResourceId
 // Primitive meshes
 
 // Does not give a material
-primitive_square_mesh_data :: proc() -> (mesh: Mesh) {
-    mesh.vertex_data = make(VertexData)
-    mesh.index_data = make(IndexData)
+primitive_square_mesh_data :: proc(manager: ^ResourceManager, unique_layout: bool, allocator := context.allocator) -> (mesh: Mesh) {
+    mesh.vertex_data = make(VertexData, allocator=allocator)
+    mesh.index_data = make(IndexData, allocator=allocator)
     append_elems(&mesh.vertex_data,
         -1, 1, 0,  0.0, 1.0,
         1, 1, 0,  1.0, 1.0,
@@ -175,11 +198,13 @@ primitive_square_mesh_data :: proc() -> (mesh: Mesh) {
     )
     mesh.vertices_count = len(mesh.vertex_data)
     mesh.indices_count = len(mesh.index_data)
-    mesh.layout = make(#soa[dynamic]MeshAttributeInfo)
-    append_soa_elems(&mesh.layout,
-        MeshAttributeInfo{ .position, .vec3, .f32, 12, 3, strings.clone("aPosition")},
-        MeshAttributeInfo{ .texcoord, .vec2, .f32, 8, 2, strings.clone("aTexCoords")}
-    )
+
+    layout: VertexLayout
+    layout.infos = make([]MeshAttributeInfo, 2, allocator=allocator)
+    layout.infos[0] = { .position, .vec3, .f32, 12, 3, strings.clone("aPosition")}
+    layout.infos[1] = { .texcoord, .vec2, .f32, 8, 2, strings.clone("aTexCoords")}
+    layout.unique = unique_layout
+    add_vertex_layout(manager, layout)
 
     return
 }
@@ -242,7 +267,7 @@ MaterialPropertyInfos :: bit_set[MaterialPropertyInfo; u32]
 
 Material :: struct {
     name: string,
-    type: ResourceID,
+    type: ResourceIdent,
     properties: map[MaterialPropertyInfo]MaterialProperty
 }
 
@@ -250,7 +275,10 @@ MaterialType :: struct {
     properties: MaterialPropertyInfos,
     double_sided: bool,
     unlit: bool,
-    lighting_shader: ResourceID, // todo check if this needs
+    // unique field specifies that it should not be grouped with duplicate MaterialType's in the manager
+    // Use when the lighting shader is special and must differ from these duplicate permutations
+    unique: bool,
+    lighting_shader: ResourceID,
 }
 
 
@@ -275,7 +303,13 @@ destroy_material :: proc(manager: ^ResourceManager, material: Material, allocato
         }
     }
 
-    return
+    remove_material(manager, material.type) or_return  // Will delete lighting shader
+    return true
+}
+
+destroy_material_type :: proc(manager: ^ResourceManager, type: MaterialType) -> (ok: bool) {
+    remove_shader(manager, type.lighting_shader) or_return
+    return true
 }
 
 
@@ -329,7 +363,11 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
     dbg.log(.INFO, "Converting cgltf material: %s", cmat.name)
     if cmat.name != nil do material.name = strings.clone_from_cstring(cmat.name)
 
+    material_type: MaterialType
+
     if cmat.has_pbr_metallic_roughness {
+        material_type.properties |= { .PBR_METALLIC_ROUGHNESS }
+
         base_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.base_color_texture.texture, gltf_file_location) or_return
         met_rough_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.metallic_roughness_texture.texture, gltf_file_location) or_return
 
@@ -347,24 +385,33 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
     }
 
     if cmat.normal_texture.texture != nil {
+        material_type.properties |= { .NORMAL_TEXTURE }
+
         tex := texture_from_cgltf_texture(cmat.normal_texture.texture, gltf_file_location) or_return
         tex_id := add_texture(manager, tex) or_return
         material.properties[.NORMAL_TEXTURE] = { NORMAL_TEXTURE, NormalTexture(tex_id) }
     }
     if cmat.occlusion_texture.texture != nil {
+        material_type.properties |= { .OCCLUSION_TEXTURE }
+
         tex := texture_from_cgltf_texture(cmat.occlusion_texture.texture, gltf_file_location) or_return
         tex_id := add_texture(manager, tex) or_return
         material.properties[.OCCLUSION_TEXTURE] = { OCCLUSION_TEXTURE, OcclusionTexture(tex_id) }
     }
     if cmat.emissive_texture.texture != nil {
+        material_type.properties |= { .EMISSIVE_TEXTURE, .EMISSIVE_FACTOR}
+
         tex := texture_from_cgltf_texture(cmat.emissive_texture.texture, gltf_file_location) or_return
         tex_id := add_texture(manager, tex) or_return
         material.properties[.EMISSIVE_TEXTURE] = { EMISSIVE_TEXTURE, EmissiveTexture(tex_id) }
         material.properties[.EMISSIVE_FACTOR] = { EMISSIVE_FACTOR, EmissiveFactor(cmat.emissive_factor) }
     }
 
-    material.double_sided = bool(cmat.double_sided)
-    material.unlit = bool(cmat.unlit)
+    material_type.double_sided = bool(cmat.double_sided)
+    material_type.unlit = bool(cmat.unlit)
+
+    type_id := add_material(manager, material_type) or_return
+    material.type = type_id
 
     ok = true
     return

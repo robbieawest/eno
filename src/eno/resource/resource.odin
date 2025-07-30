@@ -3,13 +3,14 @@ package resource
 import "../shader"
 import dbg "../debug"
 import "../utils"
+import "../standards"
 
 import "core:hash"
 import "core:mem"
 import "core:log"
 import "core:container/intrusive/list"
-import standards "../standards"
-import runtime "base:runtime"
+import "base:runtime"
+import "core:math/rand"
 
 // Package defining the resource manager and relevant systems relating to it
 
@@ -35,20 +36,29 @@ ResourceMapping :: map[ResourceHash]ResourceBucket
 @(private)
 hash_resource :: proc(resource: $T) -> ResourceHash {
     // Extend possible to give different hash routine for a different resource type
-    when T == shader.ShaderProgram || T == Texture || T == Material {
+    when T == shader.ShaderProgram || T == Texture {
         resource := resource
         return hash_ptr(&resource)
     }
     else when T == MaterialType {
+        if resource.unique do return rand.uint64()  // If theres a collision out of all 2^64 - 1 possibilities then all I can do is apologize
+
         hashable: struct{ properties: MaterialPropertyInfos,  double_sided: bool, unlit: bool }
         hashable = { properties=resource.properties, double_sided=resource.double_sided, unlit=resource.unlit }
         return hash_ptr(&hashable)
+    }
+    else when T == VertexLayout {
+        if resource.unique do return rand.uint64()
+
+        return hash_ptr(raw_data(resource.infos))
     }
     else {
         #panic("Type is invalid in hash")
     }
 }
 
+// todo hashing via following internal pointers of T?
+// likely not relevant to this proc
 @(private)
 hash_ptr :: proc(ptr: ^$T) -> ResourceHash {
     return hash.fnv64a(transmute([]byte)runtime.Raw_Slice{ ptr, type_info_of(T).size })
@@ -60,6 +70,7 @@ ResourceManager :: struct {
     materials: ResourceMapping,
     shaders: ResourceMapping,
     textures: ResourceMapping,
+    vertex_layouts: ResourceMapping,
     billboard_shader: ResourceID,  // Hacky, a proper MaterialType would fix this
     // (later) - not just hacky, it breaks reference counting
     billboard_id: ResourceID,  // Texture
@@ -71,6 +82,7 @@ init_resource_manager :: proc(allocator := context.allocator) -> ResourceManager
         make(ResourceMapping, allocator=allocator),
         make(ResourceMapping, allocator=allocator),
         make(ResourceMapping, allocator=allocator),
+        make(ResourceMapping, allocator=allocator),
         nil,
         nil,
         allocator
@@ -78,11 +90,11 @@ init_resource_manager :: proc(allocator := context.allocator) -> ResourceManager
 }
 
 // Allocates buf for material pointers - recommend specifying temp allocator
-get_materials :: proc(manager: ResourceManager, allocator := context.allocator) -> []^Material {
-    mat_dyn := make([dynamic]^Material, allocator)
+get_materials :: proc(manager: ResourceManager, allocator := context.allocator) -> []^MaterialType {
+    mat_dyn := make([dynamic]^MaterialType, allocator)
 
     for _, bucket in manager.materials {
-        iterator := list.iterator_head(bucket, ResourceNode(Material), "node")
+        iterator := list.iterator_head(bucket, ResourceNode(MaterialType), "node")
         for resource_node in list.iterate_next(&iterator) {
             append(&mat_dyn, &resource_node.resource)
         }
@@ -249,20 +261,28 @@ add_shader :: proc(manager: ^ResourceManager, program: shader.ShaderProgram) -> 
     return add_resource(&manager.shaders, shader.ShaderProgram, program, manager.allocator)
 }
 
-add_material :: proc(manager: ^ResourceManager, material: Material) -> (id: ResourceIdent, ok: bool) {
-    return add_resource(&manager.materials, Material, material, manager.allocator)
+add_material :: proc(manager: ^ResourceManager, material: MaterialType) -> (id: ResourceIdent, ok: bool) {
+    return add_resource(&manager.materials, MaterialType, material, manager.allocator)
+}
+
+add_vertex_layout :: proc(manager: ^ResourceManager, layout: VertexLayout) -> (id: ResourceIdent, ok: bool) {
+    return add_resource(&manager.vertex_layouts, VertexLayout, layout, manager.allocator)
 }
 
 get_texture :: proc(manager: ^ResourceManager, id: ResourceID) -> (texture: ^Texture, ok: bool) {
     return get_resource(&manager.textures, Texture, utils.unwrap_maybe(id) or_return)
 }
 
-get_material :: proc(manager: ^ResourceManager, id: ResourceID) -> (material: ^Material, ok: bool) {
-    return get_resource(&manager.materials, Material, utils.unwrap_maybe(id) or_return)
+get_material :: proc(manager: ^ResourceManager, id: ResourceID) -> (material: ^MaterialType, ok: bool) {
+    return get_resource(&manager.materials, MaterialType, utils.unwrap_maybe(id) or_return)
 }
 
 get_shader :: proc(manager: ^ResourceManager, id: ResourceID) -> (program: ^shader.ShaderProgram, ok: bool) {
     return get_resource(&manager.shaders, shader.ShaderProgram, utils.unwrap_maybe(id) or_return)
+}
+
+get_vertex_layout :: proc(manager: ^ResourceManager, id: ResourceID) -> (layout: ^VertexLayout, ok: bool) {
+    return get_resource(&manager.vertex_layouts, VertexLayout, utils.unwrap_maybe(id) or_return)
 }
 
 remove_texture :: proc(manager: ^ResourceManager, id: ResourceID) -> (ok: bool) {
@@ -270,11 +290,15 @@ remove_texture :: proc(manager: ^ResourceManager, id: ResourceID) -> (ok: bool) 
 }
 
 remove_material :: proc(manager: ^ResourceManager, id: ResourceID) -> (ok: bool) {
-    return remove_resource(&manager.materials, Material, utils.unwrap_maybe(id) or_return, manager.allocator)
+    return remove_resource(&manager.materials, MaterialType, utils.unwrap_maybe(id) or_return, manager.allocator)
 }
 
 remove_shader :: proc(manager: ^ResourceManager, id: ResourceID) -> (ok: bool) {
     return remove_resource(&manager.shaders, shader.ShaderProgram, utils.unwrap_maybe(id) or_return, manager.allocator)
+}
+
+remove_layout :: proc(manager: ^ResourceManager, id: ResourceID) -> (ok: bool) {
+    return remove_resource(&manager.vertex_layouts, VertexLayout, utils.unwrap_maybe(id) or_return, manager.allocator)
 }
 
 
@@ -298,7 +322,7 @@ get_billboard_lighting_shader :: proc(manager: ^ResourceManager) -> (result: Res
 // Allocator for internal temp uses - not for freeing resources, this uses manager.allocator
 clear_unused_resources :: proc(manager: ^ResourceManager, allocator := context.temp_allocator) ->  (ok: bool) {
     ok = true
-    ok &= clear(manager, &manager.materials, Material, manager.allocator, allocator, check_reference_zero(Material))
+    ok &= clear(manager, &manager.materials, MaterialType, manager.allocator, allocator, check_reference_zero(MaterialType))
     ok &= clear(manager, &manager.textures, Texture, manager.allocator, allocator, check_reference_zero(Texture))
     ok &= clear(manager, &manager.shaders, shader.ShaderProgram, manager.allocator, allocator, check_reference_zero(shader.ShaderProgram))
     return
@@ -316,7 +340,7 @@ check_reference_zero :: proc($T: typeid) -> proc(R: ResourceNode(T)) -> bool {
 destroy_manager :: proc(manager: ^ResourceManager, allocator := context.temp_allocator) -> (ok: bool) {
     dbg.log(.INFO, "Destroying manager")
     ok = true
-    ok &= clear(manager, &manager.materials, Material, manager.allocator, allocator, nil)
+    ok &= clear(manager, &manager.materials, MaterialType, manager.allocator, allocator, nil)
     ok &= clear(manager, &manager.textures, Texture, manager.allocator, allocator, nil)
     ok &= clear(manager, &manager.shaders, shader.ShaderProgram, manager.allocator, allocator, nil)
 
@@ -327,16 +351,20 @@ destroy_manager :: proc(manager: ^ResourceManager, allocator := context.temp_all
 }
 
 @(private)
-destroy_resource :: proc(manager: ^ResourceManager, resource: ^$T) {
+destroy_resource :: proc(manager: ^ResourceManager, resource: ^$T) -> (ok: bool){
     when T == Texture {
         destroy_texture(resource)
     }
     else when T == shader.ShaderProgram {
         shader.destroy_shader_program(resource^)
     }
-    else when T == Material {
-        destroy_material(manager, resource^)
+    else when T == MaterialType {
+        destroy_material_type(manager, resource^) or_return
     }
+    else when T == VertexLayout {
+        destroy_vertex_layout(manager, resource^) or_return
+    }
+    return true
 }
 
 @(private)
@@ -367,7 +395,12 @@ clear :: proc(
                 // Delete
                 dbg.log(.INFO, "Deleting node of type: %v", typeid_of(T))
                 list.remove(&bucket, &resource_node.node)
-                destroy_resource(manager, &resource_node.resource)  // Could potentially delete a node in bucket
+
+                destroy_ok := destroy_resource(manager, &resource_node.resource) // Could potentially delete a node in bucket
+                if !destroy_ok {
+                    dbg.log(.ERROR, "Destruction of resource of type: %v failed", typeid_of(T))
+                    return
+                }
 
                 node = node.next
                 alloc_err := free(resource_node, allocator)

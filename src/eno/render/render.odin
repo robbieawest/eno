@@ -101,7 +101,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
 
         for &model_data in models_data {
             for &mesh in model_data.model.meshes {
-                mat_id, mat_ok := mesh.material.?; if !mat_ok {
+                mat_id, mat_ok := mesh.material.type.?; if !mat_ok {
                     dbg.log(.ERROR, "Material not found for mesh")
                     return
                 }
@@ -145,7 +145,6 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
             }
 
             bind_program(lighting_shader.id.?)
-            bind_material_uniforms(manager, material^, lighting_shader) or_return
             update_camera_ubo(scene) or_return
             update_lights_ssbo(scene) or_return
 
@@ -153,6 +152,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
                 model_mat, normal_mat := model_and_normal(mesh_data.mesh, mesh_data.world, scene.viewpoint)
                 transfer_mesh(mesh_data.mesh) or_return
 
+                bind_material_uniforms(manager, mesh_data.mesh.material, lighting_shader) or_return
                 shader.set_uniform(lighting_shader, standards.MODEL_MAT, model_mat)
                 shader.set_uniform(lighting_shader, standards.NORMAL_MAT, normal_mat)
 
@@ -502,10 +502,8 @@ light_to_gpu_light :: proc(light: resource.Light) -> (gpu_light: rawptr) {
 
 update_lights_ssbo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
     // Query to return only light components
-    isVisibleQueryData := true
     query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
-        { label = resource.LIGHT_COMPONENT.label, action = .QUERY_AND_INCLUDE },
-        { label = standards.VISIBLE_COMPONENT.label, action = .QUERY_NO_INCLUDE, data = &isVisibleQueryData }
+        { label = resource.LIGHT_COMPONENT.label, action = .QUERY_AND_INCLUDE }
     }}
     query_result := ecs.query_scene(scene, query) or_return
 
@@ -516,9 +514,9 @@ update_lights_ssbo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
     point_lights := make([dynamic]^resource.PointLight)
 
     for &light in lights do switch &v in light {
-        case resource.SpotLight: append(&spot_lights, &v)
-        case resource.DirectionalLight: append(&directional_lights, &v)
-        case resource.PointLight: append(&point_lights, &v)
+        case resource.SpotLight: if v.light_information.enabled do append(&spot_lights, &v)
+        case resource.DirectionalLight: if v.light_information.enabled do append(&directional_lights, &v)
+        case resource.PointLight: if v.enabled do append(&point_lights, &v)
     }
 
     num_spot_lights: uint = len(spot_lights)
@@ -581,7 +579,7 @@ create_lighting_shader :: proc(manager: ^resource.ResourceManager, compile: bool
     for material in materials {
         if material.lighting_shader != nil do continue
 
-        dbg.log(dbg.LogLevel.INFO, "Creating lighing shader for material: %s", material.name)
+        dbg.log(dbg.LogLevel.INFO, "Creating lighing shader for material")
         program := shader.read_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.frag", standards.SHADER_RESOURCE_PATH + "demo_shader.vert") or_return
         if compile do transfer_shader(&program) or_return
 

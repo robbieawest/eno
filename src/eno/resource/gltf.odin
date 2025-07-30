@@ -189,11 +189,13 @@ extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh, gltf_fil
 
         // Set material properties
         if primitive.material != nil {
-            mesh_ret.material = add_material(manager, eno_material_from_cgltf_material(manager, primitive.material^, gltf_file_location) or_return) or_return
+            mesh_ret.material = eno_material_from_cgltf_material(manager, primitive.material^, gltf_file_location) or_return
         }
 
         // Construct layout
-        for attribute in primitive.attributes {
+        layout: VertexLayout
+        layout.infos = make([]MeshAttributeInfo, len(primitive.attributes))
+        for attribute, i in primitive.attributes {
             accessor := attribute.data
 
             attribute_info := MeshAttributeInfo{
@@ -204,8 +206,11 @@ extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh, gltf_fil
                 u32(accessor.stride >> 2),
                 string(accessor.name)
             }
-            append(&mesh_ret.layout, attribute_info)
+            layout.infos[i] = attribute_info
         }
+
+        layout_id := add_vertex_layout(manager, layout) or_return
+        mesh_ret.layout = layout_id
 
 
         // Get float stride - the number of floats needed for each vertex
