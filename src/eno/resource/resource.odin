@@ -36,9 +36,22 @@ ResourceMapping :: map[ResourceHash]ResourceBucket
 @(private)
 hash_resource :: proc(resource: $T) -> ResourceHash {
     // Extend possible to give different hash routine for a different resource type
-    when T == shader.ShaderProgram || T == Texture {
-        resource := resource
+    resource := resource
+    when  T == Texture {
         return hash_ptr(&resource)
+    }
+    else when T == shader.ShaderProgram {
+        hashable := make(map[shader.ShaderType]ResourceHash); defer delete(hashable)
+        for type, single_shader in resource.shaders {
+            hashable[type] = hash_resource(single_shader)
+        }
+
+        return hash_ptr(&hashable)
+    }
+    else when T == shader.Shader {
+        hashable: struct{ type: shader.ShaderType, source: shader.ShaderSource }
+        hashable = { resource.type, resource.source }
+        return hash_ptr(&hashable)
     }
     else when T == MaterialType {
         if resource.unique do return rand.uint64()  // If theres a collision out of all 2^64 - 1 possibilities then all I can do is apologize
@@ -50,15 +63,13 @@ hash_resource :: proc(resource: $T) -> ResourceHash {
     else when T == VertexLayout {
         if resource.unique do return rand.uint64()
 
-        return hash_ptr(raw_data(resource.infos))
+        return hash_ptr(&resource.infos)
     }
     else {
         #panic("Type is invalid in hash")
     }
 }
 
-// todo hashing via following internal pointers of T?
-// likely not relevant to this proc
 @(private)
 hash_ptr :: proc(ptr: ^$T) -> ResourceHash {
     return hash.fnv64a(transmute([]byte)runtime.Raw_Slice{ ptr, type_info_of(T).size })
@@ -69,7 +80,7 @@ hash_ptr :: proc(ptr: ^$T) -> ResourceHash {
 ResourceManager :: struct {
     materials: ResourceMapping,
     shader_passes: ResourceMapping,
-    shaders: ResouceMapping,
+    shaders: ResourceMapping,
     textures: ResourceMapping,
     vertex_layouts: ResourceMapping,
     billboard_shader: ResourceID,  // Hacky, a proper MaterialType would fix this

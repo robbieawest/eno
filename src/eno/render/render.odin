@@ -53,11 +53,6 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
         return
     }
 
-    ok = create_lighting_shader(manager, true)
-    if !ok {
-        dbg.log(.ERROR, "Lighting shader failed to create")
-        return
-    }
 
     // todo design system of resource transfer
 
@@ -93,7 +88,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
         if pass.properties.geometry_z_sorting != .NO_SORT do sort_geometry_by_depth(models_data[:], pass.properties.geometry_z_sorting == .ASC)
 
         // Group into materials and meshes
-        material_map := make(map[resource.ResourceIdent][dynamic]MeshData, temp_allocator)
+        material_map := make(map[resource.ResourceIdent][dynamic]MeshData, allocator=temp_allocator)
         defer {
             for _, v in material_map do delete(v)
             delete(material_map)
@@ -133,7 +128,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
                 dbg.log(.ERROR, "Material lighting shader is not set")
             }
 
-            lighting_shader := resource.get_shader_pass(manager, material.shader.?) or_return
+            lighting_shader := resource.get_shader_pass(manager, .shader.?) or_return
 
             if lighting_shader.id == nil {
                 dbg.log(.INFO, "Compiling and transferring lighting shader in render")
