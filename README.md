@@ -41,18 +41,35 @@ Permissions may have to be updated before running the build script.
 ## Features and scope
 A list of features detailing what eno currently implements:
 
-- Windowing using SDL2
-- OpenGL rendering API
-- Entity Component System featuring a Scene > Archetype > Entity hierarchical structure, a Component API with component serializatrion/deserialization, and systems for certain batch operations. Implements a cache optimised structure for component data with byte arrays, stored within archetypes. `ecs` package
-- GLTF model loading from a scene with cgltf Odin bindings into a Model API in the `model` package
-- Dynamic shader generation within the `shader` package
-- Controls using a centralized hook structure
+- Windowing using SDL2 ( `window` package )
+- Archetypal Entity Component System with a powerful query interface where entity component data is stored tighly packed in a cache-efficient manner ( `ecs` package )
+- GLTF model/scene loading with full PBR material support ( `resource` package -> `gltf.odin` )
+- Dynamic shader source interface ( `shader` package )
+- Controls using a centralized hook structure ( `control` package )
+- OpenGL renderer backend ( `render` package )
+- PBR direct lighting with normal mapping
+- Central resource manager with hashing and reference counting to share/store shaders, material permutations, vertex layout permuations etc. ( `resource` package )
+- Liberal render pass interface with a general `render` procedure
 
 Shortly upcoming features:
-- Deferred rendering pipeline - integrates everything in the project so far, and changes a lot.
-- Some better APIs (particularly for ECS systems)
 
-Eno is made to be cross-platform where possible. I have plans for integrating Vulkan and to be able to target Mac with MoltenVK.
-I have certain plans to make an option for GLFW instead of SDL as the windower, however I'd likely focus on other things first as it really does not change anything for anybody.
+- Some render pass geometry querying improvements to support more pass types, including depth-pre passes and transparency passes
+- Centrally managed shader passes, hashed and owned between render passes and meshes
+- Billboarding improvements
+- Image based indirect lighting
+- Dynamic vertex/lighting shader generation, (comptime generation: vertex layouts, material types,  runtime branching: lighting settings)
+- Imgui :O
+- A shadow mapping technique (cascaded shadow mapping likely)
+- An AO technique (looking at GTAO)
 
-I've been developing around the renderer for a while now, so eno currently doesn't have much to show in terms of viewable graphics. This is done on purpose, so that I don't have to rewrite the renderer and adjacent systems a million times in the future (Which I still likely will, but hopefully less :)).
+Things I'd like to implement if I have the time:
+
+- Pre-render geometry processing for tangent approximations with `mikkt`; an unweld -> `mikkt` tangent generation -> weld process
+- Forward+
+- Order independent transparency
+
+Far reaching:
+- Some proper indirect lighting - potentially GI
+- Vulkan backend
+- MoltenVK for Mac
+
