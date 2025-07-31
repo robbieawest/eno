@@ -435,6 +435,7 @@ ShaderType :: enum { // Is just gl.Shader_Type
 
 Shader :: struct {
     type: ShaderType,
+    id: ShaderIdentifier,
     source: ShaderSource
 }
 
@@ -459,6 +460,8 @@ ShaderIdentifier :: Maybe(u32)
 
 ShaderProgram :: struct {
     id: ShaderIdentifier,
+    // Even though Shader is a resource in ResourceManager, just owning a copy of a Shader here makes sense
+    // No need for other ownership, since nothing will be changed later
     shaders: map[ShaderType]Shader,  // Although it is possible to add more than one shader of each type, adding support really doesn't mean anything
     uniform_cache: ShaderUniformCache
 }
@@ -525,7 +528,11 @@ build_shader_from_source :: proc(shader_info: ShaderInfo, type: ShaderType) -> (
     Builds/Deserializes the source as a single string with newlines
     Uses glsl version 430 core
 */
-supply_shader_source :: proc(shader: ^Shader) -> (ok: bool) {
+supply_shader_source :: proc(shader: ^Shader, allocator := context.allocator) -> (ok: bool) {
+    old_alloc := context.allocator
+    context.allocator = allocator
+    defer context.allocator = old_alloc
+
     dbg.log(.INFO, "Building Shader Source")
     shader_info := shader.source.shader_info
     type := shader.type

@@ -129,15 +129,15 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
                 dbg.log(.ERROR, "Material does not exist for material id")
                 return
             }
-            if material.lighting_shader == nil {
+            if material.shader == nil {
                 dbg.log(.ERROR, "Material lighting shader is not set")
             }
 
-            lighting_shader := resource.get_shader(manager, material.lighting_shader.?) or_return
+            lighting_shader := resource.get_shader_pass(manager, material.shader.?) or_return
 
             if lighting_shader.id == nil {
                 dbg.log(.INFO, "Compiling and transferring lighting shader in render")
-                transfer_shader(lighting_shader) or_return
+                compile_shader(lighting_shader) or_return
                 return
             }
 
@@ -568,20 +568,57 @@ update_lights_ssbo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
 }
 
 
-// todo full - this is demo
-create_lighting_shader :: proc(manager: ^resource.ResourceManager, compile: bool) -> (ok: bool) {
-    materials := resource.get_materials(manager^)
-    defer delete(materials)
+// Creates and compiles any shaders attached to VertexLayout or MaterialType resources
+create_shaders :: proc(manager: ^resource.ResourceManager, compile := true) -> (ok: bool) {
+    materials := resource.get_materials(manager^); defer delete(materials)
+    vertex_layouts := resource.get_vertex_layouts(manager^); defer delete(vertex_layouts)
 
-    for material in materials {
-        if material.lighting_shader != nil do continue
+    for &material in materials {
+        if material.shader == nil {
+            // todo dynamically create
+            dbg.log(dbg.LogLevel.INFO, "Creating lighing shader for material")
+            single_shader := shader.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.frag", .FRAGMENT) or_return
+            if compile do compile_shader(&single_shader) or_return
 
-        dbg.log(dbg.LogLevel.INFO, "Creating lighing shader for material")
-        program := shader.read_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.frag", standards.SHADER_RESOURCE_PATH + "demo_shader.vert") or_return
-        if compile do transfer_shader(&program) or_return
+            shader_id := resource.add_shader(manager, single_shader) or_return
+            material.shader = shader_id
+        }
+    }
 
-        shader_id := resource.add_shader(manager, program) or_return
-        material.lighting_shader = shader_id
+    for &layout in vertex_layouts {
+        if layout.shader == nil {
+            // todo dynamically create
+            dbg.log(dbg.LogLevel.INFO, "Creating vertex shader for layout")
+            single_shader := shader.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.vert", .VERTEX) or_return
+            if compile do compile_shader(&single_shader) or_return
+
+            shader_id := resource.add_shader(manager, single_shader) or_return
+            layout.shader = shader_id
+        }
+    }
+
+    return true
+}
+
+// Combines shaders from vertex layouts and material types into shader passes (shader programs)
+// Compiles any shaders not yet compiled
+// Links shaders
+// Allocates any memory via allocator
+create_shader_passes :: proc(manager: ^resource.ResourceManager, meshes: []^resource.Mesh, allocator := context.allocator) -> (ok: bool) {
+
+    for &mesh in meshes {
+        layout := resource.get_vertex_layout(manager, mesh.layout) or_return
+        material := resource.get_material(manager, mesh.material.type) or_return
+
+        vert := resource.get_shader(manager, layout.shader) or_return
+        frag := resource.get_shader(manager, material.shader) or_return
+
+        shaders := make(map[shader.ShaderType]shader.Shader, allocator=allocator)
+        shaders[.VERTEX] = vert^
+        shaders[.FRAGMENT] = frag^
+
+        pass := create_shader_pass(shaders) or_return
+        mesh.shader_pass = resource.add_shader_pass(manager, pass) or_return
     }
 
     return true

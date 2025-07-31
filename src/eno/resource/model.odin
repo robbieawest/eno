@@ -43,14 +43,14 @@ VertexLayout :: struct {
     // Decides if the VertexLayout should be grouped with duplicates in the resource manager or not
     // Use when the vertex shader should be unique to layouts with the same mesh attribute infos
     unique: bool,
-    vertex_shader: ResourceID
+    shader: ResourceID
 }
 
 destroy_vertex_layout :: proc(manager: ^ResourceManager, layout: VertexLayout) -> (ok: bool) {
     for attr_info in layout.infos do delete(attr_info.name)
     delete(layout.infos)
 
-    remove_shader(manager, layout.vertex_shader) or_return
+    remove_shader(manager, layout.shader) or_return
     return true
 }
 
@@ -109,6 +109,7 @@ Mesh :: struct {
     indices_count: int,
     layout: ResourceIdent,
     material: Material,
+    shader_pass: ResourceID,
     gl_component: GLComponent,
     is_billboard: bool,
     instance_to: Maybe(InstanceTo)  // Todo support EXT_mesh_gpu_instancing gltf extension for this
@@ -278,7 +279,7 @@ MaterialType :: struct {
     // unique field specifies that it should not be grouped with duplicate MaterialType's in the manager
     // Use when the lighting shader is special and must differ from these duplicate permutations
     unique: bool,
-    lighting_shader: ResourceID,
+    shader: ResourceID,
 }
 
 
@@ -308,7 +309,7 @@ destroy_material :: proc(manager: ^ResourceManager, material: Material, allocato
 }
 
 destroy_material_type :: proc(manager: ^ResourceManager, type: MaterialType) -> (ok: bool) {
-    remove_shader(manager, type.lighting_shader) or_return
+    remove_shader(manager, type.shader) or_return
     return true
 }
 

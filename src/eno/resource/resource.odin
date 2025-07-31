@@ -68,7 +68,8 @@ hash_ptr :: proc(ptr: ^$T) -> ResourceHash {
 // Only add/delete resources via the given procedures
 ResourceManager :: struct {
     materials: ResourceMapping,
-    shaders: ResourceMapping,
+    shader_passes: ResourceMapping,
+    shaders: ResouceMapping,
     textures: ResourceMapping,
     vertex_layouts: ResourceMapping,
     billboard_shader: ResourceID,  // Hacky, a proper MaterialType would fix this
@@ -83,25 +84,16 @@ init_resource_manager :: proc(allocator := context.allocator) -> ResourceManager
         make(ResourceMapping, allocator=allocator),
         make(ResourceMapping, allocator=allocator),
         make(ResourceMapping, allocator=allocator),
+        make(ResourceMapping, allocator=allocator),
         nil,
         nil,
         allocator
     }
 }
 
-// Allocates buf for material pointers - recommend specifying temp allocator
-get_materials :: proc(manager: ResourceManager, allocator := context.allocator) -> []^MaterialType {
-    mat_dyn := make([dynamic]^MaterialType, allocator)
 
-    for _, bucket in manager.materials {
-        iterator := list.iterator_head(bucket, ResourceNode(MaterialType), "node")
-        for resource_node in list.iterate_next(&iterator) {
-            append(&mat_dyn, &resource_node.resource)
-        }
-    }
 
-    return mat_dyn[:]
-}
+
 
 // Assumes resource appears at most once in bucket
 // O(N * M) linear + mem compare, M = bytes in T, N = length of bucket
@@ -253,12 +245,40 @@ get_resource :: proc(
     return &resource_node.resource, true
 }
 
+
+// Allocates buf for pointers - recommend specifying temp allocator
+@(private)
+get_resources :: proc(mapping: ResourceMapping, $T: typeid, allocator := context.allocator) -> []^T {
+    resources := make([dynamic]^T, allocator)
+
+    for _, bucket in mapping {
+        iterator := list.iterator_head(bucket, ResourceNode(T), "node")
+        for resource_node in list.iterate_next(&iterator) {
+            append(&resources, &resource_node.resource)
+        }
+    }
+
+    return resources[:]
+}
+
+get_materials :: proc(manager: ResourceManager, allocator := context.allocator) -> []^MaterialType {
+    return get_resources(manager.materials, MaterialType, allocator)
+}
+
+get_vertex_layouts :: proc(manager: ResourceManager, allocator := context.allocator) -> []^VertexLayout {
+    return get_resources(manager.vertex_layouts, VertexLayout, allocator)
+}
+
 add_texture :: proc(manager: ^ResourceManager, texture: Texture) -> (id: ResourceIdent, ok: bool) {
     return add_resource(&manager.textures, Texture, texture, manager.allocator)
 }
 
-add_shader :: proc(manager: ^ResourceManager, program: shader.ShaderProgram) -> (id: ResourceIdent, ok: bool) {
-    return add_resource(&manager.shaders, shader.ShaderProgram, program, manager.allocator)
+add_shader_pass :: proc(manager: ^ResourceManager, program: shader.ShaderProgram) -> (id: ResourceIdent, ok: bool) {
+    return add_resource(&manager.shader_passes, shader.ShaderProgram, program, manager.allocator)
+}
+
+add_shader :: proc(manager: ^ResourceManager, program: shader.Shader) -> (id: ResourceIdent, ok: bool) {
+    return add_resource(&manager.shaders, shader.Shader, program, manager.allocator)
 }
 
 add_material :: proc(manager: ^ResourceManager, material: MaterialType) -> (id: ResourceIdent, ok: bool) {
@@ -277,8 +297,12 @@ get_material :: proc(manager: ^ResourceManager, id: ResourceID) -> (material: ^M
     return get_resource(&manager.materials, MaterialType, utils.unwrap_maybe(id) or_return)
 }
 
-get_shader :: proc(manager: ^ResourceManager, id: ResourceID) -> (program: ^shader.ShaderProgram, ok: bool) {
-    return get_resource(&manager.shaders, shader.ShaderProgram, utils.unwrap_maybe(id) or_return)
+get_shader_pass :: proc(manager: ^ResourceManager, id: ResourceID) -> (program: ^shader.ShaderProgram, ok: bool) {
+    return get_resource(&manager.shader_passes, shader.ShaderProgram, utils.unwrap_maybe(id) or_return)
+}
+
+get_shader :: proc(manager: ^ResourceManager, id: ResourceID) -> (program: ^shader.Shader, ok: bool) {
+    return get_resource(&manager.shaders, shader.Shader, utils.unwrap_maybe(id) or_return)
 }
 
 get_vertex_layout :: proc(manager: ^ResourceManager, id: ResourceID) -> (layout: ^VertexLayout, ok: bool) {
@@ -293,8 +317,12 @@ remove_material :: proc(manager: ^ResourceManager, id: ResourceID) -> (ok: bool)
     return remove_resource(&manager.materials, MaterialType, utils.unwrap_maybe(id) or_return, manager.allocator)
 }
 
+remove_shader_pass :: proc(manager: ^ResourceManager, id: ResourceID) -> (ok: bool) {
+    return remove_resource(&manager.shader_passes, shader.ShaderProgram, utils.unwrap_maybe(id) or_return, manager.allocator)
+}
+
 remove_shader :: proc(manager: ^ResourceManager, id: ResourceID) -> (ok: bool) {
-    return remove_resource(&manager.shaders, shader.ShaderProgram, utils.unwrap_maybe(id) or_return, manager.allocator)
+    return remove_resource(&manager.shaders, shader.Shader, utils.unwrap_maybe(id) or_return, manager.allocator)
 }
 
 remove_layout :: proc(manager: ^ResourceManager, id: ResourceID) -> (ok: bool) {
@@ -307,11 +335,11 @@ get_billboard_lighting_shader :: proc(manager: ^ResourceManager) -> (result: Res
 
     shader_ident, shader_ok := manager.billboard_shader.?
     billboard_shader: ^shader.ShaderProgram
-    if shader_ok do billboard_shader, shader_ok = get_resource(&manager.shaders, shader.ShaderProgram, shader_ident, is_shared_reference=true)
+    if shader_ok do billboard_shader, shader_ok = get_resource(&manager.shader_passes, shader.ShaderProgram, shader_ident, is_shared_reference=true)
 
     if !shader_ok {
         program := shader.read_shader_source(standards.SHADER_RESOURCE_PATH + "billboard.vert", standards.SHADER_RESOURCE_PATH + "billboard.frag") or_return
-        result = add_shader(manager, program) or_return
+        result = add_shader_pass(manager, program) or_return
         manager.billboard_shader = result
         return result, true
     }
@@ -324,7 +352,7 @@ clear_unused_resources :: proc(manager: ^ResourceManager, allocator := context.t
     ok = true
     ok &= clear(manager, &manager.materials, MaterialType, manager.allocator, allocator, check_reference_zero(MaterialType))
     ok &= clear(manager, &manager.textures, Texture, manager.allocator, allocator, check_reference_zero(Texture))
-    ok &= clear(manager, &manager.shaders, shader.ShaderProgram, manager.allocator, allocator, check_reference_zero(shader.ShaderProgram))
+    ok &= clear(manager, &manager.shader_passes, shader.ShaderProgram, manager.allocator, allocator, check_reference_zero(shader.ShaderProgram))
     return
 }
 
@@ -342,11 +370,11 @@ destroy_manager :: proc(manager: ^ResourceManager, allocator := context.temp_all
     ok = true
     ok &= clear(manager, &manager.materials, MaterialType, manager.allocator, allocator, nil)
     ok &= clear(manager, &manager.textures, Texture, manager.allocator, allocator, nil)
-    ok &= clear(manager, &manager.shaders, shader.ShaderProgram, manager.allocator, allocator, nil)
+    ok &= clear(manager, &manager.shader_passes, shader.ShaderProgram, manager.allocator, allocator, nil)
 
     delete(manager.materials)
     delete(manager.textures)
-    delete(manager.shaders)
+    delete(manager.shader_passes)
     return
 }
 
