@@ -59,6 +59,7 @@ Shortly upcoming features:
 - Image based indirect lighting
 - Dynamic vertex/lighting shader generation, (comptime generation: vertex layouts, material types,  runtime branching: lighting settings)
 - Imgui :O
+- MSAA
 - A shadow mapping technique (cascaded shadow mapping likely)
 - An AO technique (looking at GTAO)
 
