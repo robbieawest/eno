@@ -9,18 +9,7 @@ import "core:strings"
 import "core:reflect"
 
 
-// Defines procedures for building shaders from multiple blocks of input/output
-// Be careful when using these procedures if reading a shader from a file and not parsing that shader
-
-/*
-    Overwrites any shader layout already existing
-
-*/
-shader_layout_from_mesh :: proc(shader: ^shader.ShaderInfo, mesh: resource.Mesh) -> (ok: bool) {
-    return shader_layout_from_mesh_layout(shader, mesh.layout)
-}
-
-shader_layout_from_mesh_layout :: proc(shader_info: ^shader.ShaderInfo, layout: resource.VertexLayout) -> (ok: bool) {
+shader_layout_from_mesh_layout :: proc(shader_info: ^shader.ShaderInfo, layout: []resource.MeshAttributeInfo) -> (ok: bool) {
     n_Attributes := len(layout)
     new_inputs := make([dynamic]shader.GLSLPair, n_Attributes)
     defer shader.destroy_glsl_pairs(new_inputs[:])

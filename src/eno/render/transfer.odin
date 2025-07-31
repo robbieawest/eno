@@ -27,18 +27,19 @@ release_model :: proc(model: resource.Model) {
 transfer_model :: proc(manager: ^resource.ResourceManager, model: resource.Model, destroy_after_transfer := true) -> (ok: bool) {
     dbg.log(.INFO, "Transferring model")
 
-    for &mesh in model.meshes do transfer_mesh(&mesh, destroy_after_transfer) or_return
+    for &mesh in model.meshes do transfer_mesh(manager, &mesh, destroy_after_transfer) or_return
 
     return
 }
 
 @(private)
-transfer_mesh :: proc(mesh: ^resource.Mesh, destroy_after_transfer := true, loc := #caller_location) -> (ok: bool) {
+transfer_mesh :: proc(manager: ^resource.ResourceManager, mesh: ^resource.Mesh, destroy_after_transfer := true, loc := #caller_location) -> (ok: bool) {
     if mesh.gl_component.vao == nil do create_and_transfer_vao(&mesh.gl_component.vao)
     else do bind_vao(mesh.gl_component.vao.?)
 
     if mesh.gl_component.vbo == nil {
-        create_and_transfer_vbo(&mesh.gl_component.vbo, mesh) or_return
+        layout := resource.get_vertex_layout(manager, mesh.layout) or_return
+        create_and_transfer_vbo(&mesh.gl_component.vbo, mesh.vertex_data, layout.infos) or_return
         if destroy_after_transfer do delete(mesh.vertex_data)
     }
     else do bind_vbo(mesh.gl_component.vbo.?)
@@ -88,16 +89,16 @@ bind_vao :: proc(vao: u32) {
 create_and_transfer_vbo :: proc{ create_and_transfer_vbo_maybe, create_and_transfer_vbo_raw }
 
 @(private)
-create_and_transfer_vbo_maybe :: proc(vbo: ^Maybe(u32), data: ^resource.Mesh) -> (ok: bool) {
+create_and_transfer_vbo_maybe :: proc(vbo: ^Maybe(u32), vertex_data: resource.VertexData, layout: []resource.MeshAttributeInfo) -> (ok: bool) {
     new_vbo: u32
-    ok = create_and_transfer_vbo_raw(&new_vbo, data)
+    ok = create_and_transfer_vbo_raw(&new_vbo, vertex_data, layout)
     vbo^ = new_vbo
     return ok
 }
 
 @(private)
-create_and_transfer_vbo_raw :: proc(vbo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
-    if len(data.vertex_data) == 0 {
+create_and_transfer_vbo_raw :: proc(vbo: ^u32, vertex_data: resource.VertexData, layout: []resource.MeshAttributeInfo) -> (ok: bool) {
+    if len(vertex_data) == 0 {
         dbg.log(.ERROR, "No vertices given to express");
         return
     }
@@ -105,12 +106,12 @@ create_and_transfer_vbo_raw :: proc(vbo: ^u32, data: ^resource.Mesh) -> (ok: boo
     gl.GenBuffers(1, vbo)
     bind_vbo(vbo^)
 
-    total_byte_stride: u32 = 0; for attribute_layout in data.layout do total_byte_stride += attribute_layout.byte_stride
+    total_byte_stride: u32 = 0; for attribute_layout in layout do total_byte_stride += attribute_layout.byte_stride
 
-    transfer_buffer_data(gl.ARRAY_BUFFER, raw_data(data.vertex_data), len(data.vertex_data) * size_of(f32), { .WRITE_ONCE_READ_MANY, .DRAW })
+    transfer_buffer_data(gl.ARRAY_BUFFER, raw_data(vertex_data), len(vertex_data) * size_of(f32), BufferUsage{ .WRITE_ONCE_READ_MANY, .DRAW })
 
     offset, current_ind: u32 = 0, 0
-    for attribute_info in data.layout {
+    for attribute_info in layout {
         gl.VertexAttribPointer(current_ind, i32(attribute_info.float_stride), gl.FLOAT, gl.FALSE, i32(total_byte_stride), uintptr(offset) * size_of(f32))
         gl.EnableVertexAttribArray(current_ind)
 
