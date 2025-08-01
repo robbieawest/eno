@@ -93,6 +93,10 @@ before_frame :: proc() -> (ok: bool) {
         game.HOOKS_CAMERA_MOVEMENT()  // Only can be used after camera added to scene
     )
 
+    manager := &game.Game.resource_manager
+    render.create_shaders(manager) or_return
+    render.create_shader_passes(manager, game.Game.scene) or_return
+
     return true
 }
 

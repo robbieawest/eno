@@ -239,15 +239,15 @@ get_resource :: proc(
     loc := #caller_location
 ) -> (resource: ^T, ok: bool) {
     if ident.hash not_in mapping {
-        dbg.log(.ERROR, "Ident hash not found in mapping")
+        dbg.log(.ERROR, "Ident hash not found in mapping, type: %v", typeid_of(T), loc=loc)
         return
     }
 
     bucket := mapping[ident.hash]
     resource_node, node_found := traverse_bucket_ptr(bucket, T, ident.node)
     if !node_found {
-        dbg.log(.ERROR, "Node not found in bucket, hash: %d, node: %p, type: %v", ident.hash, rawptr(ident.node), typeid_of(T))
-        dbg.log(.ERROR, "Mapping: %#v", mapping)
+        dbg.log(.ERROR, "Node not found in bucket, hash: %d, node: %p, type: %v", ident.hash, rawptr(ident.node), typeid_of(T), loc=loc)
+        dbg.log(.ERROR, "Mapping: %#v", mapping, loc=loc)
         return
     }
 
@@ -316,8 +316,8 @@ get_shader :: proc(manager: ^ResourceManager, id: ResourceID) -> (program: ^shad
     return get_resource(&manager.shaders, shader.Shader, utils.unwrap_maybe(id) or_return)
 }
 
-get_vertex_layout :: proc(manager: ^ResourceManager, id: ResourceID) -> (layout: ^VertexLayout, ok: bool) {
-    return get_resource(&manager.vertex_layouts, VertexLayout, utils.unwrap_maybe(id) or_return)
+get_vertex_layout :: proc(manager: ^ResourceManager, id: ResourceID, loc := #caller_location) -> (layout: ^VertexLayout, ok: bool) {
+    return get_resource(&manager.vertex_layouts, VertexLayout, utils.unwrap_maybe(id) or_return, loc=loc)
 }
 
 remove_texture :: proc(manager: ^ResourceManager, id: ResourceID) -> (ok: bool) {

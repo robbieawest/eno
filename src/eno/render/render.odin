@@ -87,26 +87,31 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
 
         if pass.properties.geometry_z_sorting != .NO_SORT do sort_geometry_by_depth(models_data[:], pass.properties.geometry_z_sorting == .ASC)
 
-        // Group into materials and meshes
-        material_map := make(map[resource.ResourceIdent][dynamic]MeshData, allocator=temp_allocator)
+        // Group geometry by shaders
+        shader_map := make(map[resource.ResourceIdent][dynamic]MeshData, allocator=temp_allocator)
         defer {
-            for _, v in material_map do delete(v)
-            delete(material_map)
+            for _, v in shader_map do delete(v)
+            delete(shader_map)
         }
 
         for &model_data in models_data {
             for &mesh in model_data.model.meshes {
-                mat_id := mesh.material.type
+                id := mesh.shader_pass
+                if id == nil {
+                    dbg.log(.ERROR, "Mesh has no assigned shader pass pre render")
+                    return
+                }
+                shader_id := id.?
 
                 pair := MeshData{ &mesh, model_data.world, model_data.instance_to}
-                if mat_id in material_map {
-                    dyn := &material_map[mat_id]
+                if shader_id in shader_map {
+                    dyn := &shader_map[shader_id]
                     append(dyn, pair)
                 }
                 else {
                     dyn := make([dynamic]MeshData, 1, temp_allocator)
                     dyn[0] = pair
-                    material_map[mat_id] = dyn
+                    shader_map[shader_id] = dyn
                 }
 
             }
@@ -115,28 +120,22 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
         handle_pass_properties(pipeline, pass)
 
         // render meshes
-        for mat_id, &mesh_datas  in material_map {
+        for shader_pass_id, &mesh_datas  in shader_map {
 
-            material := resource.get_material(manager, mat_id) or_return
+            shader_pass := resource.get_shader_pass(manager, shader_pass_id) or_return
 
             // Sanity checks
-            if material == nil {
-                dbg.log(.ERROR, "Material does not exist for material id")
-                return
-            }
-            if material.shader == nil {
-                dbg.log(.ERROR, "Material lighting shader is not set")
-            }
-
-            lighting_shader := resource.get_shader_pass(manager, .shader.?) or_return
-
-            if lighting_shader.id == nil {
-                dbg.log(.INFO, "Compiling and transferring lighting shader in render")
-                compile_shader(lighting_shader) or_return
+            if shader_pass == nil {
+                dbg.log(.ERROR, "Shader pass does not exist for material id")
                 return
             }
 
-            bind_program(lighting_shader.id.?)
+            if shader_pass.id == nil {
+                dbg.log(.ERROR, "Shader pass is not yet compiled before render")
+                return
+            }
+
+            bind_program(shader_pass.id.?)
             update_camera_ubo(scene) or_return
             update_lights_ssbo(scene) or_return
 
@@ -144,9 +143,9 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
                 model_mat, normal_mat := model_and_normal(mesh_data.mesh, mesh_data.world, scene.viewpoint)
                 transfer_mesh(manager, mesh_data.mesh) or_return
 
-                bind_material_uniforms(manager, mesh_data.mesh.material, lighting_shader) or_return
-                shader.set_uniform(lighting_shader, standards.MODEL_MAT, model_mat)
-                shader.set_uniform(lighting_shader, standards.NORMAL_MAT, normal_mat)
+                bind_material_uniforms(manager, mesh_data.mesh.material, shader_pass) or_return
+                shader.set_uniform(shader_pass, standards.MODEL_MAT, model_mat)
+                shader.set_uniform(shader_pass, standards.NORMAL_MAT, normal_mat)
 
                 issue_single_element_draw_call(mesh_data.mesh.indices_count)
             }
@@ -565,6 +564,8 @@ update_lights_ssbo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
 
 // Creates and compiles any shaders attached to VertexLayout or MaterialType resources
 create_shaders :: proc(manager: ^resource.ResourceManager, compile := true) -> (ok: bool) {
+    // When this needs to be dynamic, it needs to loop via meshes to get matching pairs of materials and layouts
+
     materials := resource.get_materials(manager^); defer delete(materials)
     vertex_layouts := resource.get_vertex_layouts(manager^); defer delete(vertex_layouts)
 
@@ -599,21 +600,33 @@ create_shaders :: proc(manager: ^resource.ResourceManager, compile := true) -> (
 // Compiles any shaders not yet compiled
 // Links shaders
 // Allocates any memory via allocator
-create_shader_passes :: proc(manager: ^resource.ResourceManager, meshes: []^resource.Mesh, allocator := context.allocator) -> (ok: bool) {
+create_shader_passes :: proc(manager: ^resource.ResourceManager, scene: ^ecs.Scene, allocator := context.allocator) -> (ok: bool) {
 
-    for &mesh in meshes {
-        layout := resource.get_vertex_layout(manager, mesh.layout) or_return
-        material := resource.get_material(manager, mesh.material.type) or_return
+    // Query scene for all models and flatten to meshes
+    query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
+        { label = resource.MODEL_COMPONENT.label, action = .QUERY_AND_INCLUDE }
+    }}
+    query_result := ecs.query_scene(scene, query, allocator) or_return
+    defer ecs.destroy_scene_query_result(query_result)
 
-        vert := resource.get_shader(manager, layout.shader) or_return
-        frag := resource.get_shader(manager, material.shader) or_return
+    models := ecs.get_component_from_query_result(query_result, resource.Model, resource.MODEL_COMPONENT.label, allocator) or_return
+    defer delete(models)
 
-        shaders := make(map[shader.ShaderType]shader.Shader, allocator=allocator)
-        shaders[.VERTEX] = vert^
-        shaders[.FRAGMENT] = frag^
+    for &model in models {
+        for &mesh in model.meshes {
+            layout := resource.get_vertex_layout(manager, mesh.layout) or_return
+            material := resource.get_material(manager, mesh.material.type) or_return
 
-        pass := create_shader_pass(shaders) or_return
-        mesh.shader_pass = resource.add_shader_pass(manager, pass) or_return
+            vert := resource.get_shader(manager, layout.shader) or_return
+            frag := resource.get_shader(manager, material.shader) or_return
+
+            shaders := make(map[shader.ShaderType]shader.Shader, allocator=allocator)
+            shaders[.VERTEX] = vert^
+            shaders[.FRAGMENT] = frag^
+
+            pass := create_shader_pass(shaders) or_return
+            mesh.shader_pass = resource.add_shader_pass(manager, pass) or_return
+        }
     }
 
     return true
