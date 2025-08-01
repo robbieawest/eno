@@ -2,7 +2,6 @@ package render
 
 import "../ecs"
 import "../resource"
-import "../shader"
 import "../utils"
 import dbg "../debug"
 import "../standards"
@@ -88,34 +87,12 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
         if pass.properties.geometry_z_sorting != .NO_SORT do sort_geometry_by_depth(models_data[:], pass.properties.geometry_z_sorting == .ASC)
 
         // Group geometry by shaders
-        shader_map := make(map[resource.ResourceIdent][dynamic]MeshData, allocator=temp_allocator)
+        shader_map := group_meshes_by_shader(models_data^, temp_allocator)
         defer {
             for _, v in shader_map do delete(v)
             delete(shader_map)
         }
 
-        for &model_data in models_data {
-            for &mesh in model_data.model.meshes {
-                id := mesh.shader_pass
-                if id == nil {
-                    dbg.log(.ERROR, "Mesh has no assigned shader pass pre render")
-                    return
-                }
-                shader_id := id.?
-
-                pair := MeshData{ &mesh, model_data.world, model_data.instance_to}
-                if shader_id in shader_map {
-                    dyn := &shader_map[shader_id]
-                    append(dyn, pair)
-                }
-                else {
-                    dyn := make([dynamic]MeshData, 1, temp_allocator)
-                    dyn[0] = pair
-                    shader_map[shader_id] = dyn
-                }
-
-            }
-        }
 
         handle_pass_properties(pipeline, pass)
 
@@ -144,8 +121,8 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
                 transfer_mesh(manager, mesh_data.mesh) or_return
 
                 bind_material_uniforms(manager, mesh_data.mesh.material, shader_pass) or_return
-                shader.set_uniform(shader_pass, standards.MODEL_MAT, model_mat)
-                shader.set_uniform(shader_pass, standards.NORMAL_MAT, normal_mat)
+                resource.set_uniform(shader_pass, standards.MODEL_MAT, model_mat)
+                resource.set_uniform(shader_pass, standards.NORMAL_MAT, normal_mat)
 
                 issue_single_element_draw_call(mesh_data.mesh.indices_count)
             }
@@ -156,7 +133,41 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
     return true
 }
 
+@(private)
+group_meshes_by_shader :: proc(models_data: [dynamic]ModelData, temp_allocator := context.temp_allocator) -> (shader_map: map[resource.ResourceIdent][dynamic]MeshData) {
+
+    shader_map = make(map[resource.ResourceIdent][dynamic]MeshData, allocator=temp_allocator)
+
+
+    for &model_data in models_data {
+        for &mesh in model_data.model.meshes {
+            id := mesh.shader_pass
+            if id == nil {
+                dbg.log(.ERROR, "Mesh has no assigned shader pass pre render")
+                return
+            }
+            shader_id := id.?
+
+            pair := MeshData{ &mesh, model_data.world, model_data.instance_to}
+            if shader_id in shader_map {
+                dyn := &shader_map[shader_id]
+                append(dyn, pair)
+            }
+            else {
+                dyn := make([dynamic]MeshData, 1, temp_allocator)
+                dyn[0] = pair
+                shader_map[shader_id] = dyn
+            }
+
+        }
+    }
+
+    return
+}
+
+
 // Handles binding of framebuffer along with enabling of certain settings/tests
+@(private)
 handle_pass_properties :: proc(pipeline: RenderPipeline($N), pass: RenderPass) {
     if pass.frame_buffer == nil {
         bind_default_framebuffer()
@@ -306,7 +317,7 @@ model_and_normal :: proc(mesh: ^resource.Mesh, world: ^standards.WorldComponent,
     Specifically used in respect to the lighting shader stored inside the material
 */
 @(private)
-bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material, lighting_shader: ^shader.ShaderProgram) -> (ok: bool) {
+bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material, lighting_shader: ^resource.ShaderProgram) -> (ok: bool) {
 
     texture_unit: u32
     infos: resource.MaterialPropertyInfos
@@ -327,20 +338,20 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
 
                 transfer_texture(base_colour)
                 bind_texture(texture_unit, base_colour.gpu_texture) or_return
-                shader.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, i32(texture_unit))
+                resource.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, i32(texture_unit))
                 texture_unit += 1
 
                 transfer_texture(metallic_roughness)
                 bind_texture(texture_unit, metallic_roughness.gpu_texture) or_return
-                shader.set_uniform(lighting_shader, resource.PBR_METALLIC_ROUGHNESS, i32(texture_unit))
+                resource.set_uniform(lighting_shader, resource.PBR_METALLIC_ROUGHNESS, i32(texture_unit))
                 texture_unit += 1
 
-                shader.set_uniform(lighting_shader, resource.BASE_COLOUR_FACTOR, v.base_colour_factor[0], v.base_colour_factor[1], v.base_colour_factor[2], v.base_colour_factor[3])
-                shader.set_uniform(lighting_shader, resource.METALLIC_FACTOR, v.metallic_factor)
-                shader.set_uniform(lighting_shader, resource.ROUGHNESS_FACTOR, v.roughness_factor)
+                resource.set_uniform(lighting_shader, resource.BASE_COLOUR_FACTOR, v.base_colour_factor[0], v.base_colour_factor[1], v.base_colour_factor[2], v.base_colour_factor[3])
+                resource.set_uniform(lighting_shader, resource.METALLIC_FACTOR, v.metallic_factor)
+                resource.set_uniform(lighting_shader, resource.ROUGHNESS_FACTOR, v.roughness_factor)
 
             case resource.EmissiveFactor:
-                shader.set_uniform(lighting_shader, resource.EMISSIVE_FACTOR, v[0], v[1], v[2])
+                resource.set_uniform(lighting_shader, resource.EMISSIVE_FACTOR, v[0], v[1], v[2])
 
             case resource.EmissiveTexture:
                 emissive_texture, tex_ok := resource.get_texture(manager, resource.ResourceIdent(v))
@@ -351,7 +362,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
 
                 transfer_texture(emissive_texture)
                 bind_texture(texture_unit, emissive_texture.gpu_texture.?) or_return
-                shader.set_uniform(lighting_shader, resource.EMISSIVE_TEXTURE, i32(texture_unit))
+                resource.set_uniform(lighting_shader, resource.EMISSIVE_TEXTURE, i32(texture_unit))
                 texture_unit += 1
 
             case resource.OcclusionTexture:
@@ -363,7 +374,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
 
                 transfer_texture(occlusion_texture)
                 bind_texture(texture_unit, occlusion_texture.gpu_texture.?) or_return
-                shader.set_uniform(lighting_shader, resource.OCCLUSION_TEXTURE, i32(texture_unit))
+                resource.set_uniform(lighting_shader, resource.OCCLUSION_TEXTURE, i32(texture_unit))
                 texture_unit += 1
 
             case resource.NormalTexture:
@@ -375,7 +386,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
 
                 transfer_texture(normal_texture)
                 bind_texture(texture_unit, normal_texture.gpu_texture.?) or_return
-                shader.set_uniform(lighting_shader, resource.NORMAL_TEXTURE, i32(texture_unit))
+                resource.set_uniform(lighting_shader, resource.NORMAL_TEXTURE, i32(texture_unit))
                 texture_unit += 1
             case resource.BaseColourTexture:
                 base_colour, tex_ok := resource.get_texture(manager, resource.ResourceIdent(v))
@@ -386,12 +397,12 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
 
                 transfer_texture(base_colour)
                 bind_texture(texture_unit, base_colour.gpu_texture) or_return
-                shader.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, i32(texture_unit))
+                resource.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, i32(texture_unit))
                 texture_unit += 1
         }
     }
 
-    // shader.set_uniform(lighting_shader, resource.MATERIAL_INFOS, transmute(u32)infos)
+    // resource.set_uniform(lighting_shader, resource.MATERIAL_INFOS, transmute(u32)infos)
     return true
 }
 
@@ -563,7 +574,7 @@ update_lights_ssbo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
 
 
 // Creates and compiles any shaders attached to VertexLayout or MaterialType resources
-create_shaders :: proc(manager: ^resource.ResourceManager, compile := true) -> (ok: bool) {
+create_shaders :: proc(manager: ^resource.ResourceManager, compile := true, shader_allocator := context.allocator) -> (ok: bool) {
     // When this needs to be dynamic, it needs to loop via meshes to get matching pairs of materials and layouts
 
     materials := resource.get_materials(manager^); defer delete(materials)
@@ -573,7 +584,7 @@ create_shaders :: proc(manager: ^resource.ResourceManager, compile := true) -> (
         if material.shader == nil {
             // todo dynamically create
             dbg.log(dbg.LogLevel.INFO, "Creating lighing shader for material")
-            single_shader := shader.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.frag", .FRAGMENT) or_return
+            single_shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.frag", .FRAGMENT, shader_allocator) or_return
             if compile do compile_shader(&single_shader) or_return
 
             shader_id := resource.add_shader(manager, single_shader) or_return
@@ -585,7 +596,7 @@ create_shaders :: proc(manager: ^resource.ResourceManager, compile := true) -> (
         if layout.shader == nil {
             // todo dynamically create
             dbg.log(dbg.LogLevel.INFO, "Creating vertex shader for layout")
-            single_shader := shader.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.vert", .VERTEX) or_return
+            single_shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.vert", .VERTEX, shader_allocator) or_return
             if compile do compile_shader(&single_shader) or_return
 
             shader_id := resource.add_shader(manager, single_shader) or_return
@@ -603,8 +614,10 @@ create_shaders :: proc(manager: ^resource.ResourceManager, compile := true) -> (
 create_shader_passes :: proc(manager: ^resource.ResourceManager, scene: ^ecs.Scene, allocator := context.allocator) -> (ok: bool) {
 
     // Query scene for all models and flatten to meshes
+    isVisibleQueryData := true
     query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
-        { label = resource.MODEL_COMPONENT.label, action = .QUERY_AND_INCLUDE }
+        { label = resource.MODEL_COMPONENT.label, action = .QUERY_AND_INCLUDE },
+        { label = standards.VISIBLE_COMPONENT.label, action = .QUERY_NO_INCLUDE, data = &isVisibleQueryData }
     }}
     query_result := ecs.query_scene(scene, query, allocator) or_return
     defer ecs.destroy_scene_query_result(query_result)
@@ -620,12 +633,13 @@ create_shader_passes :: proc(manager: ^resource.ResourceManager, scene: ^ecs.Sce
             vert := resource.get_shader(manager, layout.shader) or_return
             frag := resource.get_shader(manager, material.shader) or_return
 
-            shaders := make(map[shader.ShaderType]shader.Shader, allocator=allocator)
-            shaders[.VERTEX] = vert^
-            shaders[.FRAGMENT] = frag^
+            shaders := make([]resource.Shader, 2, allocator=allocator)
+            shaders[0] = vert^
+            shaders[1] = frag^
 
-            pass := create_shader_pass(shaders) or_return
-            mesh.shader_pass = resource.add_shader_pass(manager, pass) or_return
+            program := resource.make_shader_program(manager, shaders, allocator) or_return
+            transfer_shader_program(manager, &program) or_return
+            mesh.shader_pass = resource.add_shader_pass(manager, program) or_return
         }
     }
 
@@ -652,7 +666,7 @@ create_forward_lighting_shader :: proc(
     lighting_model: LightingModel,
     material_model: MaterialModel,
     allocator := context.allocator
-) -> (vertex: shader.ShaderInfo, frag: shader.ShaderInfo, ok: bool) {
+) -> (vertex: resource.ShaderInfo, frag: resource.ShaderInfo, ok: bool) {
 
 /*
 
@@ -660,16 +674,16 @@ create_forward_lighting_shader :: proc(
 shader_layout_from_mesh_layout(&vertex, attribute_infos) or_return
 
 //Lights
-light_struct := shader.make_shader_struct("Light",
-    { shader.GLSLDataType.vec3, "colour", }, { shader.GLSLDataType.vec3, "position" }
+light_struct := resource.make_shader_struct("Light",
+    { resource.GLSLDataType.vec3, "colour", }, { resource.GLSLDataType.vec3, "position" }
 )
-shader.add_structs(&frag, light_struct)
+resource.add_structs(&frag, light_struct)
 
-shader.add_bindings_of_type(&frag, .SSBO, {
+resource.add_bindings_of_type(&frag, .SSBO, {
     "lights",
-    []shader.ExtendedGLSLPair{
+    []resource.ExtendedGLSLPair{
         {
-            shader.GLSLVariableArray { "Light" },
+            resource.GLSLVariableArray { "Light" },
             "lights"
         }
     }
@@ -677,18 +691,18 @@ shader.add_bindings_of_type(&frag, .SSBO, {
 
 
 vertex_source := make([dynamic]string)
-defer shader.destroy_function_source(vertex_source[:])
+defer resource.destroy_function_source(vertex_source[:])
 
 // Add shader input/output for both vertex and fragment
 for attribute_info in attribute_infos {
-    input_pair := shader.GLSLPair{ glsl_type_from_attribute(attribute_info) or_return, attribute_info.name}
-    shader.add_outputs(&vertex, input_pair)
-    shader.add_inputs(&frag, input_pair)
+    input_pair := resource.GLSLPair{ glsl_type_from_attribute(attribute_info) or_return, attribute_info.name}
+    resource.add_outputs(&vertex, input_pair)
+    resource.add_inputs(&frag, input_pair)
 
     assign_to: string
     defer delete(assign_to)
 
-    if type, type_ok := input_pair.type.(shader.GLSLDataType); type_ok {
+    if type, type_ok := input_pair.type.(resource.GLSLDataType); type_ok {
         // todo change usage of "position" and "normal" and make a standard for model loading and attribute names, with custom names as well
         if input_pair.name == "position" && type == .vec3 {
             // todo pass this into glsl_type_from_attribute
@@ -706,7 +720,7 @@ for attribute_info in attribute_infos {
 }
 
 // Add vertex MVP uniforms
-shader.add_uniforms(&vertex,
+resource.add_uniforms(&vertex,
     { .mat4, MODEL_MATRIX_UNIFORM },
     { .mat4, VIEW_MATRIX_UNIFORM },
     { .mat4, PROJECTION_MATRIX_UNIFORM },
@@ -716,8 +730,8 @@ shader.add_uniforms(&vertex,
 // Add vertex main function
 utils.fmt_append(&vertex_source, "gl_Position = %s * %s * vec4(%s, 1.0);", PROJECTION_MATRIX_UNIFORM, VIEW_MATRIX_UNIFORM, "position")
 
-main_func := shader.make_shader_function(.void, "main", vertex_source[:])
-shader.add_functions(&vertex, main_func)
+main_func := resource.make_shader_function(.void, "main", vertex_source[:])
+resource.add_functions(&vertex, main_func)
 
 // Frag uniforms
 if .NORMAL_TEXTURE not_in material.properties {
@@ -730,22 +744,22 @@ if .PBR_METALLIC_ROUGHNESS not_in material.properties {
     return
 }
 
-uniforms := make([dynamic]shader.GLSLPair); defer shader.destroy_glsl_pairs(uniforms[:])
+uniforms := make([dynamic]resource.GLSLPair); defer resource.destroy_glsl_pairs(uniforms[:])
 
 // todo
-append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, resource.BASE_COLOUR_TEXTURE })  // base colour comes from pbrMetallicRoughness
-append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, resource.PBR_METALLIC_ROUGHNESS })
-append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, resource.NORMAL_TEXTURE })
+append(&uniforms, resource.GLSLPair{ resource.GLSLDataType.sampler2D, resource.BASE_COLOUR_TEXTURE })  // base colour comes from pbrMetallicRoughness
+append(&uniforms, resource.GLSLPair{ resource.GLSLDataType.sampler2D, resource.PBR_METALLIC_ROUGHNESS })
+append(&uniforms, resource.GLSLPair{ resource.GLSLDataType.sampler2D, resource.NORMAL_TEXTURE })
 
 inc_emissive_texture := .EMISSIVE_TEXTURE in material.properties
 inc_occlusion_texture := .OCCLUSION_TEXTURE in material.properties
 
 if inc_emissive_texture {
-    append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, resource.EMISSIVE_TEXTURE })
-    append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.vec3, resource.EMISSIVE_FACTOR })
+    append(&uniforms, resource.GLSLPair{ resource.GLSLDataType.sampler2D, resource.EMISSIVE_TEXTURE })
+    append(&uniforms, resource.GLSLPair{ resource.GLSLDataType.vec3, resource.EMISSIVE_FACTOR })
 }
 
-if inc_occlusion_texture do append(&uniforms, shader.GLSLPair{ shader.GLSLDataType.sampler2D, resource.OCCLUSION_TEXTURE })
+if inc_occlusion_texture do append(&uniforms, resource.GLSLPair{ resource.GLSLDataType.sampler2D, resource.OCCLUSION_TEXTURE })
 
 */
 

@@ -1,4 +1,4 @@
-package gpu
+package resource
 
 import "core:strings"
 import "base:intrinsics"

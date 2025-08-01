@@ -3,7 +3,7 @@ package camera_utils
 import win "../window"
 import "../game"
 import cam "../camera"
-import "../shader"
+import "../resource"
 
 import "core:fmt"
 
@@ -48,6 +48,6 @@ get_default_label :: proc() -> string {
 }
 
 // Even though Shader package should not depend on anything I'll just keep this here
-update_view :: proc(program: ^shader.ShaderProgram, label := "m_View") {
-    shader.set_matrix_uniform(program, label, cam.camera_look_at(game.Game.scene.viewpoint))
+update_view :: proc(program: ^resource.ShaderProgram, label := "m_View") {
+    resource.set_matrix_uniform(program, label, cam.camera_look_at(game.Game.scene.viewpoint))
 }

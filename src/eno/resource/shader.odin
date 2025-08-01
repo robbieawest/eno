@@ -1,4 +1,4 @@
-package gpu
+package resource
 
 import gl "vendor:OpenGL"
 
@@ -451,7 +451,7 @@ ShaderSource :: struct {
 }
 
 destroy_shader_source :: proc(source: ShaderSource) {
-    delete(source.string_source)
+    if source.is_available_as_string && len(source.string_source) != 0 do delete(source.string_source)
     destroy_shader_info(source.shader_info)
 }
 
@@ -460,35 +460,33 @@ ShaderIdentifier :: Maybe(u32)
 
 ShaderProgram :: struct {
     id: ShaderIdentifier,
-    // Even though Shader is a resource in ResourceManager, just owning a copy of a Shader here makes sense
-    // No need for other ownership, since nothing will be changed later
-    shaders: map[ShaderType]Shader,  // Although it is possible to add more than one shader of each type, adding support really doesn't mean anything
+    shaders: map[ShaderType]ResourceIdent,  // Although it is possible to add more than one shader of each type, adding support really doesn't mean anything
     uniform_cache: ShaderUniformCache
 }
 
 // Does not copy incoming shaders
-make_shader_program:: proc(shaders: []Shader) -> (program: ShaderProgram) {
-    dbg.log()
-    program.shaders = make(map[ShaderType]Shader)
-    program.uniform_cache = make(ShaderUniformCache)
-    add_shaders_to_program(&program, shaders)
+make_shader_program:: proc(manager: ^ResourceManager, shaders: []Shader, allocator := context.allocator) -> (program: ShaderProgram, ok: bool) {
+    program.shaders = make(map[ShaderType]ResourceIdent, allocator=allocator)
+    program.uniform_cache = make(ShaderUniformCache, allocator=allocator)
+    add_shaders_to_program(manager, &program, shaders) or_return
+    ok = true
     return
 }
 
 // Does not copy incoming shaders
-add_shaders_to_program :: proc(program: ^ShaderProgram, shaders: []Shader) {
-    dbg.log()
+add_shaders_to_program :: proc(manager: ^ResourceManager, program: ^ShaderProgram, shaders: []Shader) -> (ok: bool) {
     for shader in shaders {
         if shader.type in program.shaders {
             dbg.log(.WARN, "Shader of existing type attempted to be added to program, ignoring")
-        } else do program.shaders[shader.type] = shader
+        } else do program.shaders[shader.type] = add_shader(manager, shader) or_return
     }
+    return true
 }
 
-destroy_shader_program :: proc(program: ShaderProgram) {
-    dbg.log()
-    for _, shader in program.shaders do destroy_shader(shader)
+destroy_shader_program :: proc(manager: ^ResourceManager, program: ShaderProgram) -> (ok: bool) {
+    for _, shader in program.shaders do remove_shader(manager, shader) or_return
     delete(program.shaders)
+    return true
 }
 
 
@@ -822,9 +820,9 @@ ShaderPath :: struct {
 }
 
 @(private)
-init_shader_source :: proc(source: string, extension: string) -> (shader: Shader, ok: bool) {
+init_shader_source :: proc(source: string, extension: string, allocator := context.allocator) -> (shader: Shader, ok: bool) {
     shader_type := extension_to_shader_type(extension)
-    source := ShaderSource{ string_source = strings.clone(source), is_available_as_string = true}
+    source := ShaderSource{ string_source = strings.clone(source, allocator), is_available_as_string = true}
     shader = Shader{ source = source, type = shader_type}
 
     /*
@@ -839,9 +837,9 @@ init_shader_source :: proc(source: string, extension: string) -> (shader: Shader
 }
 
 
-read_single_shader_source :: proc(full_path: string, shader_type: ShaderType) -> (shader: Shader, ok: bool) {
+read_single_shader_source :: proc(full_path: string, shader_type: ShaderType, allocator := context.allocator) -> (shader: Shader, ok: bool) {
     dbg.log(dbg.LogLevel.INFO, "Reading single shader source: %s", full_path)
-    source, err := futils.read_file_source(full_path)
+    source, err := futils.read_file_source(full_path, allocator)
     if err != .None {
         dbg.log(dbg.LogLevel.ERROR, "Could not read file source for shader")
         return
@@ -855,10 +853,10 @@ read_single_shader_source :: proc(full_path: string, shader_type: ShaderType) ->
     return
 }
 
-read_shader_source :: proc(filenames: ..string) -> (program: ShaderProgram, ok: bool) {
+read_shader_source :: proc(manager: ^ResourceManager, filenames: ..string, allocator := context.allocator) -> (program: ShaderProgram, ok: bool) {
 
-    shader_sources: [dynamic]Shader
-    defer delete(shader_sources)
+    shaders := make([dynamic]Shader, allocator=allocator)
+    defer delete(shaders)
 
     for filename in filenames {
         inv_filename := utils.regex_match(filename, utils.REGEX_FILEPATH_PATTERN)
@@ -877,7 +875,7 @@ read_shader_source :: proc(filenames: ..string) -> (program: ShaderProgram, ok: 
                 source, err := futils.read_file_source(filename); defer delete(source);
                 handle_file_read_error(filename, err) or_return
 
-                append(&shader_sources, init_shader_source(source, extension) or_return)
+                append(&shaders , init_shader_source(source, extension) or_return)
             }
             else {
                 dbg.log(dbg.LogLevel.ERROR, "Shader extension not accepted: %s", extension)
@@ -888,12 +886,12 @@ read_shader_source :: proc(filenames: ..string) -> (program: ShaderProgram, ok: 
             // Extension not given
             file_found := false
             for extension in ACCEPTED_SHADER_EXTENSIONS {
-                full_path := utils.concat(filename, ".", extension); defer delete(full_path)
-                source, err := futils.read_file_source(full_path); defer delete(source)
+                full_path := utils.concat(filename, ".", extension, allocator=allocator); defer delete(full_path)
+                source, err := futils.read_file_source(full_path, allocator); defer delete(source)
 
                 if err == .None {
                     dbg.log(dbg.LogLevel.INFO, "Successfully read file. File path: \"%s\"", full_path)
-                    append(&shader_sources, init_shader_source(source, extension) or_return)
+                    append(&shaders , init_shader_source(source, extension, allocator) or_return)
                     file_found = true
                 }
                 else if err == .FileReadError {
@@ -913,12 +911,12 @@ read_shader_source :: proc(filenames: ..string) -> (program: ShaderProgram, ok: 
 
     }
 
-    if len(shader_sources) == 0 {
+    if len(shaders ) == 0 {
         dbg.log(dbg.LogLevel.ERROR, "Failed to read any shader file sources")
         return
     }
 
-    program = make_shader_program(shader_sources[:])
+    program = make_shader_program(manager, shaders[:], allocator) or_return
 
     ok = true
     return

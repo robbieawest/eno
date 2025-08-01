@@ -1,4 +1,4 @@
-package gpu
+package resource
 
 import gl "vendor:OpenGL"
 

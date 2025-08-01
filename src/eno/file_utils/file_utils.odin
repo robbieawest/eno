@@ -7,7 +7,6 @@ import "core:testing"
 import "core:strings"
 import "core:log"
 import "core:mem"
-import "core:fmt"
 
 
 FileReadError :: enum {
@@ -16,10 +15,10 @@ FileReadError :: enum {
     PathDoesNotResolve,
 }
 
-read_lines_from_file :: proc(filepath: string) -> (lines: []string, err: FileReadError) {
-    source: string; source, err = read_file_source(filepath)
+read_lines_from_file :: proc(filepath: string, allocator := context.allocator) -> (lines: []string, err: FileReadError) {
+    source: string; source, err = read_file_source(filepath, allocator)
 
-    alloc_err: mem.Allocator_Error; lines, alloc_err = strings.split_lines(source)
+    alloc_err: mem.Allocator_Error; lines, alloc_err = strings.split_lines(source, allocator)
     if alloc_err != mem.Allocator_Error.None {
         err = .FileReadError
         return
@@ -29,10 +28,10 @@ read_lines_from_file :: proc(filepath: string) -> (lines: []string, err: FileRea
 }
 
 
-read_lines_from_file_handle :: proc(file: os.Handle) -> (lines: []string, err: FileReadError) {
-    source: string; source, err = read_source_from_handle(file)
+read_lines_from_file_handle :: proc(file: os.Handle, allocator := context.allocator) -> (lines: []string, err: FileReadError) {
+    source: string; source, err = read_source_from_handle(file, allocator)
 
-    alloc_err: mem.Allocator_Error; lines, alloc_err = strings.split_lines(source)
+    alloc_err: mem.Allocator_Error; lines, alloc_err = strings.split_lines(source, allocator)
     if alloc_err != mem.Allocator_Error.None {
         err = .FileReadError
         return
@@ -41,7 +40,7 @@ read_lines_from_file_handle :: proc(file: os.Handle) -> (lines: []string, err: F
     return lines, FileReadError.None
 }
 
-read_file_source :: proc(filepath: string) -> (source: string, err: FileReadError) {
+read_file_source :: proc(filepath: string, allocator := context.allocator) -> (source: string, err: FileReadError) {
     err = FileReadError.None
 
     file, os_path_err := os.open(filepath); defer os.close(file)
@@ -50,13 +49,13 @@ read_file_source :: proc(filepath: string) -> (source: string, err: FileReadErro
         return
     }
 
-    return read_source_from_handle(file)
+    return read_source_from_handle(file, allocator=allocator)
 }
 
-read_source_from_handle :: proc(file: os.Handle) -> (source: string, err: FileReadError) {
+read_source_from_handle :: proc(file: os.Handle, allocator := context.allocator) -> (source: string, err: FileReadError) {
     err = FileReadError.None
 
-    bytes, os_read_err := os.read_entire_file_from_handle_or_err(file);
+    bytes, os_read_err := os.read_entire_file_from_handle_or_err(file, allocator);
     if os_read_err != os.ERROR_NONE {
         err = FileReadError.FileReadError
         return

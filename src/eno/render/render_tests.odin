@@ -4,7 +4,6 @@ import "../resource"
 
 import "core:testing"
 import "core:log"
-import "../shader"
 
 @(test)
 forward_lighting_shader_test :: proc(t: ^testing.T) {

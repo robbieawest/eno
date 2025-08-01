@@ -46,7 +46,7 @@ before_frame :: proc() -> (ok: bool) {
     models := scene_res.models
     second_helmet := models[0]
     second_helmet.model.name = strings.clone("SciFiHelmet2")
-    second_helmet.world_comp = standards.make_world_component(position=glm.vec3{ 3.0, 0.0, 0.0 })
+    second_helmet.world_comp = standards.make_world_component(position=glm.vec3{ 3.0, 0.0, 3.0 })
     append(&models, second_helmet)
 
     ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
@@ -61,7 +61,7 @@ before_frame :: proc() -> (ok: bool) {
     ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
 
     // todo copy light name internally
-    light := resource.PointLight{ "demo_light", true, 1.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 3.0, 0.0, 0.0 } }
+    light := resource.PointLight{ "demo_light", true, 1.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 3.0, 3.0, 0.0 } }
     light_comp := standards.make_world_component(position=light.position)
     light2 := resource.PointLight{ "demo_light2", true, 1.0, glm.vec3{ 1.0, 0.0, 0.0 }, glm.vec3{ -5.0, 0.0, 0.0 } }
     light_comp2 := standards.make_world_component(position=light2.position)

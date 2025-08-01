@@ -4,7 +4,6 @@ import gl "vendor:OpenGL"
 
 import "../resource"
 import dbg "../debug"
-import "../shader"
 import "../utils"
 
 import "core:log"
@@ -334,14 +333,8 @@ transfer_buffer_data_of_target :: proc(target: u32, data: rawptr, #any_int data_
 }
 
 
-create_shader_pass :: proc(shaders: map[shader.ShaderType]shader.Shader) -> (pass: shader.ShaderProgram, ok: bool) {
-    pass.shaders = shaders
-    ok = transfer_shader_program(&pass)
-    return
-}
-
-// Compiles each shader in program if not already compiled, and links result
-transfer_shader_program :: proc(program: ^shader.ShaderProgram) -> (ok: bool) {
+// Compiles and links shaders in program
+transfer_shader_program :: proc(manager: ^resource.ResourceManager, program: ^resource.ShaderProgram) -> (ok: bool) {
     dbg.log(dbg.LogLevel.INFO, "Transferring shader program")
 
     if program.id != nil do return true
@@ -350,8 +343,9 @@ transfer_shader_program :: proc(program: ^shader.ShaderProgram) -> (ok: bool) {
     defer delete(shader_ids)
 
     i := 0
-    for _, &given_shader in program.shaders {
-        id := compile_shader(&given_shader) or_return
+    for _, given_shader in program.shaders {
+        shader := resource.get_shader(manager, given_shader) or_return
+        id := compile_shader(shader) or_return
         shader_ids[i] = id
         i += 1
     }
@@ -360,28 +354,28 @@ transfer_shader_program :: proc(program: ^shader.ShaderProgram) -> (ok: bool) {
     return true
 }
 
-compile_shader :: proc(single_shader: ^shader.Shader, allocator := context.allocator) -> (id: u32, ok: bool) {
-    if single_shader.id != nil do return single_shader.id.?, true
+compile_shader :: proc(shader: ^resource.Shader) -> (id: u32, ok: bool) {
+    if shader.id != nil do return shader.id.?, true
 
-    dbg.log(dbg.LogLevel.INFO, "Compiling shader of type %v", single_shader.type)
-    if !single_shader.source.is_available_as_string || len(single_shader.source.string_source) == 0 {
-        dbg.log(dbg.LogLevel.INFO, "Shader source was not provided prior to transfer_shader, building new")
-        shader.supply_shader_source(single_shader, allocator) or_return
-    }
-
-    id, ok = gl.compile_shader_from_source(single_shader.source.string_source, shader.conv_gl_shader_type(single_shader.type))
-    if !ok {
-        dbg.log(dbg.LogLevel.ERROR, "Could not compile shader source of shader type %v", single_shader.type)
+    dbg.log(dbg.LogLevel.INFO, "Compiling shader of type %v", shader.type)
+    if !shader.source.is_available_as_string || len(shader.source.string_source) == 0 {
+        dbg.log(dbg.LogLevel.INFO, "String shader source not provided in shader compilation")
         return
     }
 
-    single_shader.id = id
+    id, ok = gl.compile_shader_from_source(shader.source.string_source, resource.conv_gl_shader_type(shader.type))
+    if !ok {
+        dbg.log(dbg.LogLevel.ERROR, "Could not compile shader source of shader type %v", shader.type)
+        return
+    }
+
+    shader.id = id
     ok = true
     return
 }
 
 
-attach_program :: proc(program: shader.ShaderProgram, loc := #caller_location) {
+attach_program :: proc(program: resource.ShaderProgram, loc := #caller_location) {
     if program_id, id_ok := utils.unwrap_maybe(program.id); !id_ok {
         dbg.log(dbg.LogLevel.INFO, "Shader program not yet created")
         return

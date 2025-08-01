@@ -1,4 +1,4 @@
-package gpu
+package resource
 
 import dbg "../debug"
 
@@ -64,15 +64,8 @@ build_shader_source_test :: proc(t: ^testing.T) {
 
 @(test)
 shader_read_test :: proc(t: ^testing.T) {
-    program, ok := read_shader_source("resources/shaders/demo_shader")
-    defer destroy_shader_program(program)
+    shader, ok := read_single_shader_source("resources/shaders/demo_shader.frag", .FRAGMENT)
+    defer destroy_shader(shader)
 
     testing.expect(t, ok, "ok check")
-    nil_maybe: Maybe(u32)
-    testing.expect_value(t, nil_maybe, program.id)
-    log.infof("%#v", program)
-    if len(program.shaders) == 2 {
-        log.infof("%s", program.shaders[.FRAGMENT].source)
-        log.infof("%s", program.shaders[.VERTEX].source)
-    }
 }
