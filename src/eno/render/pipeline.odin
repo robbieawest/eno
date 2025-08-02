@@ -3,11 +3,13 @@ package render
 import gl "vendor:OpenGL"
 
 import dbg "../debug"
+import "../resource"
 import "../utils"
 import mutils "../utils/math_utils"
 import "../ecs"
 
 import "core:reflect"
+import "core:slice"
 import "core:strings"
 import "base:intrinsics"
 
@@ -149,7 +151,30 @@ RenderPassProperties :: struct {
     Meaning you can query that a component must exist, and that it's data must match (provide nil for data rawptr to query by component availability)
     The label must not be of WORLD_COMPONENT, MODEL_COMPONENT or VISIBLE_COMPONENT
 */
-RenderPassQuery :: []struct{ label: string, data: rawptr }
+MaterialQuery :: #type proc(resource.Material, resource.MaterialType) -> bool
+RenderPassQuery :: struct {
+    component_queries: []struct{ label: string, data: rawptr },
+    material_query: Maybe(MaterialQuery)
+}
+
+// Maybe remove? Not sure it is needed
+apply_material_query :: proc(
+    manager: ^resource.ResourceManager,
+    mat_query: Maybe(MaterialQuery),
+    meshes: []^resource.Mesh,
+    allocator := context.allocator
+) -> (new_meshes: []^resource.Mesh, ok: bool) {
+    query, query_ok := mat_query.?
+    if !query_ok do return new_meshes, true
+
+    new_meshes_dyn := make([dynamic]^resource.Mesh, allocator=allocator)
+
+    for mesh in meshes {
+        mat_type := resource.get_material(manager, mesh.material.type) or_return
+        if query(mesh.material, mat_type^) do append(&new_meshes_dyn, mesh)
+    }
+    return new_meshes_dyn[:], true
+}
 
 RenderPassMeshGather :: union { RenderPassQuery, ^RenderPass }
 

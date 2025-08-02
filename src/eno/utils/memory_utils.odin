@@ -3,6 +3,7 @@ package utils
 import dbg "../debug"
 
 import "core:mem"
+import "base:intrinsics"
 
 copy_map :: proc(m: map[$K]$V, allocator := context.allocator) -> (ret: map[K]V) {
     ret = make(map[K]V, len(m), allocator=allocator)
@@ -37,4 +38,22 @@ s_safe_slice :: proc(slice: $T/[]$E, #any_int start: int, #any_int end: int, loc
 equals :: proc(a: $T, b: T) -> bool {
     a := a; b := b
     return mem.compare_ptrs(&a, &b, type_info_of(T).size) == 0
+}
+
+
+extract_field :: proc(a: $T/[]^$E, $field: string, $field_type: typeid, allocator := context.allocator) -> []^field_type
+    where intrinsics.type_has_field(E, field),
+          intrinsics.type_field_type(E, field) == field_type {
+    ret_dyna := make([dynamic]^field_type, allocator=allocator)
+
+    for elem in a {
+        append(&ret_dyna, get_field(elem, field, field_type))
+    }
+    return ret_dyna[:]
+}
+
+get_field :: proc(a: ^$T, $field: string, $field_type: typeid) -> ^field_type
+    where intrinsics.type_has_field(T, field),
+          intrinsics.type_field_type(T, field) == field_type {
+    return cast(^field_type)(offset_of_by_string(T, field) + uintptr(a))
 }

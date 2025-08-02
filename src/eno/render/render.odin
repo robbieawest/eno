@@ -56,14 +56,14 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
     // todo design system of resource transfer
 
     // Used for render passes that query their own data
-    mesh_data_map := make(map[^RenderPass][dynamic]ModelData, allocator=temp_allocator)
+    mesh_data_map := make(map[^RenderPass][dynamic]MeshData, allocator=temp_allocator)
     // Used for render passes which point to another render pass's model data
-    mesh_data_references := make(map[^RenderPass]^[dynamic]ModelData, allocator=temp_allocator)
+    mesh_data_references := make(map[^RenderPass]^[dynamic]MeshData, allocator=temp_allocator)
 
     for &pass in pipeline.passes {
 
         // Gather model data
-        models_data: ^[dynamic]ModelData
+        mesh_data: ^[dynamic]MeshData
         switch v in pass.mesh_gather {
             case ^RenderPass:
                 if v not_in mesh_data_map {
@@ -72,27 +72,23 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
                         return
                     }
 
-                    models_data = mesh_data_references[v]
-                    mesh_data_references[v] = models_data
+                    mesh_data = mesh_data_references[v]
                 }
+                else do mesh_data = &mesh_data_map[v]
+                mesh_data_references[&pass] = mesh_data
             case RenderPassQuery:
-                mesh_data_map[&pass] = query_scene(scene, v, temp_allocator) or_return
-                models_data = &mesh_data_map[&pass]
+                mesh_data_map[&pass] = query_scene(manager, scene, v, temp_allocator) or_return
+                mesh_data = &mesh_data_map[&pass]
             case nil:
-                mesh_data_map[&pass] = query_scene(scene, nil, temp_allocator) or_return
-                models_data = &mesh_data_map[&pass]
+                mesh_data_map[&pass] = query_scene(manager, scene, {}, temp_allocator) or_return
+                mesh_data = &mesh_data_map[&pass]
 
         }
 
-        if pass.properties.geometry_z_sorting != .NO_SORT do sort_geometry_by_depth(models_data[:], pass.properties.geometry_z_sorting == .ASC)
+        if pass.properties.geometry_z_sorting != .NO_SORT do sort_geometry_by_depth(mesh_data[:], pass.properties.geometry_z_sorting == .ASC)
 
         // Group geometry by shaders
-        shader_map := group_meshes_by_shader(models_data^, temp_allocator)
-        defer {
-            for _, v in shader_map do delete(v)
-            delete(shader_map)
-        }
-
+        shader_map := group_meshes_by_shader(mesh_data^, temp_allocator)
 
         handle_pass_properties(pipeline, pass)
 
@@ -134,32 +130,30 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
 }
 
 @(private)
-group_meshes_by_shader :: proc(models_data: [dynamic]ModelData, temp_allocator := context.temp_allocator) -> (shader_map: map[resource.ResourceIdent][dynamic]MeshData) {
+group_meshes_by_shader :: proc(meshes: [dynamic]MeshData, temp_allocator := context.temp_allocator) -> (shader_map: map[resource.ResourceIdent][dynamic]MeshData) {
 
     shader_map = make(map[resource.ResourceIdent][dynamic]MeshData, allocator=temp_allocator)
 
 
-    for &model_data in models_data {
-        for &mesh in model_data.model.meshes {
-            id := mesh.shader_pass
-            if id == nil {
-                dbg.log(.ERROR, "Mesh has no assigned shader pass pre render")
-                return
-            }
-            shader_id := id.?
-
-            pair := MeshData{ &mesh, model_data.world, model_data.instance_to}
-            if shader_id in shader_map {
-                dyn := &shader_map[shader_id]
-                append(dyn, pair)
-            }
-            else {
-                dyn := make([dynamic]MeshData, 1, temp_allocator)
-                dyn[0] = pair
-                shader_map[shader_id] = dyn
-            }
-
+    for &mesh_data in meshes {
+        id := mesh_data.mesh.shader_pass
+        if id == nil {
+            dbg.log(.ERROR, "Mesh has no assigned shader pass pre render")
+            return
         }
+        shader_id := id.?
+
+        pair := MeshData{ mesh_data.mesh, mesh_data.world, mesh_data.instance_to}
+        if shader_id in shader_map {
+            dyn := &shader_map[shader_id]
+            append(dyn, pair)
+        }
+        else {
+            dyn := make([dynamic]MeshData, 1, temp_allocator)
+            dyn[0] = pair
+            shader_map[shader_id] = dyn
+        }
+
     }
 
     return
@@ -207,10 +201,10 @@ handle_pass_properties :: proc(pipeline: RenderPipeline($N), pass: RenderPass) {
 
 
 @(private)
-sort_geometry_by_depth :: proc(models_data: []ModelData, z_asc: bool) {
-    sort_proc := z_asc ? proc(a: ModelData, b: ModelData) -> bool {
+sort_geometry_by_depth :: proc(models_data: []MeshData, z_asc: bool) {
+    sort_proc := z_asc ? proc(a: MeshData, b: MeshData) -> bool {
         return a.world.position.z < b.world.position.z
-    } : proc(a: ModelData, b: ModelData) -> bool {
+    } : proc(a: MeshData, b: MeshData) -> bool {
         return a.world.position.z > b.world.position.z
     }
     slice.sort_by(models_data, sort_proc)
@@ -218,25 +212,37 @@ sort_geometry_by_depth :: proc(models_data: []ModelData, z_asc: bool) {
 
 
 @(private)
-query_scene :: proc(scene: ^ecs.Scene, pass_query: RenderPassQuery, temp_allocator: mem.Allocator) -> (model_data: [dynamic]ModelData, ok: bool) {
+query_scene :: proc(
+    manager: ^resource.ResourceManager,
+    scene: ^ecs.Scene,
+    pass_query: RenderPassQuery,
+    temp_allocator: mem.Allocator
+) -> (mesh_data: [dynamic]MeshData, ok: bool) {
 
     // todo handle pass_query (nil case as well)
 
     isVisibleQueryData := true
-    query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
+    component_queries := make([dynamic]ecs.ComponentQuery, allocator=temp_allocator)
+    append_elems(&component_queries, ..[]ecs.ComponentQuery{
         { label = resource.MODEL_COMPONENT.label, action = .QUERY_AND_INCLUDE },
         { label = standards.WORLD_COMPONENT.label, action = .QUERY_AND_INCLUDE },
         { label = resource.INSTANCE_TO_COMPONENT.label, action = .NO_QUERY_BUT_INCLUDE },
-        { label = standards.VISIBLE_COMPONENT.label, action = .QUERY_NO_INCLUDE, data = &isVisibleQueryData },
-    }}
-    query_result := ecs.query_scene(scene, query) or_return
+        { label = standards.VISIBLE_COMPONENT.label, action = .QUERY_NO_INCLUDE, data = &isVisibleQueryData }
+    })
+
+    for query in pass_query.component_queries {
+        append(&component_queries, ecs.ComponentQuery{ query.label, .QUERY_NO_INCLUDE, query.data })
+    }
+
+    query := ecs.ArchetypeQuery{ components = component_queries[:]}
+    query_result := ecs.query_scene(scene, query, allocator=temp_allocator) or_return
 
     // flatten into lots of meshes
     ModelWorldPair :: struct {
         model: ^resource.Model,
         world_comp: ^standards.WorldComponent
     }
-    model_data = make([dynamic]ModelData, temp_allocator)
+    model_data := make(#soa[dynamic]ModelData, temp_allocator)
 
     for _, arch_result in query_result {
         models, models_ok := ecs.get_component_from_arch_result(arch_result, resource.Model, resource.MODEL_COMPONENT.label, temp_allocator)
@@ -265,7 +271,17 @@ query_scene :: proc(scene: ^ecs.Scene, pass_query: RenderPassQuery, temp_allocat
             append(&model_data, ModelData{ models[i], worlds[i], nil })
         }
 
+    }
 
+    models, worlds, instance_tos := soa_unzip(model_data[:])  // this unzip is a bit obtuse
+    mesh_data = make([dynamic]MeshData, allocator=temp_allocator)
+    for meshes, i in utils.extract_field(models, "meshes", [dynamic]resource.Mesh, allocator=temp_allocator) {
+        for &mesh in meshes {
+            material_type := resource.get_material(manager, mesh.material.type) or_return
+            if pass_query.material_query == nil || pass_query.material_query.?(mesh.material, material_type^) {
+                append(&mesh_data, MeshData{ &mesh, worlds[i], instance_tos[i] })
+            }
+        }
     }
 
     ok = true
