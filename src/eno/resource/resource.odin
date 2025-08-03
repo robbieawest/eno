@@ -40,7 +40,16 @@ hash_resource :: proc(resource: $T) -> ResourceHash {
         return hash_ptr(&resource)
     }
     else when T == ShaderProgram {
-        return hash_ptr(&resource.shaders)
+        bytes := make([dynamic]byte)
+        defer delete(bytes)
+
+        for k, v in resource.shaders {
+            key := k; value := v
+            append_elems(&bytes, ..transmute([]byte)runtime.Raw_Slice{&key, size_of(ShaderType) })
+            append_elems(&bytes, ..transmute([]byte)runtime.Raw_Slice{&value, size_of(ResourceIdent) })
+        }
+
+        return hash_raw(bytes[:])
     }
     else when T == Shader {
         hashable: struct{ type: ShaderType, source: ShaderSource }
@@ -67,6 +76,11 @@ hash_resource :: proc(resource: $T) -> ResourceHash {
 @(private)
 hash_ptr :: proc(ptr: ^$T) -> ResourceHash {
     return hash.fnv64a(transmute([]byte)runtime.Raw_Slice{ ptr, type_info_of(T).size })
+}
+
+@(private)
+hash_raw :: proc(bytes: []byte) -> ResourceHash {
+    return hash.fnv64a(bytes)
 }
 
 
