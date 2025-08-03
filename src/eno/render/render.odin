@@ -40,7 +40,8 @@ MeshData :: struct {
     instance_to: ^resource.InstanceTo
 }
 
-render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N), scene: ^ecs.Scene, temp_allocator := context.temp_allocator) -> (ok: bool) {
+render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, scene: ^ecs.Scene, temp_allocator := context.temp_allocator) -> (ok: bool) {
+    pipeline := pipeline
 
     /*
         for later:
@@ -77,6 +78,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
                 else do mesh_data = &mesh_data_map[v]
                 mesh_data_references[&pass] = mesh_data
             case RenderPassQuery:
+                // log.info("pass query")
                 mesh_data_map[&pass] = query_scene(manager, scene, v, temp_allocator) or_return
                 mesh_data = &mesh_data_map[&pass]
             case nil:
@@ -84,7 +86,10 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
                 mesh_data = &mesh_data_map[&pass]
 
         }
-
+        if mesh_data == nil {
+            dbg.log(.ERROR, "Mesh data nil")
+            return
+        }
         if pass.properties.geometry_z_sorting != .NO_SORT do sort_geometry_by_depth(mesh_data[:], pass.properties.geometry_z_sorting == .ASC)
 
         // Group geometry by shaders
@@ -161,7 +166,7 @@ group_meshes_by_shader :: proc(
 
     for &mesh_data in meshes {
         if mesh_data.mesh.mesh_id == nil {
-            dbg.log(.ERROR, "Shader pass not generated for mesh")
+            dbg.log(.ERROR, "Shader pass not generated for mesh: %#v", mesh_data.mesh.material)
             return
         }
 
@@ -187,7 +192,7 @@ group_meshes_by_shader :: proc(
 
 // Handles binding of framebuffer along with enabling of certain settings/tests
 @(private)
-handle_pass_properties :: proc(pipeline: RenderPipeline($N), pass: RenderPass) {
+handle_pass_properties :: proc(pipeline: RenderPipeline, pass: RenderPass) {
     if pass.frame_buffer == nil {
         bind_default_framebuffer()
     } else do bind_framebuffer(pipeline.frame_buffers[pass.frame_buffer.?])
@@ -243,6 +248,7 @@ query_scene :: proc(
     pass_query: RenderPassQuery,
     temp_allocator: mem.Allocator
 ) -> (mesh_data: [dynamic]MeshData, ok: bool) {
+    log.infof("querying with pass query")
 
     // todo handle pass_query (nil case as well)
 
@@ -818,10 +824,10 @@ populate_all_shaders :: proc(
 
     meshes := make([dynamic]^resource.Mesh, temp_allocator)
     for model_meshes, i in utils.extract_field(models, "meshes", [dynamic]resource.Mesh, allocator=temp_allocator) {
-        append_elems(&meshes, model_meshes)
+        for &mesh in model_meshes do append(&meshes, &mesh)
     }
 
-    for &pass in pipeline.passes do populate_shaders(&pipeline.shader_store, manager, &pass, meshes, allocator) or_return
+    for &pass in pipeline.passes do populate_shaders(&pipeline.shader_store, manager, &pass, meshes[:], allocator) or_return
 
     ok = true
     return
@@ -840,6 +846,8 @@ populate_shaders :: proc(
 
     shader_generate_type, do_generate := render_pass.shader_gather.(RenderPassShaderGenerate)
     if !do_generate do return  // If shader_gather points to a RenderPass then do nothing here
+
+    dbg.log(.INFO, "Populating shaders for render pass")
 
     for &mesh in meshes {
 
@@ -879,8 +887,11 @@ generate_shader_pass_for_mesh :: proc(
     // Upon .NO_GENERATE the pass gets ignored
     if mesh.mesh_id != nil || shader_generate == .NO_GENERATE do return nil, true
 
+    dbg.log(.INFO, "Generating shader pass for mesh")
+
     vertex_layout := resource.get_vertex_layout(manager, mesh.layout) or_return
     material_type := resource.get_material(manager, mesh.material.type) or_return
+    log.infof("layout: %v, mat: %v", mesh.layout, mesh.material.type)
 
     if vertex_layout.shader == nil {
         dbg.log(dbg.LogLevel.INFO, "Creating vertex shader for layout")
@@ -917,7 +928,7 @@ generate_vertex_shader :: proc(
     allocator := context.allocator
 ) -> (id: resource.ResourceIdent, ok: bool) {
     // Todo dynamic
-    dbg.log()
+    dbg.log(.INFO, "Generating vertex shader")
 
     single_shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.vert", .VERTEX, allocator) or_return
     id = resource.add_shader(manager, single_shader) or_return
@@ -932,9 +943,9 @@ generate_lighting_shader :: proc(
     allocator := context.allocator
 ) -> (id: resource.ResourceIdent, ok: bool) {
     // Todo dynamic
-    dbg.log()
+    dbg.log(.INFO, "Generating lighting shader")
 
-    single_shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.frag", .VERTEX, allocator) or_return
+    single_shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.frag", .FRAGMENT, allocator) or_return
     id = resource.add_shader(manager, single_shader) or_return
     ok = true
     return

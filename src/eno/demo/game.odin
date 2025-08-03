@@ -13,7 +13,6 @@ import glm "core:math/linalg/glsl"
 import render "../render"
 import "core:math"
 
-N_FRAME_BUFFERS :: 0
 
 // Implement your before_frame and every_frame procedures in a file like this
 // Certain operations are done around this every frame, look inside game package
@@ -22,7 +21,7 @@ N_FRAME_BUFFERS :: 0
 // set a pointer to Game.game_Data
 
 GameData :: struct {
-    render_pipeline: render.RenderPipeline(N_FRAME_BUFFERS)
+    render_pipeline: render.RenderPipeline
 }
 
 every_frame :: proc() -> (ok: bool) {
@@ -51,14 +50,21 @@ before_frame :: proc() -> (ok: bool) {
 
     ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
 
-    manager := &game.Game.resource_manager
 
     game_data := new(GameData)
     game_data.render_pipeline = render.init_render_pipeline(n_render_passes=1)
-    render.add_render_passes(&game_data.render_pipeline, render.RenderPass{
+    game_data.render_pipeline.passes[0] = render.RenderPass{
         mesh_gather = render.RenderPassQuery{},
         shader_gather = render.RenderPassShaderGenerate.LIGHTING
-    })
+    }
+    log.infof("passes: %#v", game_data.render_pipeline.passes)
+
+    for &pass in game_data.render_pipeline.passes {
+        // log.infof("pass: %#v", pass)
+        // log.infof("pass: %#v", pass.mesh_gather.(render.RenderPassQuery).component_queries)
+        log.infof("pass query: %#v", render.RenderPassQuery(pass.mesh_gather.(render.RenderPassQuery)))
+    }
+
     game.Game.game_data = game_data
 
     // Camera
@@ -97,6 +103,8 @@ before_frame :: proc() -> (ok: bool) {
         game.HOOKS_CAMERA_MOVEMENT()  // Only can be used after camera added to scene
     )
 
+    manager := &game.Game.resource_manager
+    render.populate_all_shaders(&game_data.render_pipeline, manager, game.Game.scene) or_return
 
     return true
 }

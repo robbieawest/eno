@@ -4,6 +4,7 @@ import gl "vendor:OpenGL"
 import SDL "vendor:sdl2"
 
 import dbg "../debug"
+import "../render"
 import "../ecs"
 import "../resource"
 import "../standards"
@@ -11,6 +12,7 @@ import "../standards"
 import "core:testing"
 import "core:log"
 import "core:fmt"
+import runtime "base:runtime"
 
 // Tests put here to avoid circular imports, specifically needed for expresses tests which require a render context
 
@@ -109,6 +111,7 @@ express_shader_test :: proc(t: ^testing.T) {
  */
 }
 
+/*
 @(test)
 query_archetype_test :: proc(t: ^testing.T) {
     log.infof("%d", size_of(resource.Model))
@@ -142,4 +145,29 @@ query_archetype_test :: proc(t: ^testing.T) {
     query_result, _ := ecs.query_archetype(arch, query)
 
     log.infof("query result: %#v", query_result)
+}
+
+*/
+
+
+
+@(test)
+renderpip :: proc(t: ^testing.T) {
+    context.allocator = context.temp_allocator
+
+    render_pipeline := render.init_render_pipeline(1)
+    // render_pipeline.passes = make([]render.RenderPass, 1)
+    // render_pipeline_passes := make([]render.RenderPass, 1)
+
+    render_pipeline.passes[0] = render.RenderPass{
+        mesh_gather = render.RenderPassQuery{},
+        shader_gather = render.RenderPassShaderGenerate.LIGHTING
+    }
+    log.infof("passes: %#v", render_pipeline.passes)
+
+    for &pass in render_pipeline.passes {
+    // log.infof("pass: %#v", pass)
+    // log.infof("pass: %#v", pass.mesh_gather.(render.RenderPassQuery).component_queries)
+        log.infof("pass query: %#v", pass.mesh_gather.(render.RenderPassQuery))
+    }
 }

@@ -5,13 +5,14 @@ import gl "vendor:OpenGL"
 import dbg "../debug"
 import "../resource"
 
+import "core:slice"
 import "core:reflect"
 import "core:strings"
 import "base:intrinsics"
 
 FrameBufferID :: u32  // Index into RenderPipeline.frame_buffers - checked
-RenderPipeline :: struct($N_bufs: int) {
-    frame_buffers: [N_bufs]FrameBuffer,
+RenderPipeline :: struct {
+    frame_buffers: []FrameBuffer,
     passes: []RenderPass,
     shader_store: RenderShaderStore
 }
@@ -20,37 +21,42 @@ RenderPipeline :: struct($N_bufs: int) {
 init_render_pipeline :: proc{ init_render_pipeline_no_bufs, init_render_pipeline_bufs }
 
 // Default render pipeline has no passes
-init_render_pipeline_no_bufs :: proc(#any_int n_render_passes: int, allocator := context.allocator) -> (ret: RenderPipeline(0)) {
+init_render_pipeline_no_bufs :: proc(#any_int n_render_passes: int, allocator := context.allocator) -> (ret: RenderPipeline) {
     ret.passes = make([]RenderPass, n_render_passes, allocator=allocator)
     ret.shader_store = init_shader_store(allocator)
     return
 }
 
 // Default render pipeline has no passes
-init_render_pipeline_bufs :: proc(#any_int n_render_passes: int, buffers: [$N]FrameBuffer, allocator := context.allocator) -> (ret: RenderPipeline(N)) {
-    ret.frame_buffers = buffers
+init_render_pipeline_bufs :: proc(#any_int n_render_passes: int, buffers: []FrameBuffer, allocator := context.allocator) -> (ret: RenderPipeline) {
+    ret.frame_buffers = slice.clone(buffers, allocator=allocator)
     ret.passes = make([]RenderPass, n_render_passes, allocator=allocator)
     ret.shader_store = init_shader_store(allocator)
     return
 }
 
-add_render_passes :: proc(pipeline: ^RenderPipeline($N), passes: ..RenderPass) -> (ok: bool) {
-    for pass in passes {
-        if pass.frame_buffer != nil && int(pass.frame_buffer.?) >= N {
+add_render_passes :: proc(pipeline: ^RenderPipeline, passes: ..RenderPass, allocator := context.allocator) -> (ok: bool) {
+    if len(passes) != len(pipeline.passes) {
+        dbg.log(.ERROR, "Did not give enough render passes")
+        return
+    }
+
+    for pass, i in passes {
+        if pass.frame_buffer != nil && int(pass.frame_buffer.?) >= len(pipeline.frame_buffers) {
             dbg.log(.ERROR, "Render pass framebuffer id '%d' does not correspond to a framebuffer in the pipeline", pass.frame_buffer)
             return
         }
+        pipeline.passes[i] = pass
     }
 
-    pipeline.passes = passes
     return true
 }
-
 
 
 // Releases GPU memory
 destroy_pipeline :: proc(pipeline: ^RenderPipeline, manager: ^resource.ResourceManager) {
     for &fbo in pipeline.frame_buffers do destroy_framebuffer(&fbo)
+    delete(pipeline.frame_buffers)
     delete(pipeline.passes)
     destroy_shader_store(manager, pipeline.shader_store)
 }
@@ -184,7 +190,7 @@ RenderPassShaderGenerate :: enum {
     LIGHTING
 }
 
-RenderPassShaderGather :: union {
+RenderPassShaderGather :: union #no_nil {
     RenderPassShaderGenerate,
     ^RenderPass
 }

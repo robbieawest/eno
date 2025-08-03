@@ -4,6 +4,7 @@ import dbg "../debug"
 import "../utils"
 import "../standards"
 
+import "core:slice"
 import "core:hash"
 import "core:mem"
 import "core:log"
@@ -66,7 +67,7 @@ hash_resource :: proc(resource: $T) -> ResourceHash {
     else when T == VertexLayout {
         if resource.unique do return rand.uint64()
 
-        return hash_ptr(&resource.infos)
+        return hash_slice(resource.infos)
     }
     else {
         #panic("Type is invalid in hash")
@@ -76,6 +77,12 @@ hash_resource :: proc(resource: $T) -> ResourceHash {
 @(private)
 hash_ptr :: proc(ptr: ^$T) -> ResourceHash {
     return hash.fnv64a(transmute([]byte)runtime.Raw_Slice{ ptr, type_info_of(T).size })
+}
+
+@(private)
+hash_slice :: proc(slice: $T/[]$E) -> ResourceHash {
+    raw_slice := transmute(runtime.Raw_Slice)slice
+    return hash.fnv64a(transmute([]byte)runtime.Raw_Slice{raw_slice.data, type_info_of(E).size * len(slice)})
 }
 
 @(private)
@@ -111,18 +118,53 @@ init_resource_manager :: proc(allocator := context.allocator) -> ResourceManager
 }
 
 
+@(private)
+compare_resources :: proc(a: $T, b: T) -> bool {
 
+    when T == Texture {
+        return utils.equals(a, b)
+    }
+    else when T == ShaderProgram {
+        if len(a.shaders) != len(b.shaders) do return false
+        for type, ident in a.shaders {
+            if type not_in b.shaders do return false
+            if !utils.equals(ident, b.shaders[type]) do return false
+        }
+        return true
+    }
+    else when T == Shader {
+        // Not a faithful deep compare
+        comparable :: struct{ type: ShaderType, source: ShaderSource }
+        a_comp := comparable{ a.type, a.source }
+        b_comp := comparable{ b.type, b.source }
+        return utils.equals(a_comp, b_comp)
+    }
+    else when T == MaterialType {
+        comparable :: struct{ properties: MaterialPropertyInfos, double_sided: bool, unlit: bool, unique: bool }
+        a_comp := comparable{ a.properties, a.double_sided, a.unlit, a.unique }
+        b_comp := comparable{ b.properties, b.double_sided, b.unlit, b.unique }
+        return utils.equals(a_comp, b_comp)
+    }
+    else when T == VertexLayout {
+        return slice.equal(a.infos, b.infos)
+    }
+    else {
+        #panic("Type is invalid in hash")
+    }
+
+}
 
 
 // Assumes resource appears at most once in bucket
 // O(N * M) linear + mem compare, M = bytes in T, N = length of bucket
 // Linear memory compare as opposed to pointer compare
 @(private)
-traverse_bucket :: proc(bucket: list.List, $T: typeid, resource: T) -> (node: ^ResourceNode(T), ok: bool) {
+traverse_bucket :: proc(bucket: list.List, resource: $T) -> (node: ^ResourceNode(T), ok: bool) {
     iterator := list.iterator_head(bucket, ResourceNode(T), "node")
 
     for resource_node in list.iterate_next(&iterator) {
-        if utils.equals(resource, resource_node.resource) do return resource_node, true
+        log.infof("resource1: %#v, resource2: %#v", resource, resource_node.resource)
+        if compare_resources(resource, resource_node.resource) do return resource_node, true
     }
 
     return
@@ -134,6 +176,7 @@ traverse_bucket_ptr :: proc(bucket: list.List, $T: typeid, ptr: uintptr) -> (nod
     iterator := list.iterator_head(bucket, ResourceNode(T), "node")
 
     for resource_node in list.iterate_next(&iterator) {
+        log.infof("ptr1: %v, ptr2: %2v", ptr, uintptr(resource_node))
         if ptr == uintptr(resource_node) do return resource_node, true
     }
 
@@ -153,7 +196,7 @@ add_resource :: proc(
     // Reused code, could be improved but kiss
     if hash in mapping {
         bucket: ^list.List = &mapping[hash]
-        resource_node, node_exists := traverse_bucket(bucket^, T, resource)
+        resource_node, node_exists := traverse_bucket(bucket^, resource)
 
         if node_exists {
             dbg.log(.INFO, "Increasing reference of resource, hash: %d", hash)
@@ -178,7 +221,7 @@ add_resource :: proc(
             dbg.log(.INFO, "Added new node in bucket of hash: %d", hash)
 
             id.hash = hash
-            id.node = uintptr(&node)
+            id.node = uintptr(node)
         }
     }
     else {

@@ -311,7 +311,7 @@ destroy_material :: proc(manager: ^ResourceManager, material: Material, allocato
 }
 
 destroy_material_type :: proc(manager: ^ResourceManager, type: MaterialType) -> (ok: bool) {
-    remove_shader(manager, type.shader) or_return
+    if type.shader != nil do remove_shader(manager, type.shader) or_return
     return true
 }
 
