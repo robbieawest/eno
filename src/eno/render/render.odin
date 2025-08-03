@@ -248,7 +248,7 @@ query_scene :: proc(
     pass_query: RenderPassQuery,
     temp_allocator: mem.Allocator
 ) -> (mesh_data: [dynamic]MeshData, ok: bool) {
-    log.infof("querying with pass query")
+    // log.infof("querying with pass query")
 
     // todo handle pass_query (nil case as well)
 
@@ -860,6 +860,8 @@ populate_shaders :: proc(
         if shader_pass == nil do continue
 
         mesh_id := shader_store.last_mesh_id
+        dbg.log(.INFO, "New mesh id: %d", mesh_id)
+        mesh.mesh_id = mesh_id
         shader_store.last_mesh_id += 1
 
         if render_pass not_in shader_store.render_pass_mappings {
@@ -885,7 +887,10 @@ generate_shader_pass_for_mesh :: proc(
     allocator := context.allocator
 ) -> (shader_pass_id: resource.ResourceID, ok: bool) {
     // Upon .NO_GENERATE the pass gets ignored
-    if mesh.mesh_id != nil || shader_generate == .NO_GENERATE do return nil, true
+    if mesh.mesh_id != nil || shader_generate == .NO_GENERATE {
+        dbg.log(.INFO, "Skipping shader generation for mesh")
+        return nil, true
+    }
 
     dbg.log(.INFO, "Generating shader pass for mesh")
 

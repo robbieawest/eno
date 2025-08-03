@@ -163,7 +163,6 @@ traverse_bucket :: proc(bucket: list.List, resource: $T) -> (node: ^ResourceNode
     iterator := list.iterator_head(bucket, ResourceNode(T), "node")
 
     for resource_node in list.iterate_next(&iterator) {
-        log.infof("resource1: %#v, resource2: %#v", resource, resource_node.resource)
         if compare_resources(resource, resource_node.resource) do return resource_node, true
     }
 
@@ -176,7 +175,6 @@ traverse_bucket_ptr :: proc(bucket: list.List, $T: typeid, ptr: uintptr) -> (nod
     iterator := list.iterator_head(bucket, ResourceNode(T), "node")
 
     for resource_node in list.iterate_next(&iterator) {
-        log.infof("ptr1: %v, ptr2: %2v", ptr, uintptr(resource_node))
         if ptr == uintptr(resource_node) do return resource_node, true
     }
 
