@@ -51,10 +51,14 @@ before_frame :: proc() -> (ok: bool) {
 
     ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
 
+    manager := &game.Game.resource_manager
 
     game_data := new(GameData)
-    game_data.render_pipeline = render.init_render_pipeline()
-    render.add_render_passes(&game_data.render_pipeline, {})
+    game_data.render_pipeline = render.init_render_pipeline(n_render_passes=1)
+    render.add_render_passes(&game_data.render_pipeline, render.RenderPass{
+        mesh_gather = render.RenderPassQuery{},
+        shader_gather = render.RenderPassShaderGenerate.LIGHTING
+    })
     game.Game.game_data = game_data
 
     // Camera
@@ -93,9 +97,6 @@ before_frame :: proc() -> (ok: bool) {
         game.HOOKS_CAMERA_MOVEMENT()  // Only can be used after camera added to scene
     )
 
-    manager := &game.Game.resource_manager
-    render.create_shaders(manager) or_return
-    render.create_shader_passes(manager, game.Game.scene) or_return
 
     return true
 }

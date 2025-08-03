@@ -4,19 +4,16 @@ import gl "vendor:OpenGL"
 
 import dbg "../debug"
 import "../resource"
-import "../utils"
-import mutils "../utils/math_utils"
-import "../ecs"
 
 import "core:reflect"
-import "core:slice"
 import "core:strings"
 import "base:intrinsics"
 
 FrameBufferID :: u32  // Index into RenderPipeline.frame_buffers - checked
 RenderPipeline :: struct($N_bufs: int) {
     frame_buffers: [N_bufs]FrameBuffer,
-    passes: []RenderPass
+    passes: []RenderPass,
+    shader_store: RenderShaderStore
 }
 
 // Default render pipeline has no passes
@@ -25,6 +22,7 @@ init_render_pipeline :: proc{ init_render_pipeline_no_bufs, init_render_pipeline
 // Default render pipeline has no passes
 init_render_pipeline_no_bufs :: proc(#any_int n_render_passes: int, allocator := context.allocator) -> (ret: RenderPipeline(0)) {
     ret.passes = make([]RenderPass, n_render_passes, allocator=allocator)
+    ret.shader_store = init_shader_store(allocator)
     return
 }
 
@@ -32,6 +30,7 @@ init_render_pipeline_no_bufs :: proc(#any_int n_render_passes: int, allocator :=
 init_render_pipeline_bufs :: proc(#any_int n_render_passes: int, buffers: [$N]FrameBuffer, allocator := context.allocator) -> (ret: RenderPipeline(N)) {
     ret.frame_buffers = buffers
     ret.passes = make([]RenderPass, n_render_passes, allocator=allocator)
+    ret.shader_store = init_shader_store(allocator)
     return
 }
 
@@ -41,19 +40,19 @@ add_render_passes :: proc(pipeline: ^RenderPipeline($N), passes: ..RenderPass) -
             dbg.log(.ERROR, "Render pass framebuffer id '%d' does not correspond to a framebuffer in the pipeline", pass.frame_buffer)
             return
         }
-
-        append(&pipeline.passes, pass)
     }
 
+    pipeline.passes = passes
     return true
 }
 
 
 
 // Releases GPU memory
-destroy_pipeline :: proc(pipeline: ^RenderPipeline) {
+destroy_pipeline :: proc(pipeline: ^RenderPipeline, manager: ^resource.ResourceManager) {
     for &fbo in pipeline.frame_buffers do destroy_framebuffer(&fbo)
     delete(pipeline.passes)
+    destroy_shader_store(manager, pipeline.shader_store)
 }
 
 

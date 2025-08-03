@@ -88,7 +88,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
         if pass.properties.geometry_z_sorting != .NO_SORT do sort_geometry_by_depth(mesh_data[:], pass.properties.geometry_z_sorting == .ASC)
 
         // Group geometry by shaders
-        shader_map := group_meshes_by_shader(mesh_data^, temp_allocator)
+        shader_map := group_meshes_by_shader(pipeline.shader_store, &pass, mesh_data^, temp_allocator) or_return
 
         handle_pass_properties(pipeline, pass)
 
@@ -130,18 +130,42 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline($N),
 }
 
 @(private)
-group_meshes_by_shader :: proc(meshes: [dynamic]MeshData, temp_allocator := context.temp_allocator) -> (shader_map: map[resource.ResourceIdent][dynamic]MeshData) {
+group_meshes_by_shader :: proc(
+    shader_store: RenderShaderStore,
+    render_pass: ^RenderPass,
+    meshes: [dynamic]MeshData,
+    temp_allocator := context.temp_allocator
+) -> (shader_map: map[resource.ResourceIdent][dynamic]MeshData, ok: bool) {
+
+    // Get shader mapping from RenderShaderStore
+    shader_mapping: ^RenderShaderMapping
+    switch gather in render_pass.shader_gather {
+        case ^RenderPass:
+            switch inner_gather in gather.shader_gather {
+                case ^RenderPass:
+                    dbg.log(.ERROR, "If a render pass shader gather points to another render pass, that other render pass must not point to another pass")
+                    return
+                case RenderPassShaderGenerate:
+                    if gather not_in shader_store.render_pass_mappings {
+                        dbg.log(.ERROR, "Inner render pass not gathered data yet, please sort render passes by gathers")
+                        return
+                    }
+                    shader_mapping = &shader_store.render_pass_mappings[gather]
+            }
+        case RenderPassShaderGenerate:
+            shader_mapping = &shader_store.render_pass_mappings[render_pass]
+
+    }
 
     shader_map = make(map[resource.ResourceIdent][dynamic]MeshData, allocator=temp_allocator)
 
-
     for &mesh_data in meshes {
-        id := mesh_data.mesh.shader_pass
-        if id == nil {
-            dbg.log(.ERROR, "Mesh has no assigned shader pass pre render")
+        if mesh_data.mesh.mesh_id == nil {
+            dbg.log(.ERROR, "Shader pass not generated for mesh")
             return
         }
-        shader_id := id.?
+
+        shader_id := shader_mapping[mesh_data.mesh.mesh_id.?]
 
         pair := MeshData{ mesh_data.mesh, mesh_data.world, mesh_data.instance_to}
         if shader_id in shader_map {
@@ -156,6 +180,7 @@ group_meshes_by_shader :: proc(meshes: [dynamic]MeshData, temp_allocator := cont
 
     }
 
+    ok = true
     return
 }
 
@@ -754,11 +779,12 @@ RenderShaderStore :: struct {
 
     last_mesh_id: resource.MeshIdent,
     // Indexed for each render pass, if union is int then index render_pass_mappings again
-    render_pass_mappings: map[^RenderPass]RenderPassMapping
+    render_pass_mappings: map[^RenderPass]RenderShaderMapping
 }
 
 init_shader_store :: proc(allocator := context.allocator) -> (shader_store: RenderShaderStore) {
-    shader_store.render_pass_mappings = make(map[^RenderPass]RenderPassMapping, allocator)
+    shader_store.render_pass_mappings = make(map[^RenderPass]RenderShaderMapping, allocator)
+    return
 }
 
 destroy_shader_store :: proc(manager: ^resource.ResourceManager, shader_store: RenderShaderStore) -> (ok: bool) {
@@ -768,10 +794,38 @@ destroy_shader_store :: proc(manager: ^resource.ResourceManager, shader_store: R
         delete(mapping)
     }
     delete(shader_store.render_pass_mappings)
+    return
 }
 
 
-RenderPassMapping :: map[resource.MeshIdent]resource.ResourceIdent
+RenderShaderMapping :: map[resource.MeshIdent]resource.ResourceIdent
+
+populate_all_shaders :: proc(
+    pipeline: ^RenderPipeline,
+    manager: ^resource.ResourceManager,
+    scene: ^ecs.Scene,
+    allocator := context.allocator,
+    temp_allocator := context.temp_allocator
+) -> (ok: bool) {
+    isVisibleQueryData := true
+    query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
+        { label = resource.MODEL_COMPONENT.label, action = .QUERY_AND_INCLUDE },
+        { label = standards.VISIBLE_COMPONENT.label, action = .QUERY_NO_INCLUDE, data = &isVisibleQueryData }
+    }}
+    query_result := ecs.query_scene(scene, query, temp_allocator) or_return
+
+    models := ecs.get_component_from_query_result(query_result, resource.Model, resource.MODEL_COMPONENT.label, temp_allocator) or_return
+
+    meshes := make([dynamic]^resource.Mesh, temp_allocator)
+    for model_meshes, i in utils.extract_field(models, "meshes", [dynamic]resource.Mesh, allocator=temp_allocator) {
+        append_elems(&meshes, model_meshes)
+    }
+
+    for &pass in pipeline.passes do populate_shaders(&pipeline.shader_store, manager, &pass, meshes, allocator) or_return
+
+    ok = true
+    return
+}
 
 // Call when you have new meshes to populate shader_store and manager with
 // todo see if unique field should be a mesh thing rather than a vertex layout/material type thing
@@ -789,7 +843,7 @@ populate_shaders :: proc(
 
     for &mesh in meshes {
 
-        shader_pass, generate_ok := generate_shader_pass_for_mesh(shader_store, manager, shader_generate_type, mesh)
+        shader_pass, generate_ok := generate_shader_pass_for_mesh(shader_store, manager, shader_generate_type, mesh, allocator)
         if !generate_ok {
             dbg.log(.ERROR, "Could not populate shaders for mesh")
             return
@@ -801,11 +855,14 @@ populate_shaders :: proc(
         shader_store.last_mesh_id += 1
 
         if render_pass not_in shader_store.render_pass_mappings {
-            new_mapping := make(RenderPassMapping, shader_store.render_pass_mappings.allocator)
-            new_mapping[mesh_id] = shader_pass
+            new_mapping := make(RenderShaderMapping, shader_store.render_pass_mappings.allocator)
+            new_mapping[mesh_id] = shader_pass.?
             shader_store.render_pass_mappings[render_pass] = new_mapping
         }
-        else do shader_store.render_pass_mappings[render_pass][mesh_id] = shader_pass
+        else {
+            shader_mapping := &shader_store.render_pass_mappings[render_pass]
+            shader_mapping[mesh_id] = shader_pass.?
+        }
     }
 
     return true
@@ -818,7 +875,7 @@ generate_shader_pass_for_mesh :: proc(
     shader_generate: RenderPassShaderGenerate,
     mesh: ^resource.Mesh,
     allocator := context.allocator
-) -> (shader_pass: resource.ResourceID, ok: bool) {
+) -> (shader_pass_id: resource.ResourceID, ok: bool) {
     // Upon .NO_GENERATE the pass gets ignored
     if mesh.mesh_id != nil || shader_generate == .NO_GENERATE do return nil, true
 
@@ -846,7 +903,7 @@ generate_shader_pass_for_mesh :: proc(
     shader_pass.shaders[.VERTEX] = vertex_layout.shader.?
     shader_pass.shaders[.FRAGMENT] = material_type.shader.?
 
-    shader_pass_id := resource.add_shader_pass(manager, shader_pass) or_return
+    shader_pass_id = resource.add_shader_pass(manager, shader_pass) or_return
     e_shader_pass := resource.get_shader_pass(manager, shader_pass_id) or_return
     transfer_shader_program(manager, e_shader_pass) or_return // Links, will attempt to compile but it doesn't matter
 
