@@ -464,6 +464,12 @@ ShaderProgram :: struct {
     uniform_cache: ShaderUniformCache
 }
 
+init_shader_program :: proc(allocator := context.allocator) -> (program: ShaderProgram) {
+    program.shaders = make(map[ShaderType]ResourceIdent, allocator=allocator)
+    program.uniform_cache = make(ShaderUniformCache, allocator=allocator)
+    return
+}
+
 // Does not copy incoming shaders
 make_shader_program:: proc(manager: ^ResourceManager, shaders: []Shader, allocator := context.allocator) -> (program: ShaderProgram, ok: bool) {
     program.shaders = make(map[ShaderType]ResourceIdent, allocator=allocator)

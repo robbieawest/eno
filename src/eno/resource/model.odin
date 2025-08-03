@@ -102,6 +102,8 @@ MeshComponentType :: enum {
 VertexData :: [dynamic]f32
 IndexData :: [dynamic]u32
 
+MeshID :: Maybe(MeshIdent)
+MeshIdent :: u32
 Mesh :: struct {
     vertex_data: VertexData,
     vertices_count: int,
@@ -109,9 +111,9 @@ Mesh :: struct {
     indices_count: int,
     layout: ResourceIdent,
     material: Material,
-    shader_pass: ResourceID,
+    mesh_id: MeshID,  // Used in render.RenderPassStore to find the shaders for each render pass
     gl_component: GLComponent,
-    is_billboard: bool,
+    is_billboard: bool,  // todo remove
     instance_to: Maybe(InstanceTo)  // Todo support EXT_mesh_gpu_instancing gltf extension for this
 }
 

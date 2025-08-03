@@ -335,9 +335,9 @@ transfer_buffer_data_of_target :: proc(target: u32, data: rawptr, #any_int data_
 
 // Compiles and links shaders in program
 transfer_shader_program :: proc(manager: ^resource.ResourceManager, program: ^resource.ShaderProgram) -> (ok: bool) {
-    dbg.log(dbg.LogLevel.INFO, "Transferring shader program")
-
     if program.id != nil do return true
+
+    dbg.log(dbg.LogLevel.INFO, "Transferring shader program")
 
     shader_ids := make([dynamic]u32, len(program.shaders))
     defer delete(shader_ids)

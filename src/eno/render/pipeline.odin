@@ -16,22 +16,22 @@ import "base:intrinsics"
 FrameBufferID :: u32  // Index into RenderPipeline.frame_buffers - checked
 RenderPipeline :: struct($N_bufs: int) {
     frame_buffers: [N_bufs]FrameBuffer,
-    passes: [dynamic]RenderPass
+    passes: []RenderPass
 }
 
 // Default render pipeline has no passes
 init_render_pipeline :: proc{ init_render_pipeline_no_bufs, init_render_pipeline_bufs }
 
 // Default render pipeline has no passes
-init_render_pipeline_no_bufs :: proc(allocator := context.allocator) -> (ret: RenderPipeline(0)) {
-    ret.passes = make([dynamic]RenderPass, allocator=allocator)
+init_render_pipeline_no_bufs :: proc(#any_int n_render_passes: int, allocator := context.allocator) -> (ret: RenderPipeline(0)) {
+    ret.passes = make([]RenderPass, n_render_passes, allocator=allocator)
     return
 }
 
 // Default render pipeline has no passes
-init_render_pipeline_bufs :: proc(buffers: [$N]FrameBuffer, allocator := context.allocator) -> (ret: RenderPipeline(N)) {
+init_render_pipeline_bufs :: proc(#any_int n_render_passes: int, buffers: [$N]FrameBuffer, allocator := context.allocator) -> (ret: RenderPipeline(N)) {
     ret.frame_buffers = buffers
-    ret.passes = make([dynamic]RenderPass, allocator=allocator)
+    ret.passes = make([]RenderPass, n_render_passes, allocator=allocator)
     return
 }
 
@@ -178,16 +178,27 @@ apply_material_query :: proc(
 
 RenderPassMeshGather :: union { RenderPassQuery, ^RenderPass }
 
+// Extend
+RenderPassShaderGenerate :: enum {
+    NO_GENERATE,
+    DEPTH_ONLY,
+    LIGHTING
+}
+
+RenderPassShaderGather :: union {
+    RenderPassShaderGenerate,
+    ^RenderPass
+}
+
 // Structure may be too simple
 RenderPass :: struct {
     frame_buffer: Maybe(FrameBufferID),
     // If ^RenderPass, use the mesh data queried in that render pass
     // When constructing a render pass, if mesh_gather : ^RenderPass then it will follow back through the references to find a RenderPassQuery
     mesh_gather: RenderPassMeshGather,
-    properties: RenderPassProperties
+    shader_gather: RenderPassShaderGather,  // Used only to generate shader passes with
+    properties: RenderPassProperties,
 }
-
-
 
 
 // Populate this when needed

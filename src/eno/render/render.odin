@@ -589,78 +589,7 @@ update_lights_ssbo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
 }
 
 
-// Creates and compiles any shaders attached to VertexLayout or MaterialType resources
-create_shaders :: proc(manager: ^resource.ResourceManager, compile := true, shader_allocator := context.allocator) -> (ok: bool) {
-    // When this needs to be dynamic, it needs to loop via meshes to get matching pairs of materials and layouts
 
-    materials := resource.get_materials(manager^); defer delete(materials)
-    vertex_layouts := resource.get_vertex_layouts(manager^); defer delete(vertex_layouts)
-
-    for &material in materials {
-        if material.shader == nil {
-            // todo dynamically create
-            dbg.log(dbg.LogLevel.INFO, "Creating lighing shader for material")
-            single_shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.frag", .FRAGMENT, shader_allocator) or_return
-            if compile do compile_shader(&single_shader) or_return
-
-            shader_id := resource.add_shader(manager, single_shader) or_return
-            material.shader = shader_id
-        }
-    }
-
-    for &layout in vertex_layouts {
-        if layout.shader == nil {
-            // todo dynamically create
-            dbg.log(dbg.LogLevel.INFO, "Creating vertex shader for layout")
-            single_shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.vert", .VERTEX, shader_allocator) or_return
-            if compile do compile_shader(&single_shader) or_return
-
-            shader_id := resource.add_shader(manager, single_shader) or_return
-            layout.shader = shader_id
-        }
-    }
-
-    return true
-}
-
-// Combines shaders from vertex layouts and material types into shader passes (shader programs)
-// Compiles any shaders not yet compiled
-// Links shaders
-// Allocates any memory via allocator
-create_shader_passes :: proc(manager: ^resource.ResourceManager, scene: ^ecs.Scene, allocator := context.allocator) -> (ok: bool) {
-
-    // Query scene for all models and flatten to meshes
-    isVisibleQueryData := true
-    query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
-        { label = resource.MODEL_COMPONENT.label, action = .QUERY_AND_INCLUDE },
-        { label = standards.VISIBLE_COMPONENT.label, action = .QUERY_NO_INCLUDE, data = &isVisibleQueryData }
-    }}
-    query_result := ecs.query_scene(scene, query, allocator) or_return
-    defer ecs.destroy_scene_query_result(query_result)
-
-    models := ecs.get_component_from_query_result(query_result, resource.Model, resource.MODEL_COMPONENT.label, allocator) or_return
-    defer delete(models)
-
-    for &model in models {
-        for &mesh in model.meshes {
-            layout := resource.get_vertex_layout(manager, mesh.layout) or_return
-            material := resource.get_material(manager, mesh.material.type) or_return
-
-            vert := resource.get_shader(manager, layout.shader) or_return
-            frag := resource.get_shader(manager, material.shader) or_return
-
-            shaders := make([]resource.Shader, 2, allocator=allocator)
-            shaders[0] = vert^
-            shaders[1] = frag^
-
-            program := resource.make_shader_program(manager, shaders, allocator) or_return
-            transfer_shader_program(manager, &program) or_return
-            mesh.shader_pass = resource.add_shader_pass(manager, program) or_return
-        }
-    }
-
-    return true
-}
 
 
 LightingModel :: enum {
@@ -787,3 +716,169 @@ if inc_occlusion_texture do append(&uniforms, resource.GLSLPair{ resource.GLSLDa
 MODEL_MATRIX_UNIFORM :: "m_Model"
 VIEW_MATRIX_UNIFORM :: "m_View"
 PROJECTION_MATRIX_UNIFORM :: "m_Projection"
+
+
+
+RenderShaderStore :: struct {
+    // Index map to render pass, then MeshStoreID map to shader pass
+    // MeshStoreIDs are unique across all render pass mappings
+    // or just use a MeshID? We are just pointing to a resource.ResourceID
+    // Where does shader dynamic generation occur?
+    // Is it only for the typical lighting pass?
+    // Should a render pass have a type?
+    // If a render pass has a type it means we can match against it and generate the right shaders
+    // if not, how do we describe how to generate the shaders in the render pass structure?
+    // Solution: Mix
+    // Give render passes a "purpose" type, seperate from the properties
+    // Purposes:
+    // Depth only
+    // Lighting pass
+    // ... Could be related to AO, AA or anything
+    // Then in the shader generation step, populate the RenderShaderStore using Render passes, meshes, the purpose type
+    //  giving MeshIDs to meshes in series
+    // How to make multiple meshes point to the same Shader Pass? This is very bound to happen
+    // Of course we have hashed resource management, this means we can share a ShaderPass if the underlying shaders are the same
+    // todo check the hashing to see if this actually works, now I think it will just do a pointer comparison
+    // We leverage the resource manager such that after all vertex layout and material shaders are compiled, we go through
+    //  all the meshes, create a shader pass, and add it to the manager getting a shared ResourceIdent
+    // This shared ResourceIdent will be linked to the mesh in render_pass_mappings
+    // This means multiple meshes will use the same ResourceID, this is completely fine
+
+    // What about extendibiliy? What about if a mesh should be added/removed?
+    // Then just do the same thing
+    // The shader generator procdure just take a ^RenderShaderStore, and do the same as all meshes have done before
+    // With another. smaller probably, mesh slice
+    // If the vertex-material permutation exists, then no compilation needs to be done
+    // If not, then it would need to compile
+    // If this is a problem long term, a seperate procedure can be written to populate all needed vertex-material permutations before first frame
+
+    last_mesh_id: resource.MeshIdent,
+    // Indexed for each render pass, if union is int then index render_pass_mappings again
+    render_pass_mappings: map[^RenderPass]RenderPassMapping
+}
+
+init_shader_store :: proc(allocator := context.allocator) -> (shader_store: RenderShaderStore) {
+    shader_store.render_pass_mappings = make(map[^RenderPass]RenderPassMapping, allocator)
+}
+
+destroy_shader_store :: proc(manager: ^resource.ResourceManager, shader_store: RenderShaderStore) -> (ok: bool) {
+    ok = true
+    for _, mapping in shader_store.render_pass_mappings {
+        for _, shader_pass in mapping do ok &= resource.remove_shader_pass(manager, shader_pass)
+        delete(mapping)
+    }
+    delete(shader_store.render_pass_mappings)
+}
+
+
+RenderPassMapping :: map[resource.MeshIdent]resource.ResourceIdent
+
+// Call when you have new meshes to populate shader_store and manager with
+// todo see if unique field should be a mesh thing rather than a vertex layout/material type thing
+// todo -  currently not doing anything with the field
+populate_shaders :: proc(
+    shader_store: ^RenderShaderStore,
+    manager: ^resource.ResourceManager,
+    render_pass: ^RenderPass,
+    meshes: []^resource.Mesh,
+    allocator := context.allocator
+) -> (ok: bool) {
+
+    shader_generate_type, do_generate := render_pass.shader_gather.(RenderPassShaderGenerate)
+    if !do_generate do return  // If shader_gather points to a RenderPass then do nothing here
+
+    for &mesh in meshes {
+
+        shader_pass, generate_ok := generate_shader_pass_for_mesh(shader_store, manager, shader_generate_type, mesh)
+        if !generate_ok {
+            dbg.log(.ERROR, "Could not populate shaders for mesh")
+            return
+        }
+
+        if shader_pass == nil do continue
+
+        mesh_id := shader_store.last_mesh_id
+        shader_store.last_mesh_id += 1
+
+        if render_pass not_in shader_store.render_pass_mappings {
+            new_mapping := make(RenderPassMapping, shader_store.render_pass_mappings.allocator)
+            new_mapping[mesh_id] = shader_pass
+            shader_store.render_pass_mappings[render_pass] = new_mapping
+        }
+        else do shader_store.render_pass_mappings[render_pass][mesh_id] = shader_pass
+    }
+
+    return true
+}
+
+@(private)
+generate_shader_pass_for_mesh :: proc(
+    shader_store: ^RenderShaderStore,
+    manager: ^resource.ResourceManager,
+    shader_generate: RenderPassShaderGenerate,
+    mesh: ^resource.Mesh,
+    allocator := context.allocator
+) -> (shader_pass: resource.ResourceID, ok: bool) {
+    // Upon .NO_GENERATE the pass gets ignored
+    if mesh.mesh_id != nil || shader_generate == .NO_GENERATE do return nil, true
+
+    vertex_layout := resource.get_vertex_layout(manager, mesh.layout) or_return
+    material_type := resource.get_material(manager, mesh.material.type) or_return
+
+    if vertex_layout.shader == nil {
+        dbg.log(dbg.LogLevel.INFO, "Creating vertex shader for layout")
+        vertex_layout.shader = generate_vertex_shader(manager, shader_generate, allocator) or_return
+    }
+
+    if material_type.shader == nil {
+        dbg.log(dbg.LogLevel.INFO, "Creating lighting shader for material type")
+        material_type.shader = generate_lighting_shader(manager, shader_generate, allocator) or_return
+    }
+
+    // Grabbing shaders here makes it impossible to compile a shader twice
+    vert := resource.get_shader(manager, vertex_layout.shader.?) or_return
+    frag := resource.get_shader(manager, material_type.shader.?) or_return
+
+    if vert.id == nil do compile_shader(vert) or_return
+    if frag.id == nil do compile_shader(frag) or_return
+
+    shader_pass := resource.init_shader_program()
+    shader_pass.shaders[.VERTEX] = vertex_layout.shader.?
+    shader_pass.shaders[.FRAGMENT] = material_type.shader.?
+
+    shader_pass_id := resource.add_shader_pass(manager, shader_pass) or_return
+    e_shader_pass := resource.get_shader_pass(manager, shader_pass_id) or_return
+    transfer_shader_program(manager, e_shader_pass) or_return // Links, will attempt to compile but it doesn't matter
+
+    return shader_pass_id, true
+}
+
+@(private)
+generate_vertex_shader :: proc(
+    manager: ^resource.ResourceManager,
+    pass_type: RenderPassShaderGenerate,
+    allocator := context.allocator
+) -> (id: resource.ResourceIdent, ok: bool) {
+    // Todo dynamic
+    dbg.log()
+
+    single_shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.vert", .VERTEX, allocator) or_return
+    id = resource.add_shader(manager, single_shader) or_return
+    ok = true
+    return
+}
+
+@(private)
+generate_lighting_shader :: proc(
+    manager: ^resource.ResourceManager,
+    pass_type: RenderPassShaderGenerate,
+    allocator := context.allocator
+) -> (id: resource.ResourceIdent, ok: bool) {
+    // Todo dynamic
+    dbg.log()
+
+    single_shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.frag", .VERTEX, allocator) or_return
+    id = resource.add_shader(manager, single_shader) or_return
+    ok = true
+    return
+}
