@@ -57,13 +57,6 @@ before_frame :: proc() -> (ok: bool) {
         mesh_gather = render.RenderPassQuery{},
         shader_gather = render.RenderPassShaderGenerate.LIGHTING
     }
-    log.infof("passes: %#v", game_data.render_pipeline.passes)
-
-    for &pass in game_data.render_pipeline.passes {
-        // log.infof("pass: %#v", pass)
-        // log.infof("pass: %#v", pass.mesh_gather.(render.RenderPassQuery).component_queries)
-        log.infof("pass query: %#v", render.RenderPassQuery(pass.mesh_gather.(render.RenderPassQuery)))
-    }
 
     game.Game.game_data = game_data
 

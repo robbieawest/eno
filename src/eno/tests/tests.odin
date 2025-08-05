@@ -150,24 +150,23 @@ query_archetype_test :: proc(t: ^testing.T) {
 */
 
 
-
+// Illegal instruction in fmt_union !bug!
 @(test)
 renderpip :: proc(t: ^testing.T) {
-    context.allocator = context.temp_allocator
+    // context.allocator = runtime.heap_allocator()
 
-    render_pipeline := render.init_render_pipeline(1)
+    render_pipeline := render.init_render_pipeline_no_bufs(1)
+    // render_pipeline: render.RenderPipeline
     // render_pipeline.passes = make([]render.RenderPass, 1)
-    // render_pipeline_passes := make([]render.RenderPass, 1)
 
     render_pipeline.passes[0] = render.RenderPass{
         mesh_gather = render.RenderPassQuery{},
         shader_gather = render.RenderPassShaderGenerate.LIGHTING
     }
-    log.infof("passes: %#v", render_pipeline.passes)
+    log.infof("type: %#v", type_info_of(render.RenderPassMeshGather).variant)
 
     for &pass in render_pipeline.passes {
-    // log.infof("pass: %#v", pass)
-    // log.infof("pass: %#v", pass.mesh_gather.(render.RenderPassQuery).component_queries)
+        log.infof("queries %v", pass.mesh_gather.(render.RenderPassQuery).component_queries)
         log.infof("pass query: %#v", pass.mesh_gather.(render.RenderPassQuery))
     }
 }
