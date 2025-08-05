@@ -53,10 +53,8 @@ A list of features detailing what eno currently implements:
 
 Shortly upcoming features:
 
-- Some render pass geometry querying improvements to support more pass types, including depth-pre passes and transparency passes
-- Centrally managed shader passes, hashed and owned between render passes and meshes
-- Billboarding improvements
 - Image based indirect lighting
+- Billboarding improvements via instancing
 - Dynamic vertex/lighting shader generation, (comptime generation: vertex layouts, material types,  runtime branching: lighting settings)
 - Imgui :O
 - MSAA
