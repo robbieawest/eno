@@ -425,11 +425,54 @@ Model :: struct {
     meshes: [dynamic]Mesh,
 }
 
-TextureID :: u64
+
+TextureType :: enum {
+    TWO_DIM,
+    THREE_DIM,
+    CUBEMAP
+}
+
+TextureProperty :: enum {
+    WRAP_S,
+    WRAP_T,
+    WRAP_R,
+    MIN_FILTER,
+    MAG_FILTER
+}
+
+TexturePropertyValue :: enum {
+    CLAMP_EDGE,
+    CLAMP_BORDER,
+    REPEAT,
+    MIRROR_CLAMP_EDGE,
+    MIRROR_CLAMP_BORDER,
+    MIRROR_REPEAT,
+    NEAREST,
+    LINEAR,
+    LINEAR_MIPMAP_LINEAR,
+    LINEAR_MIPMAP_NEAREST,
+    NEAREST_MIPMAP_LINEAR,
+    NEAREST_MIPMAP_NEAREST
+}
+
+TextureProperties :: map[TextureProperty]TexturePropertyValue
+
+default_texture_properties :: proc(allocator := context.allocator) -> (properties: TextureProperties) {
+    properties = make(TextureProperties, allocator=allocator)
+    properties[.WRAP_S] = .CLAMP_EDGE
+    properties[.WRAP_T] = .CLAMP_EDGE
+    properties[.WRAP_R] = .CLAMP_EDGE
+    properties[.MIN_FILTER] = .LINEAR
+    properties[.MAG_FILTER] = .LINEAR
+    return
+}
+
 Texture :: struct {
     name: string,
-    image: Image,
-    gpu_texture: Maybe(u32)
+    image: Image,  // For a cubemap this would be the raw environment map to convert to cubemap. gpu_texture will always != nil when not needed
+    gpu_texture: Maybe(u32),
+    type: TextureType,
+    properties: TextureProperties
 }
 
 // Does not release GPU memory
@@ -457,9 +500,8 @@ destroy_pixel_data :: proc(image: ^Image) {
 texture_from_cgltf_texture :: proc(texture: ^cgltf.texture, gltf_file_location: string, allocator := context.allocator) -> (result: Texture, ok: bool) {
     if texture == nil do return result, true
     return Texture {
-        strings.clone_from_cstring(texture.name),
-        load_image_from_cgltf_image(texture.image_, gltf_file_location, allocator) or_return,
-        nil,
+        name = strings.clone_from_cstring(texture.name),
+        image = load_image_from_cgltf_image(texture.image_, gltf_file_location, allocator) or_return
     }, true
 }
 

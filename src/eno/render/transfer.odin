@@ -211,6 +211,7 @@ make_texture_raw :: proc(w, h: i32, data: rawptr = nil, internal_format: i32 = g
     gl.BindTexture(gl.TEXTURE_2D, id)
     gl.TexImage2D(gl.TEXTURE_2D, lod, internal_format, w, h, 0, format, type, data)
 
+    // Todo make support for this elsewhere
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)

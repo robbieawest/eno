@@ -62,6 +62,7 @@ Scene :: struct {
     allocated: bool,
     cameras: [dynamic]cam.Camera,
     viewpoint: ^cam.Camera,
+    image_environment: Maybe(ImageEnvironment)
 }
 
 // Scene reside on the stack if possible
@@ -241,4 +242,14 @@ archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label:
 
     ok = true
     return
+}
+
+
+ImageEnvironment :: struct {
+    // All cubemaps, IBL textures: image field is not used
+    environment_map: resource.Texture,
+    //IBL
+    irradiance_map: Maybe(resource.Texture),
+    prefilter_map: Maybe(resource.Texture),
+    brdf_lookup: Maybe(resource.Texture)
 }

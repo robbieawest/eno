@@ -955,3 +955,78 @@ generate_lighting_shader :: proc(
     ok = true
     return
 }
+
+
+// Handles the pre render passes
+pre_render :: proc(pipeline: RenderPipeline, scene: ^ecs.Scene, temp_allocator := context.temp_allocator) -> (ok: bool) {
+
+    for pass in pipeline.pre_passes {
+        if len(pass.frame_buffers) == 0 {
+            dbg.log(.ERROR, "Pre render pass must have more than one framebuffer")
+            return
+        }
+
+        switch input in pass.input {
+        case IBLInput:
+            environment := &scene.image_environment
+            if environment == nil {
+                dbg.log(.ERROR, "No environment found in scene for IBL")
+                return
+            }
+
+            buffer := utils.safe_index(pipeline.frame_buffers, pass.frame_buffers[0]) or_return
+            ok = ibl_pre_render_pass(buffer^, &environment.?)
+            if !ok {
+                dbg.log(.ERROR, "Failed to pre render IBL maps")
+            }
+        }
+    }
+
+    ok = true
+    return
+}
+
+
+@(private)
+ibl_pre_render_pass_checks :: proc(buffer: FrameBuffer) -> (ok: bool) {
+    return true
+}
+
+ibl_pre_render_pass :: proc(buffer: FrameBuffer, environment: ^ecs.ImageEnvironment) -> (ok: bool) {
+
+    ibl_pre_render_pass_checks(buffer) or_return
+
+    if environment.irradiance_map == nil do environment.irradiance_map = create_ibl_irradiance_map() or_return
+    if environment.prefilter_map == nil do environment.prefilter_map = create_ibl_prefilter_map() or_return
+    if environment.brdf_lookup == nil do environment.brdf_lookup = create_ibl_brdf_lookup() or_return
+
+    // Then either use the textures as attached to the framebuffer or look at scene -> image environment
+
+    ok = true
+    return
+}
+
+create_ibl_irradiance_map :: proc() -> (irradiance: resource.Texture, ok: bool) {
+
+    ok = true
+    return
+}
+
+create_ibl_prefilter_map :: proc() -> (prefilter: resource.Texture, ok: bool) {
+
+    ok = true
+    return
+}
+
+create_ibl_brdf_lookup :: proc() -> (brdf_lut: resource.Texture, ok: bool) {
+
+    ok = true
+    return
+}
+
+
+
+
+make_ibl_framebuffer :: proc() -> (buffer: FrameBuffer) {
+    return
+}

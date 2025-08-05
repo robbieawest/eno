@@ -33,6 +33,15 @@ s_safe_slice :: proc(slice: $T/[]$E, #any_int start: int, #any_int end: int, loc
     return slice[start:end], true
 }
 
+// Dont care enough to add a dyn version
+safe_index :: proc(slice: $T/[]$E, #any_int ind: int, loc := #caller_location) -> (elem: ^E, ok: bool) {
+    if !index_in_bounds(ind, len(slice)) {
+        dbg.log(.ERROR, "Out of bounds index", loc=loc)
+        return
+    }
+    return &slice[ind], true
+}
+
 
 // O(N) memory check where N = num bytes in T
 equals :: proc(a: $T, b: T) -> bool {

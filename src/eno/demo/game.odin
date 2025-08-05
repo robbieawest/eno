@@ -55,9 +55,9 @@ before_frame :: proc() -> (ok: bool) {
     game_data.render_pipeline = render.init_render_pipeline(n_render_passes=1)
     game_data.render_pipeline.passes[0] = render.RenderPass{
         mesh_gather = render.RenderPassQuery{},
-        shader_gather = render.RenderPassShaderGenerate.LIGHTING
+        shader_gather = render.RenderPassShaderGenerate.LIGHTING,
+        properties = render.RenderPassProperties{ geometry_z_sorting = .ASC, face_culling = render.Face.BACK }
     }
-
     game.Game.game_data = game_data
 
     // Camera

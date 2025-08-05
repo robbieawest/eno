@@ -3,18 +3,21 @@ package render
 import gl "vendor:OpenGL"
 
 import dbg "../debug"
+import "../ecs"
 import "../resource"
 
 import "core:slice"
 import "core:reflect"
 import "core:strings"
 import "base:intrinsics"
+import utils "../utils"
 
 FrameBufferID :: u32  // Index into RenderPipeline.frame_buffers - checked
 RenderPipeline :: struct {
     frame_buffers: []FrameBuffer,
     passes: []RenderPass,
-    shader_store: RenderShaderStore
+    shader_store: RenderShaderStore,
+    pre_passes: []PreRenderPass
 }
 
 // Default render pipeline has no passes
@@ -464,5 +467,41 @@ make_attachment :: proc(
 @(private)
 get_n_attachments :: proc(frame_buffer: ^FrameBuffer,  type: AttachmentType) -> (n: u32) {
     for _, attachment in frame_buffer.attachments do n += u32(attachment.type == type)
+    return
+}
+
+
+PreRenderPassInput :: union {
+    IBLInput
+}
+
+IBLInput :: struct {
+    // ... add later?
+}
+
+PreRenderPass :: struct {
+    input: PreRenderPassInput,
+    frame_buffers: []FrameBufferID
+}
+
+make_pre_render_pass :: proc(
+    pipeline: RenderPipeline,
+    input: PreRenderPassInput,
+    frame_buffers: ..FrameBufferID,
+    allocator := context.allocator
+) -> (pass: PreRenderPass, ok: bool) {
+    buffers := make([dynamic]FrameBufferID, allocator=allocator)
+    for frame_buffer in frame_buffers {
+        if int(frame_buffer) >= len(pipeline.frame_buffers) {
+            dbg.log(.ERROR, "Frame buffer points outside of the pipeline framebuffers")
+            return
+        }
+        append(&buffers, frame_buffer)
+    }
+
+    pass.frame_buffers = buffers[:]
+    pass.input = input
+
+    ok = true
     return
 }
