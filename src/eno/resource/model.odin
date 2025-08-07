@@ -12,7 +12,7 @@ import "core:mem"
 import "core:strings"
 import glm "core:math/linalg/glsl"
 import "core:log"
-
+import file_utils "../file_utils"
 
 MODEL_COMPONENT := standards.ComponentTemplate{ "Model", Model, size_of(Model) }
 LIGHT_COMPONENT := standards.ComponentTemplate{ "Light", Light, size_of(Light) }
@@ -445,7 +445,6 @@ TexturePropertyValue :: enum {
     CLAMP_BORDER,
     REPEAT,
     MIRROR_CLAMP_EDGE,
-    MIRROR_CLAMP_BORDER,
     MIRROR_REPEAT,
     NEAREST,
     LINEAR,
@@ -497,16 +496,16 @@ destroy_pixel_data :: proc(image: ^Image) {
     image.pixel_data = nil
 }
 
-texture_from_cgltf_texture :: proc(texture: ^cgltf.texture, gltf_file_location: string, allocator := context.allocator) -> (result: Texture, ok: bool) {
+texture_from_cgltf_texture :: proc(texture: ^cgltf.texture, gltf_file_location: string, allocator := context.allocator, loc := #caller_location) -> (result: Texture, ok: bool) {
     if texture == nil do return result, true
     return Texture {
         name = strings.clone_from_cstring(texture.name),
-        image = load_image_from_cgltf_image(texture.image_, gltf_file_location, allocator) or_return
+        image = load_image_from_cgltf_image(texture.image_, gltf_file_location, allocator=allocator, loc=loc) or_return
     }, true
 }
 
-load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: string, allocator := context.allocator) -> (result: Image, ok: bool) {
-    if image.name != nil do result.name = strings.clone_from_cstring(image.name)
+load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: string, allocator := context.allocator, loc := #caller_location) -> (result: Image, ok: bool) {
+    if image.name != nil do result.name = strings.clone_from_cstring(image.name, allocator=allocator)
     dbg.log(.INFO, "Reading cgltf image: %s", image.uri)
 
     if image.buffer_view == nil {
@@ -516,7 +515,7 @@ load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: str
         }
 
         // Use URI
-        return load_image_from_uri(string(image.uri), gltf_file_location)
+        return load_image_from_uri(string(image.uri), gltf_file_location, allocator=allocator loc=loc)
     }
 
     // Use buffer
@@ -534,11 +533,11 @@ load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: str
 }
 
 
-// Does not assert validity of uri
-@(private)
-load_image_from_uri :: proc(uri: string, uri_base: string = "", flip_image := false, allocator := context.allocator) -> (result: Image, ok: bool) {
-    path := len(uri_base) == 0 ? strings.clone(uri) : utils.concat(uri_base, uri); defer delete(path)
-    path_cstr := strings.clone_to_cstring(path); defer delete(path_cstr)
+load_image_from_uri :: proc(uri: string, uri_base: string = "", flip_image := false, allocator := context.allocator, loc := #caller_location) -> (result: Image, ok: bool) {
+    file_utils.check_path(uri, loc=loc) or_return
+
+    path := len(uri_base) == 0 ? strings.clone(uri, allocator=allocator) : utils.concat(uri_base, uri, allocator=allocator); defer delete(path)
+    path_cstr := strings.clone_to_cstring(path, allocator=allocator); defer delete(path_cstr)
 
     if flip_image do stbi.set_flip_vertically_on_load(1)
     defer if flip_image do stbi.set_flip_vertically_on_load(0)

@@ -1,5 +1,7 @@
 package render
 
+import gl "vendor:OpenGL"
+
 import "../ecs"
 import "../resource"
 import "../utils"
@@ -987,26 +989,49 @@ pre_render :: proc(pipeline: RenderPipeline, scene: ^ecs.Scene, temp_allocator :
 }
 
 
-@(private)
-ibl_pre_render_pass_checks :: proc(buffer: FrameBuffer) -> (ok: bool) {
-    return true
-}
 
-ibl_pre_render_pass :: proc(buffer: FrameBuffer, environment: ^ecs.ImageEnvironment) -> (ok: bool) {
+ibl_pre_render_pass :: proc(buffer: FrameBuffer, environment: ^ecs.ImageEnvironment, allocator := context.allocator, loc := #caller_location) -> (ok: bool) {
 
-    ibl_pre_render_pass_checks(buffer) or_return
+    check_framebuffer_status(buffer, loc=loc) or_return
 
-    if environment.irradiance_map == nil do environment.irradiance_map = create_ibl_irradiance_map() or_return
+    transfer_texture(&environment.environment_tex) or_return
+
+    if environment.irradiance_map == nil do environment.irradiance_map = create_ibl_irradiance_map(allocator) or_return
+    check_framebuffer_status(buffer, loc=loc) or_return
+
     if environment.prefilter_map == nil do environment.prefilter_map = create_ibl_prefilter_map() or_return
-    if environment.brdf_lookup == nil do environment.brdf_lookup = create_ibl_brdf_lookup() or_return
+    check_framebuffer_status(buffer, loc=loc) or_return
 
-    // Then either use the textures as attached to the framebuffer or look at scene -> image environment
+    if environment.brdf_lookup == nil do environment.brdf_lookup = create_ibl_brdf_lookup() or_return
+    check_framebuffer_status(buffer, loc=loc) or_return
+
+
 
     ok = true
     return
 }
 
-create_ibl_irradiance_map :: proc() -> (irradiance: resource.Texture, ok: bool) {
+IRRADIANCE_MAP_FACE_WIDTH :: 32
+IRRADIANCE_MAP_FACE_HEIGHT :: 32
+create_ibl_irradiance_map :: proc(allocator := context.allocator) -> (irradiance: resource.Texture, ok: bool) {
+    using irradiance
+    name = strings.clone("IrradianceMap", allocator=allocator)
+    properties = resource.default_texture_properties()
+    gpu_texture = make_texture(IRRADIANCE_MAP_FACE_WIDTH, IRRADIANCE_MAP_FACE_WIDTH, nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties)
+
+    shader := get_ibl_irradiance_shader(allocator)
+    resource.set_uniform()
+
+    ok = true
+    return
+}
+
+@(private)
+get_ibl_irradiance_shader :: proc(allocator := context.allocator) -> (shader: resource.RawShaderProgram, ok: bool) {
+    vert := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "cubemap.vert")
+    frag := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "irradiance.frag")
+    shader = resource.make_shader_program_raw([]resource.Shader{ vert, frag }, allocator) or_return
+    transfer_shader_program_raw(&shader) or_return
 
     ok = true
     return
@@ -1025,8 +1050,9 @@ create_ibl_brdf_lookup :: proc() -> (brdf_lut: resource.Texture, ok: bool) {
 }
 
 
+IBL_FRAMEBUFFER_WIDTH :: 512
+IBL_FRAMEBUFFER_HEIGHT :: 512
 
-
-make_ibl_framebuffer :: proc() -> (buffer: FrameBuffer) {
-    return
+make_ibl_framebuffer :: proc(allocator := context.allocator) -> (buffer: FrameBuffer) {
+    return make_framebuffer(IBL_FRAMEBUFFER_WIDTH, IBL_FRAMEBUFFER_HEIGHT, allocator=allocator)
 }

@@ -247,9 +247,20 @@ archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label:
 
 ImageEnvironment :: struct {
     // All cubemaps, IBL textures: image field is not used
-    environment_map: resource.Texture,
+    environment_tex: resource.Texture,
+    environment_map: Maybe(resource.Texture),
     //IBL
     irradiance_map: Maybe(resource.Texture),
     prefilter_map: Maybe(resource.Texture),
     brdf_lookup: Maybe(resource.Texture)
+}
+
+make_image_environment :: proc(environment_map_uri: string, flip_map := true, allocator := context.allocator) -> (env: ImageEnvironment, ok: bool) {
+    using env.environment_tex
+    name = strings.clone("EnvironmentMap", allocator=allocator)
+    type = .TWO_DIM
+    image = resource.load_image_from_uri(environment_map_uri, flip_image=flip_map, allocator=allocator) or_return
+
+    ok = true
+    return
 }

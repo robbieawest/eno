@@ -295,70 +295,21 @@ release_render_buffer :: proc(render_buffer: ^RenderBuffer) {
 }
 
 
-generate_framebuffer :: proc(w, h: i32) -> (frame_buffer: FrameBuffer, ok: bool) {
+make_framebuffer :: proc(w, h: i32, allocator := context.allocator) -> (frame_buffer: FrameBuffer) {
     frame_buffer.w = w
     frame_buffer.h = h
-
-    id: u32
-    gen_framebuffer(&id)
-    frame_buffer.id = id
-
-    ok = gl.CheckFramebufferStatus(id) == gl.FRAMEBUFFER_COMPLETE
-    frame_buffer.attachments = make(map[u32]Attachment)
+    frame_buffer.id = gen_framebuffer()
+    frame_buffer.attachments = make(map[u32]Attachment, allocator=allocator) // todo check needed
     return
 }
 
 destroy_framebuffer :: proc(frame_buffer: ^FrameBuffer) {
     for _, &attachment in frame_buffer.attachments do destroy_attachment(&attachment)
     delete(frame_buffer.attachments)
-    if id, id_ok := frame_buffer.id.?; id_ok do gl.DeleteFramebuffers(1, &id)
+    if id, id_ok := frame_buffer.id.?; id_ok do release_framebuffer(frame_buffer^)
 }
 
 
-@(private)
-gen_framebuffer :: proc(id: ^u32)  {
-    gl.GenFramebuffers(1, id)
-}
-
-bind_framebuffer_gen :: proc(frame_buffer: ^FrameBuffer) {
-    id, id_ok := frame_buffer.id.?
-    if !id_ok do gen_framebuffer(&id)
-    gl.BindFramebuffer(gl.FRAMEBUFFER, id)
-}
-
-bind_framebuffer :: proc(frame_buffer: FrameBuffer) {
-    id, id_ok := frame_buffer.id.?
-    if !id_ok {
-        dbg.log(.ERROR, "Frame buffer could not be bound")
-        return
-    }
-
-    gl.BindFramebuffer(gl.FRAMEBUFFER, id)
-}
-
-bind_default_framebuffer :: proc() {
-    gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
-}
-
-
-gen_renderbuffer :: proc(id: ^u32) {
-    gl.GenRenderbuffers(1, id)
-}
-
-bind_renderbuffer :: proc(render_buffer: ^RenderBuffer) {
-    id, id_ok := render_buffer.id.?
-    if !id_ok do gen_renderbuffer(&id)
-    gl.BindRenderbuffer(gl.RENDERBUFFER, id)
-}
-
-make_renderbuffer :: proc(w, h: i32, internal_format: u32 = gl.RGBA) -> (render_buffer: RenderBuffer) {
-    id: u32
-    gen_renderbuffer(&id)
-    render_buffer.id = id
-    bind_renderbuffer(&render_buffer)
-    gl.RenderbufferStorage(gl.RENDERBUFFER, internal_format, w, h)
-    return
-}
 
 
 RenderType :: enum {
@@ -368,38 +319,33 @@ RenderType :: enum {
 }
 
 
-/*
-    "Draws" framebuffer at the attachment, render mask, interpolation, and w, h to the default framebuffer (sdl back buffer)
-*/
-draw_framebuffer_to_screen :: proc(frame_buffer: ^FrameBuffer, attachment_id: u32, w, h: i32, interpolation: u32 = gl.NEAREST) {
-    frame_buffer_id, id_ok := frame_buffer.id.?
-    if !id_ok {
-        dbg.log(.ERROR, "Frame buffer not yet created")
-        return
-    }
-
-    attachment, attachment_ok := &frame_buffer.attachments[attachment_id]
-    if !attachment_ok {
-        dbg.log(.ERROR, "Attachment ID: %d is invalid or not bound to the framebuffer", attachment_id)
-        return
-    }
-
-    switch data in attachment.data {
-        case RenderBuffer:
-            gl.BindFramebuffer(gl.READ_FRAMEBUFFER, frame_buffer_id)
-            gl.ReadBuffer(attachment.id)  // Id not validated
-            gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, 0)
-
-            gl.BlitFramebuffer(0, 0, w, h, 0, 0, w, h,  gl.COLOR_ATTACHMENT0, interpolation)  // This could be smarter
-        case GPUTexture:
-            // todo
-    }
-}
-
-
 // !!! (draw_framebuffer_to_screen)
 // todo if last render pass has an attached renderbuffer, then blit that renderbuffer to final frame
 // if its not a renderbuffer but a texture buffer then just render that texture onto a single quad
+
+add_texture_attachment :: proc(frame_buffer: ^FrameBuffer, texture: resource.Texture) -> (ok: bool) {
+    fbo := utils.unwrap_maybe(frame_buffer.id.?) or_return
+
+    if texture.gpu_texture == nil {
+        dbg.log(.ERROR, "Texture is not yet transferred before attaching to frame buffer")
+        return
+    }
+
+    if texture.image.w != frame_buffer.w || texture.image.h != frame_buffer.h {
+        dbg.log(.ERROR, "Texture dimensions do not match renderbuffer")
+        return
+    }
+
+    bind_framebuffer_raw(frame_buffer)
+
+
+    if texture.type == .CUBEMAP {
+
+    }
+    else {
+
+    }
+}
 
 /*
     Creates an attachment of type, either a renderbuffer or a texture.

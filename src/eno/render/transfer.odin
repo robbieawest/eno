@@ -202,23 +202,81 @@ make_texture_ :: proc(tex: resource.Texture) -> (texture: GPUTexture) {
     return make_texture_raw(tex.image.w, tex.image.h, tex.image.pixel_data)
 }
 
-make_texture_raw :: proc(w, h: i32, data: rawptr = nil, internal_format: i32 = gl.RGBA8, lod: i32 = 0, format: u32 = gl.RGBA, type: u32 = gl.UNSIGNED_BYTE) -> (texture: GPUTexture) {
-    dbg.log(.INFO, "Making new texture")
+make_texture_raw :: proc(
+    w, h: i32,
+    data: rawptr = nil,
+    internal_format: i32 = gl.RGBA8,
+    lod: i32 = 0,
+    format: u32 = gl.RGBA,
+    type: u32 = gl.UNSIGNED_BYTE,
+    texture_type: resource.TextureType = .TWO_DIM,
+    texture_properties: resource.TextureProperties = {}
+) -> (texture: GPUTexture) {
+    dbg.log(.INFO, "Making new texture, w: %d, h: %d", w, h)
     id: u32
     gl.GenTextures(1, &id)
     texture = id
 
     gl.BindTexture(gl.TEXTURE_2D, id)
-    gl.TexImage2D(gl.TEXTURE_2D, lod, internal_format, w, h, 0, format, type, data)
 
-    // Todo make support for this elsewhere
-    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    switch texture_type {
+        case .TWO_DIM:
+            gl.TexImage2D(gl.TEXTURE_2D, lod, internal_format, w, h, 0, format, type, data)
+        case .CUBEMAP:
+            for i in 0..<6 {
+                gl.TexImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X + i, lod, internal_format, w, h, 0, format, type, data)
+            }
+    }
+
+    if texture_properties == {} {
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    }
+    else do set_texture_properties(texture_properties)
 
     return
 }
+
+@(private)
+set_texture_properties :: proc(type: resource.TextureType, properties: resource.TextureProperties) {
+    gl_type := conv_texture_type(type)
+    for property, value in properties {
+        gl.TexParameteri(gl_type, conv_tex_property(property), conv_tex_property_value(value))
+    }
+}
+
+@(private)
+conv_tex_property :: proc(property: resource.TextureProperty) -> u32 {
+    switch property {
+        case .WRAP_S: return gl.TEXTURE_WRAP_S
+        case .WRAP_T: return gl.TEXTURE_WRAP_T
+        case .WRAP_R: return gl.TEXTURE_WRAP_R
+        case .MIN_FILTER: return gl.TEXTURE_MIN_FILTER
+        case .MAG_FILTER: return gl.TEXTURE_MAG_FILTER
+    }
+    return 0
+}
+
+@(private)
+conv_tex_property_value :: proc(val: resource.TexturePropertyValue) -> u32 {
+    switch val {
+        case .CLAMP_BORDER: return gl.CLAMP_TO_BORDER
+        case .CLAMP_EDGE: return gl.CLAMP_TO_EDGE
+        case .LINEAR: return gl.LINEAR
+        case .LINEAR_MIPMAP_LINEAR: return gl.LINEAR_MIPMAP_LINEAR
+        case .LINEAR_MIPMAP_NEAREST: return gl.LINEAR_MIPMAP_NEAREST
+        case .MIRROR_CLAMP_EDGE: return gl.MIRROR_CLAMP_TO_EDGE
+        case .MIRROR_REPEAT: return gl.MIRRORED_REPEAT
+        case .NEAREST: return gl.NEAREST
+        case .NEAREST_MIPMAP_LINEAR: return gl.NEAREST_MIPMAP_LINEAR
+        case .NEAREST_MIPMAP_NEAREST: return gl.NEAREST_MIPMAP_NEAREST
+        case .REPEAT: return gl.REPEAT
+    }
+    return 0
+}
+
 
 release_texture :: proc(texture: ^GPUTexture) {
     if id, id_ok := texture.?; id_ok do gl.DeleteTextures(1, &id)
@@ -237,6 +295,16 @@ bind_texture :: proc(texture_unit: u32, texture: GPUTexture, loc := #caller_loca
     gl.ActiveTexture(u32(gl.TEXTURE0) + texture_unit)
     gl.BindTexture(gl.TEXTURE_2D, texture.?)
     return true
+}
+
+
+conv_texture_type :: proc(type: resource.TextureType) -> u32 {
+    switch type {
+        case .TWO_DIM: return gl.TEXTURE_2D
+        case .THREE_DIM: return gl.TEXTURE_3D
+        case .CUBEMAP: return gl.TEXTURE_CUBE_MAP
+    }
+    return 0
 }
 
 
@@ -346,8 +414,28 @@ transfer_shader_program :: proc(manager: ^resource.ResourceManager, program: ^re
     i := 0
     for _, given_shader in program.shaders {
         shader := resource.get_shader(manager, given_shader) or_return
-        id := compile_shader(shader) or_return
-        shader_ids[i] = id
+        shader.id = compile_shader(shader) or_return
+        shader_ids[i] = shader.id
+        i += 1
+    }
+
+    program.id = gl.create_and_link_program(shader_ids[:]) or_return
+    return true
+}
+
+// Compiles and links shaders in program
+transfer_shader_program_raw :: proc(program: ^resource.RawShaderProgram) -> (ok: bool) {
+    if program.id != nil do return true
+
+    dbg.log(dbg.LogLevel.INFO, "Transferring shader program")
+
+    shader_ids := make([dynamic]u32, len(program.shaders))
+    defer delete(shader_ids)
+
+    i := 0
+    for _, shader in program.shaders {
+        shader.id = compile_shader(shader) or_return
+        shader_ids[i] = shader.id
         i += 1
     }
 
@@ -485,4 +573,84 @@ set_polygon_mode :: proc(mode: PolygonMode) {
 
 set_default_polygon_mode :: proc() {
     gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL)
+}
+
+
+// Framebuffers
+
+gen_framebuffer :: proc() -> (id: u32) {
+    gl.GenFramebuffers(1, &id)
+    return
+}
+
+@(private)
+bind_framebuffer_raw :: proc(fbo: u32) {
+    gl.BindFramebuffer(gl.FRAMEBUFFER, fbo)
+}
+
+bind_framebuffer :: proc(frame_buffer: FrameBuffer, loc := #caller_location) -> (ok: bool) {
+    gl.BindFramebuffer(gl.FRAMEBUFFER, utils.unwrap_maybe(frame_buffer.id, loc) or_return)
+    return true
+}
+
+bind_default_framebuffer :: proc() {
+    gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
+}
+
+release_framebuffer :: proc(frame_buffer: FrameBuffer, loc := #caller_location) -> (ok: bool) {
+    gl.DeleteFramebuffers(1, utils.unwrap_maybe_ptr(frame_buffer.id, loc) or_return)
+    return true
+}
+
+check_framebuffer_status :: proc(framebuffer: FrameBuffer, log := true, loc := #caller_location) -> (ok: bool) {
+    ok = gl.CheckFramebufferStatus(utils.unwrap_maybe(framebuffer.id, loc=loc) or_return) == gl.FRAMEBUFFER_COMPLETE
+    if !ok && log do dbg.log(.ERROR, "Framebuffer status is invalid/incomplete")
+    return
+}
+
+gen_renderbuffer :: proc() -> (id: u32) {
+    gl.GenRenderbuffers(1, &id)
+    return
+}
+
+bind_renderbuffer :: proc(render_buffer: RenderBuffer, loc := #caller_location) -> (ok: bool) {
+    gl.BindRenderbuffer(gl.RENDERBUFFER, utils.unwrap_maybe(render_buffer.id, loc) or_return)
+    return true
+}
+
+make_renderbuffer :: proc(w, h: i32, internal_format: u32 = gl.RGBA) -> (render_buffer: RenderBuffer) {
+    render_buffer.id = gen_renderbuffer()
+    bind_renderbuffer(render_buffer)
+    gl.RenderbufferStorage(gl.RENDERBUFFER, internal_format, w, h)
+    return
+}
+
+bind_texture_to_frame_buffer :: proc(
+    frame_buffer: FrameBuffer,
+    texture: resource.Texture,
+    type: AttachmentType,
+    cube_face: u32 = 0,
+    attachment_loc: u32 = 0,
+    mip_level: i32 = 0,
+    loc := #caller_location
+) -> (ok: bool) {
+    tid := utils.unwrap_maybe(texture.gpu_texture, loc) or_return
+    bind_framebuffer(frame_buffer)
+
+    gl_attachment_id: u32 = 0
+    switch type {
+        case .COLOUR: gl_attachment_id = gl.COLOR_ATTACHMENT0 + attachment_loc
+        case .DEPTH: gl_attachment_id = gl.DEPTH_ATTACHMENT
+        case .STENCIL: gl_attachment_id = gl.STENCIL_ATTACHMENT
+        case .DEPTH_STENCIL: gl_attachment_id = gl.DEPTH_STENCIL_ATTACHMENT
+    }
+
+    if texture.type == .CUBEMAP {
+        gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl_attachment_id, gl.TEXTURE_CUBE_MAP_POSITIVE_X + cube_face, tid, mip_level)
+    }
+    else {
+        gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl_attachment_id, conv_texture_type(texture.type), tid, mip_level)
+    }
+
+    return true
 }
