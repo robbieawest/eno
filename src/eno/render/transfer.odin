@@ -423,25 +423,6 @@ transfer_shader_program :: proc(manager: ^resource.ResourceManager, program: ^re
     return true
 }
 
-// Compiles and links shaders in program
-transfer_shader_program_raw :: proc(program: ^resource.RawShaderProgram) -> (ok: bool) {
-    if program.id != nil do return true
-
-    dbg.log(dbg.LogLevel.INFO, "Transferring shader program")
-
-    shader_ids := make([dynamic]u32, len(program.shaders))
-    defer delete(shader_ids)
-
-    i := 0
-    for _, shader in program.shaders {
-        shader.id = compile_shader(shader) or_return
-        shader_ids[i] = shader.id
-        i += 1
-    }
-
-    program.id = gl.create_and_link_program(shader_ids[:]) or_return
-    return true
-}
 
 compile_shader :: proc(shader: ^resource.Shader) -> (id: u32, ok: bool) {
     if shader.id != nil do return shader.id.?, true
@@ -464,7 +445,7 @@ compile_shader :: proc(shader: ^resource.Shader) -> (id: u32, ok: bool) {
 }
 
 
-attach_program :: proc(program: resource.ShaderProgram, loc := #caller_location) {
+attach_program :: proc(program: resource.ShaderProgram, loc := #caller_location) -> (ok: bool) {
     if program_id, id_ok := utils.unwrap_maybe(program.id); !id_ok {
         dbg.log(dbg.LogLevel.INFO, "Shader program not yet created")
         return
@@ -472,6 +453,7 @@ attach_program :: proc(program: resource.ShaderProgram, loc := #caller_location)
     else{
         gl.UseProgram(program_id)
     }
+    return true
 }
 
 
@@ -625,8 +607,9 @@ make_renderbuffer :: proc(w, h: i32, internal_format: u32 = gl.RGBA) -> (render_
     return
 }
 
+// Assumes bound fbo
 bind_texture_to_frame_buffer :: proc(
-    frame_buffer: FrameBuffer,
+    fbo: u32,
     texture: resource.Texture,
     type: AttachmentType,
     cube_face: u32 = 0,
@@ -635,7 +618,6 @@ bind_texture_to_frame_buffer :: proc(
     loc := #caller_location
 ) -> (ok: bool) {
     tid := utils.unwrap_maybe(texture.gpu_texture, loc) or_return
-    bind_framebuffer(frame_buffer)
 
     gl_attachment_id: u32 = 0
     switch type {
@@ -653,4 +635,30 @@ bind_texture_to_frame_buffer :: proc(
     }
 
     return true
+}
+
+
+set_render_viewport :: proc(x_start, y_start, w, h: i32) {
+    gl.Viewport(x_start, y_start, w, h)
+}
+
+ClearProperty :: enum {
+    COLOUR_BIT,
+    DEPTH_BIT,
+    STENCIL_BIT
+}
+
+ClearMask :: bit_set[ClearProperty]
+clear_mask :: proc(mask: ClearMask) {
+    gl_mask: u32 = 0
+    for prop in mask {
+        gl_prop: u32
+        switch prop {
+            case .COLOUR_BIT: gl_prop = gl.COLOR_BUFFER_BIT
+            case .DEPTH_BIT: gl_prop = gl.DEPTH_BUFFER_BIT
+            case .STENCIL_BIT: gl_prop = gl.STENCIL_BUFFER_BIT
+        }
+        gl_mask |= gl_prop
+    }
+    gl.Clear(gl_mask)
 }

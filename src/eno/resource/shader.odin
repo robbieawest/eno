@@ -464,11 +464,6 @@ ShaderProgram :: struct {
     uniform_cache: ShaderUniformCache
 }
 
-RawShaderProgram :: struct {
-    id: ShaderIdentifier,
-    shaders: map[ShaderType]Shader,  // Although it is possible to add more than one shader of each type, adding support really doesn't mean anything
-    uniform_cache: ShaderUniformCache
-}
 
 init_shader_program :: proc(allocator := context.allocator) -> (program: ShaderProgram) {
     program.shaders = make(map[ShaderType]ResourceIdent, allocator=allocator)
@@ -485,24 +480,6 @@ make_shader_program:: proc(manager: ^ResourceManager, shaders: []Shader, allocat
     return
 }
 
-init_shader_program_raw :: proc(allocator := context.allocator) -> (program: RawShaderProgram) {
-    program.shaders = make(map[ShaderType]ResourceIdent, allocator=allocator)
-    program.uniform_cache = make(ShaderUniformCache, allocator=allocator)
-    return
-}
-
-// Does not copy incoming shaders
-make_shader_program_raw :: proc(shaders: []Shader, allocator := context.allocator) -> (program: RawShaderProgram, ok: bool) {
-    program.shaders = make(map[ShaderType]ResourceIdent, allocator=allocator)
-    program.uniform_cache = make(ShaderUniformCache, allocator=allocator)
-    for shader in shaders {
-        if shader.type in program.shaders {
-            dbg.log(.WARN, "Shader of existing type attempted to be added to program, ignoring")
-        } else do program.shaders[shader.type] = shader
-    }
-    ok = true
-    return
-}
 
 // Does not copy incoming shaders
 add_shaders_to_program :: proc(manager: ^ResourceManager, program: ^ShaderProgram, shaders: []Shader) -> (ok: bool) {

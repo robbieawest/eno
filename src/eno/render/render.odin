@@ -996,6 +996,8 @@ ibl_pre_render_pass :: proc(buffer: FrameBuffer, environment: ^ecs.ImageEnvironm
 
     transfer_texture(&environment.environment_tex) or_return
 
+    cube_vao := create_primitive_cube()
+
     if environment.irradiance_map == nil do environment.irradiance_map = create_ibl_irradiance_map(allocator) or_return
     check_framebuffer_status(buffer, loc=loc) or_return
 
@@ -1013,25 +1015,49 @@ ibl_pre_render_pass :: proc(buffer: FrameBuffer, environment: ^ecs.ImageEnvironm
 
 IRRADIANCE_MAP_FACE_WIDTH :: 32
 IRRADIANCE_MAP_FACE_HEIGHT :: 32
-create_ibl_irradiance_map :: proc(allocator := context.allocator) -> (irradiance: resource.Texture, ok: bool) {
+create_ibl_irradiance_map :: proc(
+    manager: ^resource.ResourceManager,
+    env_cubemap: GPUTexture,
+    project: matrix[4, 4]f32,
+    views: [6]matrix[4, 4]f32,
+    fbo: u32,
+    cube_vao: u32,
+    allocator := context.allocator
+) -> (irradiance: resource.Texture, ok: bool) {
     using irradiance
     name = strings.clone("IrradianceMap", allocator=allocator)
     properties = resource.default_texture_properties()
     gpu_texture = make_texture(IRRADIANCE_MAP_FACE_WIDTH, IRRADIANCE_MAP_FACE_WIDTH, nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties)
 
-    shader := get_ibl_irradiance_shader(allocator)
-    resource.set_uniform()
+    shader := get_ibl_irradiance_shader(manager, allocator)
+
+    // todo do environment map setup
+    resource.set_uniform(&shader, "environmentMap", 0)
+    resource.set_uniform(&shader, "projection", project)
+    bind_texture(0, env_cubemap) or_return
+
+    bind_framebuffer_raw(fbo)
+    for i in 0..<6 {
+        resource.set_uniform(&shader, "view", views[i])
+        bind_texture_to_frame_buffer(fbo, irradiance, .COLOUR, i, 0, 0)
+        clear_mask({ .COLOUR_BIT, .DEPTH_BIT })
+
+        render_primitive_cube(cube_vao)
+    }
 
     ok = true
     return
 }
 
 @(private)
-get_ibl_irradiance_shader :: proc(allocator := context.allocator) -> (shader: resource.RawShaderProgram, ok: bool) {
+get_ibl_irradiance_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (shader: resource.ShaderProgram, ok: bool) {
     vert := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "cubemap.vert")
     frag := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "irradiance.frag")
-    shader = resource.make_shader_program_raw([]resource.Shader{ vert, frag }, allocator) or_return
-    transfer_shader_program_raw(&shader) or_return
+    shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, allocator) or_return
+    transfer_shader_program(&shader) or_return
+    defer resource.destroy_shader_program(manager, shader)
+
+    attach_program(shader) or_return
 
     ok = true
     return
@@ -1055,4 +1081,71 @@ IBL_FRAMEBUFFER_HEIGHT :: 512
 
 make_ibl_framebuffer :: proc(allocator := context.allocator) -> (buffer: FrameBuffer) {
     return make_framebuffer(IBL_FRAMEBUFFER_WIDTH, IBL_FRAMEBUFFER_HEIGHT, allocator=allocator)
+}
+
+
+create_primitive_cube :: proc() -> (vao: u32) {
+    verts := [36 * 8]f32 {
+        -1.0, -1.0, -1.0,  0.0,  0.0, -1.0, 0.0, 0.0,
+        1.0,  1.0, -1.0,  0.0,  0.0, -1.0, 1.0, 1.0,
+        1.0, -1.0, -1.0,  0.0,  0.0, -1.0, 1.0, 0.0,
+        1.0,  1.0, -1.0,  0.0,  0.0, -1.0, 1.0, 1.0,
+        -1.0, -1.0, -1.0,  0.0,  0.0, -1.0, 0.0, 0.0,
+        -1.0,  1.0, -1.0,  0.0,  0.0, -1.0, 0.0, 1.0,
+        -1.0, -1.0,  1.0,  0.0,  0.0,  1.0, 0.0, 0.0,
+        1.0, -1.0,  1.0,  0.0,  0.0,  1.0, 1.0, 0.0,
+        1.0,  1.0,  1.0,  0.0,  0.0,  1.0, 1.0, 1.0,
+        1.0,  1.0,  1.0,  0.0,  0.0,  1.0, 1.0, 1.0,
+        -1.0,  1.0,  1.0,  0.0,  0.0,  1.0, 0.0, 1.0,
+        -1.0, -1.0,  1.0,  0.0,  0.0,  1.0, 0.0, 0.0,
+        -1.0,  1.0,  1.0, -1.0,  0.0,  0.0, 1.0, 0.0,
+        -1.0,  1.0, -1.0, -1.0,  0.0,  0.0, 1.0, 1.0,
+        -1.0, -1.0, -1.0, -1.0,  0.0,  0.0, 0.0, 1.0,
+        -1.0, -1.0, -1.0, -1.0,  0.0,  0.0, 0.0, 1.0,
+        -1.0, -1.0,  1.0, -1.0,  0.0,  0.0, 0.0, 0.0,
+        -1.0,  1.0,  1.0, -1.0,  0.0,  0.0, 1.0, 0.0,
+        1.0,  1.0,  1.0,  1.0,  0.0,  0.0, 1.0, 0.0,
+        1.0, -1.0, -1.0,  1.0,  0.0,  0.0, 0.0, 1.0,
+        1.0,  1.0, -1.0,  1.0,  0.0,  0.0, 1.0, 1.0,
+        1.0, -1.0, -1.0,  1.0,  0.0,  0.0, 0.0, 1.0,
+        1.0,  1.0,  1.0,  1.0,  0.0,  0.0, 1.0, 0.0,
+        1.0, -1.0,  1.0,  1.0,  0.0,  0.0, 0.0, 0.0,
+        -1.0, -1.0, -1.0,  0.0, -1.0,  0.0, 0.0, 1.0,
+        1.0, -1.0, -1.0,  0.0, -1.0,  0.0, 1.0, 1.0,
+        1.0, -1.0,  1.0,  0.0, -1.0,  0.0, 1.0, 0.0,
+        1.0, -1.0,  1.0,  0.0, -1.0,  0.0, 1.0, 0.0,
+        -1.0, -1.0,  1.0,  0.0, -1.0,  0.0, 0.0, 0.0,
+        -1.0, -1.0, -1.0,  0.0, -1.0,  0.0, 0.0, 1.0,
+        -1.0,  1.0, -1.0,  0.0,  1.0,  0.0, 0.0, 1.0,
+        1.0,  1.0 , 1.0,  0.0,  1.0,  0.0, 1.0, 0.0,
+        1.0,  1.0, -1.0,  0.0,  1.0,  0.0, 1.0, 1.0,
+        1.0,  1.0,  1.0,  0.0,  1.0,  0.0, 1.0, 0.0,
+        -1.0,  1.0, -1.0,  0.0,  1.0,  0.0, 0.0, 1.0,
+        -1.0,  1.0,  1.0,  0.0,  1.0,  0.0, 0.0, 0.0
+    }
+
+    gl.GenVertexArrays(1, &vao)
+    vbo: u32
+    gl.GenBuffers(1, &vbo)
+    gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
+    gl.BufferData(gl.ARRAY_BUFFER, size_of(verts), verts, gl.STATIC_DRAW)
+
+    gl.BindVertexArray(vao)
+    gl.EnableVertexAttribArray(0)
+    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 32, 0)
+    gl.EnableVertexAttribArray(1)
+    gl.VertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 32, 12)
+    gl.EnableVertexAttribArray(2)
+    gl.VertexAttribPointer(2, 2, gl.FLOAT, gl.FALSE, 32, 24)
+
+    gl.BindBuffer(gl.ARRAY_BUFFER, 0)
+    gl.BindVertexArray(0)
+}
+
+render_primitive_cube :: proc(vao: u32) {
+    gl.BindVertexArray(vao)
+
+    gl.DrawArrays(gl.TRIANGLES, 0, 36)
+
+    gl.BindVertexArray(0)
 }
