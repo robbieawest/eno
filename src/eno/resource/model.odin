@@ -515,7 +515,7 @@ load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: str
         }
 
         // Use URI
-        return load_image_from_uri(string(image.uri), gltf_file_location, allocator=allocator loc=loc)
+        return load_image_from_uri(string(image.uri), gltf_file_location, allocator=allocator, loc=loc)
     }
 
     // Use buffer
@@ -534,9 +534,9 @@ load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: str
 
 
 load_image_from_uri :: proc(uri: string, uri_base: string = "", flip_image := false, allocator := context.allocator, loc := #caller_location) -> (result: Image, ok: bool) {
-    file_utils.check_path(uri, loc=loc) or_return
 
     path := len(uri_base) == 0 ? strings.clone(uri, allocator=allocator) : utils.concat(uri_base, uri, allocator=allocator); defer delete(path)
+    file_utils.check_path(path, loc=loc) or_return
     path_cstr := strings.clone_to_cstring(path, allocator=allocator); defer delete(path_cstr)
 
     if flip_image do stbi.set_flip_vertically_on_load(1)

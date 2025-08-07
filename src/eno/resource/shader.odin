@@ -494,6 +494,7 @@ add_shaders_to_program :: proc(manager: ^ResourceManager, program: ^ShaderProgra
 destroy_shader_program :: proc(manager: ^ResourceManager, program: ShaderProgram) -> (ok: bool) {
     for _, shader in program.shaders do remove_shader(manager, shader) or_return
     delete(program.shaders)
+    delete(program.uniform_cache)
     return true
 }
 

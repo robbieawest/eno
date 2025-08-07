@@ -255,9 +255,10 @@ ImageEnvironment :: struct {
     brdf_lookup: Maybe(resource.Texture)
 }
 
+// Does not create cubemap
 make_image_environment :: proc(environment_map_uri: string, flip_map := true, allocator := context.allocator) -> (env: ImageEnvironment, ok: bool) {
     using env.environment_tex
-    name = strings.clone("EnvironmentMap", allocator=allocator)
+    name = strings.clone("EnvironmentTex", allocator=allocator)
     type = .TWO_DIM
     image = resource.load_image_from_uri(environment_map_uri, flip_image=flip_map, allocator=allocator) or_return
 

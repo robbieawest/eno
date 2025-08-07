@@ -225,21 +225,27 @@ make_texture_raw :: proc(
             gl.TexImage2D(gl.TEXTURE_2D, lod, internal_format, w, h, 0, format, type, data)
         case .CUBEMAP:
             for i in 0..<6 {
-                gl.TexImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X + i, lod, internal_format, w, h, 0, format, type, data)
+                gl.TexImage2D(u32(gl.TEXTURE_CUBE_MAP_POSITIVE_X + i), lod, internal_format, w, h, 0, format, type, data)
             }
+        case .THREE_DIM: dbg.log(.ERROR, "Texture type not supported")
     }
 
-    if texture_properties == {} {
+    if len(texture_properties) == 0 {
         gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
         gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
         gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
         gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
     }
-    else do set_texture_properties(texture_properties)
+    else do set_texture_properties(texture_type, texture_properties)
 
-    if generate_mipmap do gl.GenerateMipmap(conv_texture_type(texture_type))
+    if generate_mipmap do gen_mipmap(texture_type)
 
     return
+}
+
+// Assumes bound texture at target type
+gen_mipmap :: proc(texture_type: resource.TextureType) {
+    gl.GenerateMipmap(conv_texture_type(texture_type))
 }
 
 @(private)
@@ -263,7 +269,7 @@ conv_tex_property :: proc(property: resource.TextureProperty) -> u32 {
 }
 
 @(private)
-conv_tex_property_value :: proc(val: resource.TexturePropertyValue) -> u32 {
+conv_tex_property_value :: proc(val: resource.TexturePropertyValue) -> i32 {
     switch val {
         case .CLAMP_BORDER: return gl.CLAMP_TO_BORDER
         case .CLAMP_EDGE: return gl.CLAMP_TO_EDGE
@@ -285,7 +291,7 @@ release_texture :: proc(texture: ^GPUTexture) {
     if id, id_ok := texture.?; id_ok do gl.DeleteTextures(1, &id)
 }
 
-bind_texture :: proc(texture_unit: u32, texture: GPUTexture, loc := #caller_location) -> (ok: bool) {
+bind_texture :: proc(texture_unit: u32, texture: GPUTexture, texture_type := resource.TextureType.TWO_DIM, loc := #caller_location) -> (ok: bool) {
     if texture == nil {
         dbg.log(dbg.LogLevel.ERROR, "Texture to bind at unit %d is not transferred to gpu", texture_unit, loc=loc)
         return
@@ -296,8 +302,12 @@ bind_texture :: proc(texture_unit: u32, texture: GPUTexture, loc := #caller_loca
     }
 
     gl.ActiveTexture(u32(gl.TEXTURE0) + texture_unit)
-    gl.BindTexture(gl.TEXTURE_2D, texture.?)
+    bind_texture_raw(texture_type, texture.?)
     return true
+}
+
+bind_texture_raw :: proc(texture_type: resource.TextureType, tid: u32) {
+    gl.BindTexture(conv_texture_type(texture_type), tid)
 }
 
 
@@ -418,7 +428,7 @@ transfer_shader_program :: proc(manager: ^resource.ResourceManager, program: ^re
     for _, given_shader in program.shaders {
         shader := resource.get_shader(manager, given_shader) or_return
         shader.id = compile_shader(shader) or_return
-        shader_ids[i] = shader.id
+        shader_ids[i] = shader.id.?
         i += 1
     }
 
@@ -583,7 +593,8 @@ bind_default_framebuffer :: proc() {
 }
 
 release_framebuffer :: proc(frame_buffer: FrameBuffer, loc := #caller_location) -> (ok: bool) {
-    gl.DeleteFramebuffers(1, utils.unwrap_maybe_ptr(frame_buffer.id, loc) or_return)
+    frame_buffer := frame_buffer
+    gl.DeleteFramebuffers(1, utils.unwrap_maybe_ptr(&frame_buffer.id, loc) or_return)
     return true
 }
 
@@ -644,6 +655,28 @@ bind_texture_to_frame_buffer :: proc(
     else {
         gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl_attachment_id, conv_texture_type(texture.type), tid, mip_level)
     }
+
+    return true
+}
+
+bind_renderbuffer_to_frame_buffer :: proc(
+    fbo: u32,
+    render_buffer: RenderBuffer,
+    type: AttachmentType,
+    attachment_loc: u32 = 0,
+    loc := #caller_location
+) -> (ok: bool) {
+    fbo := utils.unwrap_maybe(render_buffer.id, loc) or_return
+
+    gl_attachment_id: u32 = 0
+    switch type {
+        case .COLOUR: gl_attachment_id = gl.COLOR_ATTACHMENT0 + attachment_loc
+        case .DEPTH: gl_attachment_id = gl.DEPTH_ATTACHMENT
+        case .STENCIL: gl_attachment_id = gl.STENCIL_ATTACHMENT
+        case .DEPTH_STENCIL: gl_attachment_id = gl.DEPTH_STENCIL_ATTACHMENT
+    }
+
+    gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl_attachment_id, gl.RENDERBUFFER, fbo)
 
     return true
 }
