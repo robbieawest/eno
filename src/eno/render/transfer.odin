@@ -210,7 +210,8 @@ make_texture_raw :: proc(
     format: u32 = gl.RGBA,
     type: u32 = gl.UNSIGNED_BYTE,
     texture_type: resource.TextureType = .TWO_DIM,
-    texture_properties: resource.TextureProperties = {}
+    texture_properties: resource.TextureProperties = {},
+    generate_mipmap := false
 ) -> (texture: GPUTexture) {
     dbg.log(.INFO, "Making new texture, w: %d, h: %d", w, h)
     id: u32
@@ -235,6 +236,8 @@ make_texture_raw :: proc(
         gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
     }
     else do set_texture_properties(texture_properties)
+
+    if generate_mipmap do gl.GenerateMipmap(conv_texture_type(texture_type))
 
     return
 }
@@ -600,10 +603,18 @@ bind_renderbuffer :: proc(render_buffer: RenderBuffer, loc := #caller_location) 
     return true
 }
 
+bind_renderbuffer_raw :: proc(rbo: u32) {
+    gl.BindRenderbuffer(gl.RENDERBUFFER, rbo)
+}
+
+set_render_buffer_storage :: proc(internal_format: u32 = gl.RGBA, w, h: i32) {
+    gl.RenderbufferStorage(gl.RENDERBUFFER, internal_format, w, h)
+}
+
 make_renderbuffer :: proc(w, h: i32, internal_format: u32 = gl.RGBA) -> (render_buffer: RenderBuffer) {
     render_buffer.id = gen_renderbuffer()
     bind_renderbuffer(render_buffer)
-    gl.RenderbufferStorage(gl.RENDERBUFFER, internal_format, w, h)
+    set_render_buffer_storage(internal_format, w, h)
     return
 }
 

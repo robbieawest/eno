@@ -10,6 +10,7 @@ import "../standards"
 import lutils "../utils/linalg_utils"
 import cam "../camera"
 
+import "core:math"
 import "core:slice"
 import "core:strings"
 import "core:fmt"
@@ -1026,8 +1027,11 @@ create_ibl_irradiance_map :: proc(
 ) -> (irradiance: resource.Texture, ok: bool) {
     using irradiance
     name = strings.clone("IrradianceMap", allocator=allocator)
+
     properties = resource.default_texture_properties()
-    gpu_texture = make_texture(IRRADIANCE_MAP_FACE_WIDTH, IRRADIANCE_MAP_FACE_WIDTH, nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties)
+    defer delete(properties)
+
+    gpu_texture = make_texture(IRRADIANCE_MAP_FACE_WIDTH, IRRADIANCE_MAP_FACE_WIDTH, nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties, false)
 
     shader := get_ibl_irradiance_shader(manager, allocator)
 
@@ -1052,7 +1056,7 @@ create_ibl_irradiance_map :: proc(
 @(private)
 get_ibl_irradiance_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (shader: resource.ShaderProgram, ok: bool) {
     vert := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "cubemap.vert")
-    frag := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "irradiance.frag")
+    frag := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "ibl_irradiance.frag")
     shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, allocator) or_return
     transfer_shader_program(&shader) or_return
     defer resource.destroy_shader_program(manager, shader)
@@ -1063,17 +1067,125 @@ get_ibl_irradiance_shader :: proc(manager: ^resource.ResourceManager, allocator 
     return
 }
 
-create_ibl_prefilter_map :: proc() -> (prefilter: resource.Texture, ok: bool) {
+PREFILTER_MAP_FACE_WIDTH :: 128
+PREFILTER_MAP_FACE_HEIGHT :: 128
+create_ibl_prefilter_map :: proc(
+    manager: ^resource.ResourceManager,
+    env_cubemap: GPUTexture,
+    project: matrix[4, 4]f32,
+    views: [6]matrix[4, 4]f32,
+    fbo: u32,
+    rbo: u32,
+    cube_vao: u32,
+    allocator := context.allocator
+) -> (prefilter: resource.Texture, ok: bool) {
+    using prefilter
+    name = strings.clone("PrefilterMap", allocator=allocator)
+
+    properties = resource.default_texture_properties()
+    properties[.MIN_FILTER] = .LINEAR_MIPMAP_LINEAR
+    defer delete(properties)
+
+    gpu_texture = make_texture(PREFILTER_MAP_FACE_WIDTH, PREFILTER_MAP_FACE_HEIGHT, nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties, true)
+
+    shader := get_ibl_prefilter_shader(manager, allocator)
+
+    // todo do environment map setup
+    resource.set_uniform(&shader, "environmentMap", 0)
+    resource.set_uniform(&shader, "projection", project)
+    bind_texture(0, env_cubemap) or_return
+
+    bind_framebuffer_raw(fbo)
+    mipLevels :: 5
+    for mip in 0..<mipLevels {
+
+        mip_width := PREFILTER_MAP_FACE_WIDTH * math.pow(mip, 0.5)
+        mip_height := PREFILTER_MAP_FACE_HEIGHT * math.pow(mip, 0.5)
+
+        bind_renderbuffer_raw(rbo)
+        set_render_buffer_storage(gl.DEPTH_COMPONENT24, mip_width, mip_height)
+
+        roughness: f32 = f32(mip) / f32(mipLevels - 1)
+        resource.set_uniform(&shader, "roughness", roughness)
+
+        for i in 0..<6 {
+            resource.set_uniform(&shader, "view", views[i])
+            bind_texture_to_frame_buffer(fbo, prefilter, .COLOUR, i, 0, mip)
+            clear_mask({ .COLOUR_BIT, .DEPTH_BIT })
+
+            render_primitive_cube(cube_vao)
+        }
+    }
 
     ok = true
     return
 }
 
-create_ibl_brdf_lookup :: proc() -> (brdf_lut: resource.Texture, ok: bool) {
+@(private)
+get_ibl_prefilter_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (shader: resource.ShaderProgram, ok: bool) {
+    vert := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "cubemap.vert")
+    frag := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "ibl_prefilter.frag")
+    shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, allocator) or_return
+    transfer_shader_program(&shader) or_return
+    defer resource.destroy_shader_program(manager, shader)
+
+    attach_program(shader) or_return
 
     ok = true
     return
 }
+
+
+BRDF_LUT_FACE_WIDTH :: 512
+BRDF_LUT_FACE_HEIGHT :: 512
+create_ibl_brdf_lookup :: proc(
+    manager: ^resource.ResourceManager,
+    env_cubemap: GPUTexture,
+    project: matrix[4, 4]f32,
+    views: [6]matrix[4, 4]f32,
+    fbo: u32,
+    rbo: u32,
+    cube_vao: u32,
+    allocator := context.allocator
+) -> (brdf_lut: resource.Texture, ok: bool) {
+    using brdf_lut
+    name = strings.clone("BrdfLUT", allocator=allocator)
+    gpu_texture = make_texture(BRDF_LUT_FACE_WIDTH, BRDF_LUT_FACE_HEIGHT, nil, gl.RGB16F, 0, gl.RG, gl.FLOAT, resource.TextureType.TWO_DIM, {}, false)
+
+    shader := get_ibl_brdf_lut_shader(manager, allocator)
+
+    // todo do environment map setup
+    bind_texture(0, env_cubemap) or_return
+
+    bind_framebuffer_raw(fbo)
+    bind_renderbuffer_raw(rbo)
+    set_render_buffer_storage(gl.DEPTH_COMPONENT24, BRDF_LUT_FACE_WIDTH, BRDF_LUT_FACE_HEIGHT)
+
+    bind_texture_to_frame_buffer(fbo, brdf_lut, .COLOUR)
+    clear_mask({ .COLOUR_BIT, .DEPTH_BIT })
+
+    set_render_viewport(0, 0, BRDF_LUT_FACE_WIDTH, BRDF_LUT_FACE_HEIGHT)
+
+    render_primitive_cube(cube_vao)
+
+    ok = true
+    return
+}
+
+@(private)
+get_ibl_brdf_lut_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (shader: resource.ShaderProgram, ok: bool) {
+    vert := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "cubemap.vert")
+    frag := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "ibl_brdf.frag")
+    shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, allocator) or_return
+    transfer_shader_program(&shader) or_return
+    defer resource.destroy_shader_program(manager, shader)
+
+    attach_program(shader) or_return
+
+    ok = true
+    return
+}
+
 
 
 IBL_FRAMEBUFFER_WIDTH :: 512
