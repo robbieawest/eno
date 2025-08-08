@@ -98,7 +98,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
         // Group geometry by shaders
         shader_map := group_meshes_by_shader(pipeline.shader_store, &pass, mesh_data^, temp_allocator) or_return
 
-        handle_pass_properties(pipeline, pass)
+        handle_pass_properties(pipeline, pass) or_return
 
         // render meshes
         for shader_pass_id, &mesh_datas  in shader_map {
@@ -195,10 +195,25 @@ group_meshes_by_shader :: proc(
 
 // Handles binding of framebuffer along with enabling of certain settings/tests
 @(private)
-handle_pass_properties :: proc(pipeline: RenderPipeline, pass: RenderPass) {
+handle_pass_properties :: proc(pipeline: RenderPipeline, pass: RenderPass) -> (ok: bool) {
     if pass.frame_buffer == nil {
         bind_default_framebuffer()
-    } else do bind_framebuffer(pipeline.frame_buffers[pass.frame_buffer.?])
+        if pass.properties.viewport == nil {
+            dbg.log(.ERROR, "Viewport must be set if not specifying a framebuffer")
+            return
+        }
+        viewport := pass.properties.viewport.?
+        set_render_viewport(viewport[0], viewport[1], viewport[2], viewport[3])
+    }
+    else {
+        frame_buffer := utils.safe_index(pipeline.frame_buffers, pass.frame_buffer.?) or_return
+        bind_framebuffer(frame_buffer^) or_return
+        if pass.properties.viewport != nil {
+            viewport := pass.properties.viewport.?
+            set_render_viewport(viewport[0], viewport[1], viewport[2], viewport[3])
+        }
+        else do set_render_viewport(0, 0, frame_buffer.w, frame_buffer.h)
+    }
 
     properties := pass.properties
     set_front_face(properties.front_face)
@@ -230,6 +245,7 @@ handle_pass_properties :: proc(pipeline: RenderPipeline, pass: RenderPass) {
         set_polygon_mode(properties.polygon_mode.?)
     } else do set_default_polygon_mode()
 
+    return true
 }
 
 

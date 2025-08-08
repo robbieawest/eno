@@ -81,7 +81,7 @@ swap_window_bufs :: proc(target: WindowTarget) -> (ok: bool) {
 
 
 WindowResolution :: struct {
-    w: u32, h: u32
+    w: i32, h: i32
 }
 
 get_window_resolution :: proc(window_target: WindowTarget) -> (res: WindowResolution, ok: bool) #optional_ok {
@@ -95,9 +95,15 @@ get_window_resolution :: proc(window_target: WindowTarget) -> (res: WindowResolu
             dbg.log(.ERROR, "Failed to get fullscreen resolution, SDL error: %s", last_sdl_err)
             return
         }
-        res = WindowResolution { u32(x), u32(y) }
+
+        res.w = x
+        res.h = y
     }
     else {
+
+        x, y: c.int
+        SDL.GetWindowSize(window_target, &x, &y)
+        /*
         display_mode: SDL.DisplayMode
         sdl_err := SDL.GetDesktopDisplayMode(0, &display_mode)
         if sdl_err != 0 {
@@ -106,7 +112,10 @@ get_window_resolution :: proc(window_target: WindowTarget) -> (res: WindowResolu
             return
         }
 
-        res = WindowResolution { u32(display_mode.w), u32(display_mode.h) }
+        res = WindowResolution { i32(display_mode.w), i32(display_mode.h) }
+        */
+        res.w = x
+        res.h = y
     }
 
     ok = true

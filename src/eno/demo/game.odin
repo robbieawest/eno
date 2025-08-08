@@ -57,12 +57,14 @@ before_frame :: proc() -> (ok: bool) {
     }
 
     game_data.render_pipeline = render.init_render_pipeline(1, 1, frame_buffers)
+
+    window_res := win.get_window_resolution(game.Game.window) or_return
     game_data.render_pipeline.passes[0] = render.make_render_pass(
         game_data.render_pipeline,
         nil,
         render.RenderPassQuery{},
         render.RenderPassShaderGenerate.LIGHTING,
-        render.RenderPassProperties{ geometry_z_sorting = .ASC, face_culling = render.Face.BACK }
+        render.RenderPassProperties{ geometry_z_sorting = .ASC, face_culling = render.Face.BACK, viewport = [4]i32{ 0, 0, window_res.w, window_res.h } }
     ) or_return
 
     game_data.render_pipeline.pre_passes[0] = render.make_pre_render_pass(

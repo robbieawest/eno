@@ -156,6 +156,7 @@ RenderPassProperties :: struct {
     face_culling: Maybe(Face),
     disable_depth_test: bool,
     stencil_test: bool,
+    viewport: Maybe([4]i32)
 }
 
 
