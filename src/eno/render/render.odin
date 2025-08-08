@@ -1013,6 +1013,8 @@ ibl_pre_render_pass :: proc(
     rbo := utils.unwrap_maybe(depth_rbo.id) or_return
 
     bind_renderbuffer_to_frame_buffer(fbo, depth_rbo, .DEPTH)
+    check_framebuffer_status(buffer, loc=loc) or_return
+    dbg.log(.INFO, "Bound renderbuffer to frame buffer")
 
     project := glm.mat4Perspective(glm.radians_f32(90), 1, 0.1, 10)
     views := [6]matrix[4, 4]f32 {
@@ -1026,6 +1028,7 @@ ibl_pre_render_pass :: proc(
 
     if environment.environment_map == nil do environment.environment_map = create_environment_map(manager, environment.environment_tex, project, views, fbo, cube_vao, allocator=allocator) or_return
     check_framebuffer_status(buffer, loc=loc) or_return
+    dbg.log(.INFO, "Successfully created ibl environment map")
 
     env_map := environment.environment_map.?
     env_cubemap := env_map.gpu_texture
@@ -1036,10 +1039,12 @@ ibl_pre_render_pass :: proc(
         project,
         views,
         fbo,
+        rbo,
         cube_vao,
         allocator
     ) or_return
     check_framebuffer_status(buffer, loc=loc) or_return
+    dbg.log(.INFO, "Successfully created ibl irradiance map")
 
     if environment.prefilter_map == nil do environment.prefilter_map = create_ibl_prefilter_map(
         manager,
@@ -1052,6 +1057,7 @@ ibl_pre_render_pass :: proc(
         allocator
     ) or_return
     check_framebuffer_status(buffer, loc=loc) or_return
+    dbg.log(.INFO, "Successfully created ibl prefilter map")
 
     if environment.brdf_lookup == nil do environment.brdf_lookup = create_ibl_brdf_lookup(
         manager,
@@ -1064,6 +1070,7 @@ ibl_pre_render_pass :: proc(
         allocator
     ) or_return
     check_framebuffer_status(buffer, loc=loc) or_return
+    dbg.log(.INFO, "Successfully created ibl brdf lookup table")
 
 
 
@@ -1090,11 +1097,12 @@ create_environment_map :: proc(
     defer delete(properties)
 
     gpu_texture = make_texture(w,h , nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties, false)
+    type = .CUBEMAP
 
     shader := get_environment_map_shader(manager, allocator) or_return
     defer resource.destroy_shader_program(manager, shader)
 
-    resource.set_uniform(&shader, "environmentTex", u32(0))
+    resource.set_uniform(&shader, "environmentTex", i32(0))
     resource.set_uniform(&shader, "m_Project", project)
     bind_texture(0, environment_tex.gpu_texture) or_return
 
@@ -1137,6 +1145,7 @@ create_ibl_irradiance_map :: proc(
     project: matrix[4, 4]f32,
     views: [6]matrix[4, 4]f32,
     fbo: u32,
+    rbo: u32,
     cube_vao: u32,
     allocator := context.allocator
 ) -> (irradiance: resource.Texture, ok: bool) {
@@ -1147,11 +1156,16 @@ create_ibl_irradiance_map :: proc(
     defer delete(properties)
 
     gpu_texture = make_texture(IRRADIANCE_MAP_FACE_WIDTH, IRRADIANCE_MAP_FACE_WIDTH, nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties, false)
+    type = .CUBEMAP
+
+    bind_framebuffer_raw(fbo)
+    bind_renderbuffer_raw(rbo)
+    set_render_buffer_storage(gl.DEPTH_COMPONENT24, IBL_FRAMEBUFFER_WIDTH, IBL_FRAMEBUFFER_HEIGHT)
 
     shader := get_ibl_irradiance_shader(manager, allocator) or_return
     defer resource.destroy_shader_program(manager, shader)
 
-    resource.set_uniform(&shader, "environmentMap", u32(0))
+    resource.set_uniform(&shader, "environmentMap", i32(0))
     resource.set_uniform(&shader, "m_Project", project)
     bind_texture(0, env_cubemap, .CUBEMAP) or_return
 
@@ -1201,34 +1215,42 @@ create_ibl_prefilter_map :: proc(
     defer delete(properties)
 
     gpu_texture = make_texture(PREFILTER_MAP_FACE_WIDTH, PREFILTER_MAP_FACE_HEIGHT, nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties, true)
+    type = .CUBEMAP
 
     shader := get_ibl_prefilter_shader(manager, allocator) or_return
     defer resource.destroy_shader_program(manager, shader)
 
-    resource.set_uniform(&shader, "environmentMap", u32(0))
+    resource.set_uniform(&shader, "environmentMap", i32(0))
     resource.set_uniform(&shader, "m_Project", project)
     bind_texture(0, env_cubemap, .CUBEMAP) or_return
 
     bind_framebuffer_raw(fbo)
-    mipLevels :: 5
-    for mip in 0..<mipLevels {
+    MIP_LEVELS :: 5
+    for mip in 0..<MIP_LEVELS {
 
-        mip_width := PREFILTER_MAP_FACE_WIDTH * i32(math.pow(f32(mip), 0.5))
-        mip_height := PREFILTER_MAP_FACE_HEIGHT * i32(math.pow(f32(mip), 0.5))
+        mip_width := i32(PREFILTER_MAP_FACE_WIDTH * math.pow(0.5, f32(mip)))
+        mip_height := i32(PREFILTER_MAP_FACE_HEIGHT * math.pow(0.5, f32(mip)))
 
         bind_renderbuffer_raw(rbo)
         set_render_buffer_storage(gl.DEPTH_COMPONENT24, mip_width, mip_height)
+        check_framebuffer_status_raw() or_return
 
-        roughness: f32 = f32(mip) / f32(mipLevels - 1)
+        set_render_viewport(0, 0, mip_width, mip_height)
+
+        roughness: f32 = f32(mip) / f32(MIP_LEVELS - 1)
         resource.set_uniform(&shader, "roughness", roughness)
 
         for i in 0..<6 {
             resource.set_uniform(&shader, "m_View", views[i])
             bind_texture_to_frame_buffer(fbo, prefilter, .COLOUR, u32(i), 0, i32(mip))
+            check_framebuffer_status_raw() or_return
+
             clear_mask({ .COLOUR_BIT, .DEPTH_BIT })
 
             render_primitive_cube(cube_vao)
         }
+
+        check_framebuffer_status_raw() or_return
     }
 
     ok = true
@@ -1262,6 +1284,7 @@ create_ibl_brdf_lookup :: proc(
     using brdf_lut
     name = strings.clone("BrdfLUT", allocator=allocator)
     gpu_texture = make_texture(IBL_FRAMEBUFFER_WIDTH, IBL_FRAMEBUFFER_HEIGHT, nil, gl.RGB16F, 0, gl.RG, gl.FLOAT, resource.TextureType.TWO_DIM, resource.TextureProperties{}, false)
+    type = .TWO_DIM
 
     shader := get_ibl_brdf_lut_shader(manager, allocator) or_return
     defer resource.destroy_shader_program(manager, shader)
@@ -1370,6 +1393,7 @@ create_primitive_cube :: proc() -> (comp: resource.GLComponent) {
 }
 
 render_primitive_cube :: proc(vao: u32) {
+    dbg.log()
     gl.BindVertexArray(vao)
 
     gl.DrawArrays(gl.TRIANGLES, 0, 36)

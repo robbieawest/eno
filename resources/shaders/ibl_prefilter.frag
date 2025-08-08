@@ -60,7 +60,7 @@ vec3 ImportanceSampleGGX(vec2 Xi, vec3 N, float roughness) {
 }
 
 void main() {
-    vec3 N = normalize(WorldPos);
+    vec3 N = normalize(position);
     vec3 R = N;
     vec3 V = R;
 
@@ -93,5 +93,5 @@ void main() {
 
     prefilteredColor = prefilteredColor / totalWeight;
 
-    FragColor = vec4(prefilteredColor, 1.0);
+    Colour = vec4(prefilteredColor, 1.0);
 }

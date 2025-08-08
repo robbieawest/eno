@@ -223,7 +223,7 @@ make_texture_raw :: proc(
     gl.GenTextures(1, &id)
     texture = id
 
-    gl.BindTexture(gl.TEXTURE_2D, id)
+    bind_texture_raw(texture_type, id)
 
     switch texture_type {
         case .TWO_DIM:
@@ -605,9 +605,12 @@ release_framebuffer :: proc(frame_buffer: FrameBuffer, loc := #caller_location) 
 
 check_framebuffer_status :: proc(framebuffer: FrameBuffer, log := true, loc := #caller_location) -> (ok: bool) {
     bind_framebuffer(framebuffer) or_return
+    return check_framebuffer_status_raw(log, loc)
+}
+
+check_framebuffer_status_raw :: proc(log := true, loc := #caller_location) -> (ok: bool) {
     ok = gl.CheckFramebufferStatus(gl.FRAMEBUFFER) == gl.FRAMEBUFFER_COMPLETE
     if !ok && log do dbg.log(.ERROR, "Framebuffer status is invalid/incomplete")
-    else do dbg.log(.INFO, "Framebuffer status complete")
     return
 }
 
@@ -646,6 +649,7 @@ bind_texture_to_frame_buffer :: proc(
     mip_level: i32 = 0,
     loc := #caller_location
 ) -> (ok: bool) {
+    dbg.log()
     tid := utils.unwrap_maybe(texture.gpu_texture, loc) or_return
 
     gl_attachment_id: u32 = 0
@@ -673,7 +677,8 @@ bind_renderbuffer_to_frame_buffer :: proc(
     attachment_loc: u32 = 0,
     loc := #caller_location
 ) -> (ok: bool) {
-    fbo := utils.unwrap_maybe(render_buffer.id, loc) or_return
+    rbo := utils.unwrap_maybe(render_buffer.id, loc) or_return
+    bind_framebuffer_raw(fbo)
 
     gl_attachment_id: u32 = 0
     switch type {
@@ -683,7 +688,7 @@ bind_renderbuffer_to_frame_buffer :: proc(
         case .DEPTH_STENCIL: gl_attachment_id = gl.DEPTH_STENCIL_ATTACHMENT
     }
 
-    gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl_attachment_id, gl.RENDERBUFFER, fbo)
+    gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl_attachment_id, gl.RENDERBUFFER, rbo)
 
     return true
 }
