@@ -50,14 +50,27 @@ before_frame :: proc() -> (ok: bool) {
 
     ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
 
-
     game_data := new(GameData)
-    game_data.render_pipeline = render.init_render_pipeline(n_render_passes=1)
-    game_data.render_pipeline.passes[0] = render.RenderPass{
-        mesh_gather = render.RenderPassQuery{},
-        shader_gather = render.RenderPassShaderGenerate.LIGHTING,
-        properties = render.RenderPassProperties{ geometry_z_sorting = .ASC, face_culling = render.Face.BACK }
+
+    frame_buffers := []render.FrameBuffer {
+        render.make_ibl_framebuffer()
     }
+
+    game_data.render_pipeline = render.init_render_pipeline(1, 1, frame_buffers)
+    game_data.render_pipeline.passes[0] = render.make_render_pass(
+        game_data.render_pipeline,
+        nil,
+        render.RenderPassQuery{},
+        render.RenderPassShaderGenerate.LIGHTING,
+        render.RenderPassProperties{ geometry_z_sorting = .ASC, face_culling = render.Face.BACK }
+    ) or_return
+
+    game_data.render_pipeline.pre_passes[0] = render.make_pre_render_pass(
+        game_data.render_pipeline,
+        render.IBLInput{},
+        0
+    ) or_return
+
     game.Game.game_data = game_data
 
     // Camera
@@ -98,6 +111,9 @@ before_frame :: proc() -> (ok: bool) {
 
     manager := &game.Game.resource_manager
     render.populate_all_shaders(&game_data.render_pipeline, manager, game.Game.scene) or_return
+
+    game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "newport_loft.hdr") or_return
+    render.pre_render(manager, game_data.render_pipeline, game.Game.scene) or_return
 
     return true
 }

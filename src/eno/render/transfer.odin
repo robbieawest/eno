@@ -12,10 +12,15 @@ import "base:runtime"
 
 
 release_mesh :: proc(mesh: resource.Mesh) {
-    mesh := mesh
-    gl.DeleteVertexArrays(1, &mesh.gl_component.vao.?)
-    gl.DeleteBuffers(1, &mesh.gl_component.vbo.?)
-    gl.DeleteBuffers(1, &mesh.gl_component.ebo.?)
+    release_gl_component(mesh.gl_component)
+}
+
+release_gl_component :: proc(comp: resource.GLComponent) {
+    comp := comp
+    using comp
+    if vao != nil do gl.DeleteVertexArrays(1, &vao.?)
+    if vbo != nil do gl.DeleteBuffers(1, &vbo.?)
+    if ebo != nil do gl.DeleteBuffers(1, &ebo.?)
 }
 
 release_model :: proc(model: resource.Model) {
@@ -599,8 +604,10 @@ release_framebuffer :: proc(frame_buffer: FrameBuffer, loc := #caller_location) 
 }
 
 check_framebuffer_status :: proc(framebuffer: FrameBuffer, log := true, loc := #caller_location) -> (ok: bool) {
-    ok = gl.CheckFramebufferStatus(utils.unwrap_maybe(framebuffer.id, loc=loc) or_return) == gl.FRAMEBUFFER_COMPLETE
+    bind_framebuffer(framebuffer) or_return
+    ok = gl.CheckFramebufferStatus(gl.FRAMEBUFFER) == gl.FRAMEBUFFER_COMPLETE
     if !ok && log do dbg.log(.ERROR, "Framebuffer status is invalid/incomplete")
+    else do dbg.log(.INFO, "Framebuffer status complete")
     return
 }
 

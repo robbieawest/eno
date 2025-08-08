@@ -24,16 +24,18 @@ RenderPipeline :: struct {
 init_render_pipeline :: proc{ init_render_pipeline_no_bufs, init_render_pipeline_bufs }
 
 // Default render pipeline has no passes
-init_render_pipeline_no_bufs :: proc(#any_int n_render_passes: int, allocator := context.allocator) -> (ret: RenderPipeline) {
+init_render_pipeline_no_bufs :: proc(#any_int n_render_passes: int, #any_int n_pre_passes: int, allocator := context.allocator) -> (ret: RenderPipeline) {
     ret.passes = make([]RenderPass, n_render_passes, allocator=allocator)
+    ret.pre_passes = make([]PreRenderPass, n_pre_passes, allocator=allocator)
     ret.shader_store = init_shader_store(allocator)
     return
 }
 
 // Default render pipeline has no passes
-init_render_pipeline_bufs :: proc(#any_int n_render_passes: int, buffers: []FrameBuffer, allocator := context.allocator) -> (ret: RenderPipeline) {
+init_render_pipeline_bufs :: proc(#any_int n_render_passes: int, #any_int n_pre_passes: int, buffers: []FrameBuffer, allocator := context.allocator) -> (ret: RenderPipeline) {
     ret.frame_buffers = slice.clone(buffers, allocator=allocator)
     ret.passes = make([]RenderPass, n_render_passes, allocator=allocator)
+    ret.pre_passes = make([]PreRenderPass, n_pre_passes, allocator=allocator)
     ret.shader_store = init_shader_store(allocator)
     return
 }
@@ -57,10 +59,14 @@ add_render_passes :: proc(pipeline: ^RenderPipeline, passes: ..RenderPass, alloc
 
 
 // Releases GPU memory
-destroy_pipeline :: proc(pipeline: ^RenderPipeline, manager: ^resource.ResourceManager) {
+destroy_pipeline :: proc(pipeline: ^RenderPipeline, manager: ^resource.ResourceManager, allocator := context.allocator) {
     for &fbo in pipeline.frame_buffers do destroy_framebuffer(&fbo)
-    delete(pipeline.frame_buffers)
-    delete(pipeline.passes)
+    delete(pipeline.frame_buffers, allocator=allocator)
+
+    for pre_pass in pipeline.pre_passes do destroy_pre_render_pass(pre_pass, allocator)
+    delete(pipeline.pre_passes, allocator=allocator)
+
+    delete(pipeline.passes, allocator=allocator)
     destroy_shader_store(manager, pipeline.shader_store)
 }
 
@@ -210,16 +216,29 @@ RenderPass :: struct {
 
 
 // Populate this when needed
-make_render_pass:: proc(n_frame_buffers: $N, frame_buffer: Maybe(FrameBufferID), mesh_gather: RenderPassMeshGather, properties: RenderPassProperties = {}) -> (pass: RenderPass, ok: bool) {
-    if frame_buffer != nil && frame_buffer.? >= n_frame_buffers {
+make_render_pass :: proc(
+    pipeline: RenderPipeline,
+    frame_buffer: Maybe(FrameBufferID),
+    mesh_gather: RenderPassMeshGather,
+    shader_gather: RenderPassShaderGather,
+    properties: RenderPassProperties = {}
+) -> (pass: RenderPass, ok: bool) {
+    if frame_buffer != nil && int(frame_buffer.?) >= len(pipeline.frame_buffers) {
         dbg.log(.ERROR, "Frame buffer points outside of the number of frame buffers")
         return
     }
     pass.frame_buffer = frame_buffer
     pass.mesh_gather = mesh_gather
+    pass.shader_gather = shader_gather
     pass.properties = properties
 
-    if !check_render_pass_gather(pass, 0, n_frame_buffers) {
+
+    if !check_render_pass_gather(&pass, 0, len(pipeline.frame_buffers)) {
+        dbg.log(.ERROR, "Render pass mesh gather must end in an ecs.SceneQuery")
+        return
+    }
+
+    if !check_shader_pass_gather(&pass, 0, len(pipeline.frame_buffers)) {
         dbg.log(.ERROR, "Render pass mesh gather must end in an ecs.SceneQuery")
         return
     }
@@ -234,6 +253,16 @@ check_render_pass_gather :: proc(pass: ^RenderPass, iteration_curr: int, iterati
     switch v in pass.mesh_gather {
         case RenderPassQuery: return true
         case ^RenderPass: return check_render_pass_gather(v, iteration_curr + 1, iteration_limit)
+    }
+    return // Impossible to reach but whatever
+}
+
+@(private)
+check_shader_pass_gather :: proc(pass: ^RenderPass, iteration_curr: int, iteration_limit: int) -> (ok: bool) {
+    if iteration_curr == iteration_limit do return false
+    switch v in pass.shader_gather{
+        case RenderPassShaderGenerate: return true
+        case ^RenderPass: return check_shader_pass_gather(v, iteration_curr + 1, iteration_limit)
     }
     return // Impossible to reach but whatever
 }
@@ -330,6 +359,10 @@ IBLInput :: struct {
 PreRenderPass :: struct {
     input: PreRenderPassInput,
     frame_buffers: []FrameBufferID
+}
+
+destroy_pre_render_pass :: proc(pre_pass: PreRenderPass, allocator := context.allocator) {
+    delete(pre_pass.frame_buffers, allocator=allocator)
 }
 
 make_pre_render_pass :: proc(

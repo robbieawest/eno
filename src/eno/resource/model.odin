@@ -117,6 +117,7 @@ Mesh :: struct {
     instance_to: Maybe(InstanceTo)  // Todo support EXT_mesh_gpu_instancing gltf extension for this
 }
 
+// Regrettable to have this in resource
 GLComponent :: struct {  // If I ever move to glMultiDrawElementsIndirect and grouping VAOs by vertex attribute permutations then this will change
     vao: VertexArrayObject,
     vbo: VertexBufferObject,
