@@ -296,7 +296,7 @@ release_texture :: proc(texture: ^GPUTexture) {
     if id, id_ok := texture.?; id_ok do gl.DeleteTextures(1, &id)
 }
 
-bind_texture :: proc(texture_unit: u32, texture: GPUTexture, texture_type := resource.TextureType.TWO_DIM, loc := #caller_location) -> (ok: bool) {
+bind_texture :: proc(#any_int texture_unit: u32, texture: GPUTexture, texture_type := resource.TextureType.TWO_DIM, loc := #caller_location) -> (ok: bool) {
     if texture == nil {
         dbg.log(dbg.LogLevel.ERROR, "Texture to bind at unit %d is not transferred to gpu", texture_unit, loc=loc)
         return
@@ -526,8 +526,8 @@ cull_geometry_faces :: proc(face: Face) {
 }
 
 set_face_culling :: proc(cull: bool) {
-    // if cull do gl.Enable(gl.CULL_FACE)
-    // else do gl.Disable(gl.CULL_FACE)
+    if cull do gl.Enable(gl.CULL_FACE)
+    else do gl.Disable(gl.CULL_FACE)
 }
 
 set_depth_test :: proc(test: bool) {

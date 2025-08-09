@@ -13,7 +13,6 @@ import cam "../camera"
 import "core:math"
 import "core:slice"
 import "core:strings"
-import "core:fmt"
 import "base:runtime"
 import glm "core:math/linalg/glsl"
 import "core:mem"
@@ -105,18 +104,8 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
 
             shader_pass := resource.get_shader_pass(manager, shader_pass_id) or_return
 
-            // Sanity checks
-            if shader_pass == nil {
-                dbg.log(.ERROR, "Shader pass does not exist for material id")
-                return
-            }
-
-            if shader_pass.id == nil {
-                dbg.log(.ERROR, "Shader pass is not yet compiled before render")
-                return
-            }
-
-            bind_program(shader_pass.id.?)
+            attach_program(shader_pass^)
+            tex_unit := bind_ibl_uniforms(scene, shader_pass) or_return
             update_camera_ubo(scene) or_return
             update_lights_ssbo(scene) or_return
 
@@ -124,7 +113,7 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
                 model_mat, normal_mat := model_and_normal(mesh_data.mesh, mesh_data.world, scene.viewpoint)
                 transfer_mesh(manager, mesh_data.mesh) or_return
 
-                bind_material_uniforms(manager, mesh_data.mesh.material, shader_pass) or_return
+                bind_material_uniforms(manager, mesh_data.mesh.material, shader_pass, tex_unit) or_return
                 resource.set_uniform(shader_pass, standards.MODEL_MAT, model_mat)
                 resource.set_uniform(shader_pass, standards.NORMAL_MAT, normal_mat)
 
@@ -135,6 +124,42 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
 
 
     return true
+}
+
+@(private)
+bind_ibl_uniforms :: proc(scene: ^ecs.Scene, shader: ^resource.ShaderProgram) -> (tex_unit: i32, ok: bool) {
+    m_env := scene.image_environment
+    if m_env == nil {
+        dbg.log(.ERROR, "Scene image environment for ibl not yet setup")
+        return
+    }
+
+    env := m_env.?
+    if env.environment_map == nil || env.brdf_lookup == nil || env.irradiance_map == nil || env.prefilter_map == nil {
+        dbg.log(.ERROR, "Not all IBL textures/cubemaps are available")
+        return
+    }
+    irradiance_map := env.irradiance_map.?
+    prefilter_map := env.prefilter_map.?
+    brdf_lut := env.brdf_lookup.?
+
+    // log.infof("%#v %#v %#v", irradiance_map, prefilter_map, brdf_lut)
+
+
+    bind_texture(tex_unit, irradiance_map.gpu_texture, irradiance_map.type) or_return
+    resource.set_uniform(shader, "irradianceMap", tex_unit)
+    tex_unit += 1
+
+    bind_texture(tex_unit, brdf_lut.gpu_texture, brdf_lut.type) or_return
+    resource.set_uniform(shader, "brdfLUT", tex_unit)
+    tex_unit += 1
+
+    bind_texture(tex_unit, prefilter_map.gpu_texture, prefilter_map.type) or_return
+    resource.set_uniform(shader, "prefilterMap", tex_unit)
+    tex_unit += 1
+
+    ok = true
+    return
 }
 
 @(private)
@@ -383,9 +408,9 @@ model_and_normal :: proc(mesh: ^resource.Mesh, world: ^standards.WorldComponent,
     Specifically used in respect to the lighting shader stored inside the material
 */
 @(private)
-bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material, lighting_shader: ^resource.ShaderProgram) -> (ok: bool) {
+bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material, lighting_shader: ^resource.ShaderProgram, curr_tex_unit: i32 = 0) -> (ok: bool) {
 
-    texture_unit: u32
+    texture_unit := curr_tex_unit
     infos: resource.MaterialPropertyInfos
     for info, property in material.properties {
         infos += { info }
@@ -404,12 +429,12 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
 
                 transfer_texture(base_colour)
                 bind_texture(texture_unit, base_colour.gpu_texture) or_return
-                resource.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, i32(texture_unit))
+                resource.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, texture_unit)
                 texture_unit += 1
 
                 transfer_texture(metallic_roughness)
                 bind_texture(texture_unit, metallic_roughness.gpu_texture) or_return
-                resource.set_uniform(lighting_shader, resource.PBR_METALLIC_ROUGHNESS, i32(texture_unit))
+                resource.set_uniform(lighting_shader, resource.PBR_METALLIC_ROUGHNESS, texture_unit)
                 texture_unit += 1
 
                 resource.set_uniform(lighting_shader, resource.BASE_COLOUR_FACTOR, v.base_colour_factor[0], v.base_colour_factor[1], v.base_colour_factor[2], v.base_colour_factor[3])
@@ -428,7 +453,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
 
                 transfer_texture(emissive_texture)
                 bind_texture(texture_unit, emissive_texture.gpu_texture.?) or_return
-                resource.set_uniform(lighting_shader, resource.EMISSIVE_TEXTURE, i32(texture_unit))
+                resource.set_uniform(lighting_shader, resource.EMISSIVE_TEXTURE, texture_unit)
                 texture_unit += 1
 
             case resource.OcclusionTexture:
@@ -440,7 +465,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
 
                 transfer_texture(occlusion_texture)
                 bind_texture(texture_unit, occlusion_texture.gpu_texture.?) or_return
-                resource.set_uniform(lighting_shader, resource.OCCLUSION_TEXTURE, i32(texture_unit))
+                resource.set_uniform(lighting_shader, resource.OCCLUSION_TEXTURE, texture_unit)
                 texture_unit += 1
 
             case resource.NormalTexture:
@@ -452,7 +477,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
 
                 transfer_texture(normal_texture)
                 bind_texture(texture_unit, normal_texture.gpu_texture.?) or_return
-                resource.set_uniform(lighting_shader, resource.NORMAL_TEXTURE, i32(texture_unit))
+                resource.set_uniform(lighting_shader, resource.NORMAL_TEXTURE, texture_unit)
                 texture_unit += 1
             case resource.BaseColourTexture:
                 base_colour, tex_ok := resource.get_texture(manager, resource.ResourceIdent(v))
@@ -463,7 +488,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
 
                 transfer_texture(base_colour)
                 bind_texture(texture_unit, base_colour.gpu_texture) or_return
-                resource.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, i32(texture_unit))
+                resource.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, texture_unit)
                 texture_unit += 1
         }
     }
@@ -1062,6 +1087,7 @@ ibl_pre_render_pass :: proc(
     check_framebuffer_status(buffer, loc=loc) or_return
     dbg.log(.INFO, "Successfully created ibl irradiance map")
 
+
     if environment.prefilter_map == nil do environment.prefilter_map = create_ibl_prefilter_map(
         manager,
         env_cubemap,
@@ -1077,18 +1103,14 @@ ibl_pre_render_pass :: proc(
 
     if environment.brdf_lookup == nil do environment.brdf_lookup = create_ibl_brdf_lookup(
         manager,
-        env_cubemap,
-        project,
-        views,
         fbo,
         rbo,
-        cube_vao,
         allocator
     ) or_return
     check_framebuffer_status(buffer, loc=loc) or_return
     dbg.log(.INFO, "Successfully created ibl brdf lookup table")
 
-
+    bind_default_framebuffer()
 
     ok = true
     return
@@ -1169,8 +1191,6 @@ create_ibl_irradiance_map :: proc(
     name = strings.clone("IrradianceMap", allocator=allocator)
 
     properties = resource.default_texture_properties()
-    defer delete(properties)
-
     gpu_texture = make_texture(IRRADIANCE_MAP_FACE_WIDTH, IRRADIANCE_MAP_FACE_WIDTH, nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties, false)
     type = .CUBEMAP
 
@@ -1228,8 +1248,6 @@ create_ibl_prefilter_map :: proc(
 
     properties = resource.default_texture_properties()
     properties[.MIN_FILTER] = .LINEAR_MIPMAP_LINEAR
-    defer delete(properties)
-
     gpu_texture = make_texture(PREFILTER_MAP_FACE_WIDTH, PREFILTER_MAP_FACE_HEIGHT, nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties, true)
     type = .CUBEMAP
 
@@ -1289,36 +1307,31 @@ get_ibl_prefilter_shader :: proc(manager: ^resource.ResourceManager, allocator :
 
 create_ibl_brdf_lookup :: proc(
     manager: ^resource.ResourceManager,
-    env_cubemap: GPUTexture,
-    project: matrix[4, 4]f32,
-    views: [6]matrix[4, 4]f32,
     fbo: u32,
     rbo: u32,
-    cube_vao: u32,
     allocator := context.allocator
 ) -> (brdf_lut: resource.Texture, ok: bool) {
     using brdf_lut
     name = strings.clone("BrdfLUT", allocator=allocator)
-    gpu_texture = make_texture(IBL_FRAMEBUFFER_WIDTH, IBL_FRAMEBUFFER_HEIGHT, nil, gl.RGB16F, 0, gl.RG, gl.FLOAT, resource.TextureType.TWO_DIM, resource.TextureProperties{}, false)
+    properties = resource.default_texture_properties(allocator)
+    gpu_texture = make_texture(IBL_FRAMEBUFFER_WIDTH, IBL_FRAMEBUFFER_HEIGHT, nil, gl.RG16F, 0, gl.RG, gl.FLOAT, resource.TextureType.TWO_DIM, properties, false)
     type = .TWO_DIM
 
     shader := get_ibl_brdf_lut_shader(manager, allocator) or_return
     defer resource.destroy_shader_program(manager, shader)
 
-    bind_texture(0, env_cubemap, .CUBEMAP) or_return
-
     bind_framebuffer_raw(fbo)
     bind_renderbuffer_raw(rbo)
     set_render_buffer_storage(gl.DEPTH_COMPONENT24, IBL_FRAMEBUFFER_WIDTH, IBL_FRAMEBUFFER_HEIGHT)
-
     bind_texture_to_frame_buffer(fbo, brdf_lut, .COLOUR)
-    clear_mask({ .COLOUR_BIT, .DEPTH_BIT })
 
     set_render_viewport(0, 0, IBL_FRAMEBUFFER_WIDTH, IBL_FRAMEBUFFER_HEIGHT)
+    clear_mask({ .COLOUR_BIT, .DEPTH_BIT })
 
     quad_comp := create_primitive_quad()
-    issue_single_element_draw_call(6)
     defer release_gl_component(quad_comp)
+
+    render_primitive_quad(quad_comp.vao.?)
 
     ok = true
     return
@@ -1336,7 +1349,6 @@ get_ibl_brdf_lut_shader :: proc(manager: ^resource.ResourceManager, allocator :=
     ok = true
     return
 }
-
 
 
 IBL_FRAMEBUFFER_WIDTH :: 512
@@ -1411,24 +1423,24 @@ create_primitive_cube :: proc() -> (comp: resource.GLComponent) {
 render_primitive_cube :: proc(vao: u32) {
     dbg.log()
     gl.BindVertexArray(vao)
-
     gl.DrawArrays(gl.TRIANGLES, 0, 36)
+    gl.BindVertexArray(0)
+}
 
+render_primitive_quad :: proc(vao: u32) {
+    dbg.log()
+    gl.BindVertexArray(vao)
+    gl.DrawArrays(gl.TRIANGLE_STRIP, 0, 4)
     gl.BindVertexArray(0)
 }
 
 
 create_primitive_quad :: proc() -> (comp: resource.GLComponent) {
     verts := [5 * 4]f32 {
-        -1, 1, 0,  0.0, 1.0,
-        1, 1, 0,  1.0, 1.0,
-        -1, -1, 0,  0.0, 0.0,
-        1, -1, 0,  1.0, 0.0
-    }
-
-    indices := [6]u32 {
-        0, 1, 2,
-        2, 1, 3
+        -1,  1, 0,  0, 1,
+         1,  1, 0,  1, 1,
+        -1, -1, 0,  0, 0,
+         1, -1, 0,  1, 0,
     }
 
     vao: u32
@@ -1446,12 +1458,6 @@ create_primitive_quad :: proc() -> (comp: resource.GLComponent) {
     gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 20, 0)
     gl.EnableVertexAttribArray(1)
     gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 20, 12)
-
-    ebo: u32
-    gl.GenBuffers(1, &ebo)
-    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
-    gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, size_of(indices), raw_data(&indices), gl.STATIC_DRAW)
-    comp.ebo = ebo
 
     return
 }

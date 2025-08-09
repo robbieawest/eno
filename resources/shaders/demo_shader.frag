@@ -79,6 +79,7 @@ in vec3 cameraPosition;  // Tangent space
 in mat3 TBN;
 out vec4 Colour;
 
+uniform sampler2D brdfLUT;
 uniform sampler2D baseColourTexture;
 uniform vec4 baseColourFactor;
 uniform sampler2D pbrMetallicRoughness;
@@ -87,6 +88,9 @@ uniform float roughnessFactor;
 uniform sampler2D occlusionTexture;
 uniform sampler2D normalTexture;
 uniform sampler2D emissiveTexture;
+
+uniform samplerCube irradianceMap;
+uniform samplerCube prefilterMap;
 
 float PI = 3.14159265358979323;
 
@@ -130,11 +134,14 @@ vec3 FresnelSchlick(vec3 V, vec3 H, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - max(dot(H, V), 0.0), 0.0, 1.0), 5.0);
 }
 
-vec3 calculateBRDF(vec3 N, vec3 V, vec3 L, vec3 H, vec3 albedo, float roughness, float metallic) {
+vec3 FresnelSchlickRoughness(vec3 V, vec3 H, vec3 F0, float roughness) {
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - max(dot(H, V), 0.0), 0.0, 1.0), 5.0);
+}
+
+vec3 calculateBRDF(vec3 N, vec3 V, vec3 L, vec3 H, vec3 albedo, float roughness, float metallic, vec3 F0) {
     float NDF = DistributionGGX(N, H, roughness);
     float G = GeomSmith(N, V, L, roughness);
-    vec3 fresnelIncidence = mix(vec3(0.04), albedo, metallic);
-    vec3 fresnel = FresnelSchlick(H, V, fresnelIncidence);
+    vec3 fresnel = FresnelSchlick(H, V, F0);
 
     // Cook-torrence
     vec3 num = NDF * G * fresnel;
@@ -162,6 +169,9 @@ void main() {
     vec3 viewDir = normalize(cameraPosition - position);
 
     vec3 normal = fragNormal;
+    vec3 R = reflect(-viewDir, normal);
+
+    vec3 fresnelIncidence = mix(vec3(0.04), albedo, metallic);
 
     uint spotLightSize = 16;
     uint directionalLightSize = 12;
@@ -180,16 +190,29 @@ void main() {
 
         vec3 radiance = light.lightInformation.colour / (lightDist * lightDist);
 
-        vec3 BRDF = calculateBRDF(normal, viewDir, lightDir, halfVec, albedo, roughness * roughnessFactor, metallic * metallicFactor);
+        vec3 BRDF = calculateBRDF(normal, viewDir, lightDir, halfVec, albedo, roughness * roughnessFactor, metallic * metallicFactor, fresnelIncidence);
         vec3 reflectance = calculateReflectance(BRDF, normal, lightDir, radiance);
         lightOutputted += reflectance;
 
         bufIndex += pointLightSize;
     }
 
-    // Ambient - arbitrary
-    vec3 ambient = vec3(0.001) * albedo * occlusion;
+    vec3 F = FresnelSchlickRoughness(normal, viewDir, fresnelIncidence, roughness);
+    vec3 kD = 1.0 - F;
+    kD *= 1.0 - metallic;
+
+    vec3 irradiance = texture(irradianceMap, normal).rgb;
+    vec3 diffuse = irradiance * albedo;
+
+    const float MAX_REFLECTION_LOD = 4.0;
+    vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
+    vec2 brdf = texture(brdfLUT, vec2(max(dot(normal, viewDir), 0.0), roughness)).rg;
+    vec3 specular = prefilteredColor * (F * brdf.r + brdf.g);
+
+    vec3 ambient = (kD * diffuse + specular) *  occlusion;
+
     vec3 colour = ambient + lightOutputted;
+    // vec3 colour = lightOutputted;
 
     // HDR
     colour = colour / (colour + vec3(1.0));
