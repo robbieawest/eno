@@ -173,8 +173,10 @@ render_skybox :: proc(manager: ^resource.ResourceManager, scene: ^ecs.Scene, all
     resource.set_uniform(RENDER_CONTEXT.skybox_shader, VIEW_MATRIX_UNIFORM, view)
     resource.set_uniform(RENDER_CONTEXT.skybox_shader, PROJECTION_MATRIX_UNIFORM, scene.viewpoint.perspective)
 
-    // irr := env.irradiance_map.?
-    // bind_texture(0, irr.gpu_texture.?, .CUBEMAP)
+    /*
+     irr := env.prefilter_map.?
+     bind_texture(0, irr.gpu_texture.?, .CUBEMAP)
+     */
     bind_texture(0, env_map.gpu_texture.?, .CUBEMAP)
     resource.set_uniform(RENDER_CONTEXT.skybox_shader, ENV_MAP_UNIFORM, i32(0))
 
@@ -1135,6 +1137,16 @@ ibl_pre_render_pass :: proc(
 
     project := glm.mat4Perspective(glm.radians_f32(90), 1, 0.1, 10)
     views := [6]matrix[4, 4]f32 {
+        glm.mat4LookAt({0, 0, 0}, {-1, 0, 0}, {0, -1, 0}),
+        glm.mat4LookAt({0, 0, 0}, {1, 0, 0}, {0, -1, 0}),
+        glm.mat4LookAt({0, 0, 0}, {0, 1, 0}, {0, 0, -1}),
+        glm.mat4LookAt({0, 0, 0}, {0, -1, 0}, {0, 0, 1}),
+        glm.mat4LookAt({0, 0, 0}, {0, 0, -1}, {0, -1, 0}),
+        glm.mat4LookAt({0, 0, 0}, {0, 0, 1}, {0, -1, 0}),
+    }
+    /*
+
+    views := [6]matrix[4, 4]f32 {
         glm.mat4LookAt({0, 0, 0}, {1, 0, 0}, {0, -1, 0}),
         glm.mat4LookAt({0, 0, 0}, {-1, 0, 0}, {0, -1, 0}),
         glm.mat4LookAt({0, 0, 0}, {0, 1, 0}, {0, 0, 1}),
@@ -1142,6 +1154,7 @@ ibl_pre_render_pass :: proc(
         glm.mat4LookAt({0, 0, 0}, {0, 0, 1}, {0, -1, 0}),
         glm.mat4LookAt({0, 0, 0}, {0, 0, -1}, {0, -1, 0}),
     }
+    */
 
     if environment.environment_map == nil do environment.environment_map = create_environment_map(manager, environment.environment_tex, project, views, fbo, cube_vao, allocator=allocator) or_return
     check_framebuffer_status(buffer, loc=loc) or_return
@@ -1192,6 +1205,8 @@ ibl_pre_render_pass :: proc(
     return
 }
 
+ENV_MAP_FACE_WIDTH :: 2048
+ENV_MAP_FACE_HEIGHT :: 2048
 create_environment_map :: proc(
     manager: ^resource.ResourceManager,
     environment_tex: resource.Texture,
@@ -1199,8 +1214,8 @@ create_environment_map :: proc(
     views: [6]matrix[4, 4]f32,
     fbo: u32,
     cube_vao: u32,
-    w: i32 = IBL_FRAMEBUFFER_WIDTH,
-    h: i32 = IBL_FRAMEBUFFER_HEIGHT,
+    w: i32 = ENV_MAP_FACE_WIDTH,
+    h: i32 = ENV_MAP_FACE_HEIGHT,
     allocator := context.allocator
 ) -> (env: resource.Texture, ok: bool) {
     using env
@@ -1381,7 +1396,8 @@ get_ibl_prefilter_shader :: proc(manager: ^resource.ResourceManager, allocator :
     return
 }
 
-
+IBL_BRDF_LUT_WIDTH :: 512
+IBL_BRDF_LUT_HEIGHT :: 512
 create_ibl_brdf_lookup :: proc(
     manager: ^resource.ResourceManager,
     fbo: u32,
@@ -1391,7 +1407,7 @@ create_ibl_brdf_lookup :: proc(
     using brdf_lut
     name = strings.clone("BrdfLUT", allocator=allocator)
     properties = resource.default_texture_properties(allocator)
-    gpu_texture = make_texture(IBL_FRAMEBUFFER_WIDTH, IBL_FRAMEBUFFER_HEIGHT, nil, gl.RG16F, 0, gl.RG, gl.FLOAT, resource.TextureType.TWO_DIM, properties, false)
+    gpu_texture = make_texture(IBL_BRDF_LUT_WIDTH, IBL_BRDF_LUT_HEIGHT, nil, gl.RG16F, 0, gl.RG, gl.FLOAT, resource.TextureType.TWO_DIM, properties, false)
     type = .TWO_DIM
 
     shader := get_ibl_brdf_lut_shader(manager, allocator) or_return
@@ -1399,10 +1415,10 @@ create_ibl_brdf_lookup :: proc(
 
     bind_framebuffer_raw(fbo)
     bind_renderbuffer_raw(rbo)
-    set_render_buffer_storage(gl.DEPTH_COMPONENT24, IBL_FRAMEBUFFER_WIDTH, IBL_FRAMEBUFFER_HEIGHT)
+    set_render_buffer_storage(gl.DEPTH_COMPONENT24, IBL_BRDF_LUT_WIDTH, IBL_BRDF_LUT_HEIGHT)
     bind_texture_to_frame_buffer(fbo, brdf_lut, .COLOUR)
 
-    set_render_viewport(0, 0, IBL_FRAMEBUFFER_WIDTH, IBL_FRAMEBUFFER_HEIGHT)
+    set_render_viewport(0, 0, IBL_BRDF_LUT_WIDTH, IBL_BRDF_LUT_HEIGHT)
     clear_mask({ .COLOUR_BIT, .DEPTH_BIT })
 
     quad_comp := create_primitive_quad()
@@ -1428,8 +1444,8 @@ get_ibl_brdf_lut_shader :: proc(manager: ^resource.ResourceManager, allocator :=
 }
 
 
-IBL_FRAMEBUFFER_WIDTH :: 512
-IBL_FRAMEBUFFER_HEIGHT :: 512
+IBL_FRAMEBUFFER_WIDTH :: ENV_MAP_FACE_WIDTH
+IBL_FRAMEBUFFER_HEIGHT :: ENV_MAP_FACE_HEIGHT
 
 make_ibl_framebuffer :: proc(allocator := context.allocator) -> (buffer: FrameBuffer) {
     return make_framebuffer(IBL_FRAMEBUFFER_WIDTH, IBL_FRAMEBUFFER_HEIGHT, allocator=allocator)
