@@ -19,14 +19,15 @@ import "core:mem"
 import "core:log"
 
 
-
-
 RenderContext :: struct {
     camera_ubo: ^ShaderBuffer,
-    lights_ssbo: ^ShaderBuffer
+    lights_ssbo: ^ShaderBuffer,
+    skybox_comp: ^resource.GLComponent,
+    skybox_shader: ^resource.ShaderProgram
 }
 
 RENDER_CONTEXT: RenderContext  // Global render context, this is fine really, only stores small amount of persistent external pointing data
+// Don't know if I care enough to destroy the render context
 
 @(private)
 ModelData :: struct {
@@ -42,7 +43,13 @@ MeshData :: struct {
     instance_to: ^resource.InstanceTo
 }
 
-render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, scene: ^ecs.Scene, temp_allocator := context.temp_allocator) -> (ok: bool) {
+render :: proc(
+    manager: ^resource.ResourceManager,
+    pipeline: RenderPipeline,
+    scene: ^ecs.Scene,
+    allocator := context.allocator,
+    temp_allocator := context.temp_allocator
+) -> (ok: bool) {
     pipeline := pipeline
 
     /*
@@ -55,8 +62,6 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
         return
     }
 
-
-    // todo design system of resource transfer
 
     // Used for render passes that query their own data
     mesh_data_map := make(map[^RenderPass][dynamic]MeshData, allocator=temp_allocator)
@@ -120,10 +125,75 @@ render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, sce
                 issue_single_element_draw_call(mesh_data.mesh.indices_count)
             }
         }
+
+        if pass.properties.render_skybox do render_skybox(manager, scene, allocator) or_return
     }
 
 
     return true
+}
+
+// Allocator is perm content, not temp
+@(private)
+render_skybox :: proc(manager: ^resource.ResourceManager, scene: ^ecs.Scene, allocator := context.allocator) -> (ok: bool) {
+    if scene.image_environment == nil {
+        dbg.log(.ERROR, "Scene image environment must be available to render skybox")
+        return
+    }
+
+    env := scene.image_environment.?
+    if env.environment_map == nil {
+        dbg.log(.ERROR, "Scene image environment map must be avaiable to render skybox")
+        return
+    }
+    env_map := env.environment_map.?
+    if env_map.gpu_texture == nil {
+        dbg.log(.ERROR, "Environment cubemap gpu texture is not provided")
+        return
+    }
+
+    if RENDER_CONTEXT.skybox_comp == nil {
+        RENDER_CONTEXT.skybox_comp = new(resource.GLComponent)
+        RENDER_CONTEXT.skybox_comp^ = create_primitive_cube()
+    }
+
+    if RENDER_CONTEXT.skybox_comp.vao == nil {
+        dbg.log(.ERROR, "Vertex array nil is unexpected in skybox render")
+        return
+    }
+
+    if RENDER_CONTEXT.skybox_shader == nil {
+        RENDER_CONTEXT.skybox_shader = new(resource.ShaderProgram)
+        RENDER_CONTEXT.skybox_shader^ = create_skybox_shader(manager, allocator) or_return
+    }
+
+    attach_program(RENDER_CONTEXT.skybox_shader^) or_return
+
+    view := glm.mat4(glm.mat3(scene.viewpoint.look_at))
+    resource.set_uniform(RENDER_CONTEXT.skybox_shader, VIEW_MATRIX_UNIFORM, view)
+    resource.set_uniform(RENDER_CONTEXT.skybox_shader, PROJECTION_MATRIX_UNIFORM, scene.viewpoint.perspective)
+
+    // irr := env.irradiance_map.?
+    // bind_texture(0, irr.gpu_texture.?, .CUBEMAP)
+    bind_texture(0, env_map.gpu_texture.?, .CUBEMAP)
+    resource.set_uniform(RENDER_CONTEXT.skybox_shader, ENV_MAP_UNIFORM, i32(0))
+
+    set_face_culling(false)
+    gl.DepthFunc(gl.LEQUAL)
+    render_primitive_cube(RENDER_CONTEXT.skybox_comp.vao.?)
+
+    return true
+}
+
+@(private)
+create_skybox_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (shader: resource.ShaderProgram, ok: bool) {
+    vert := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "skybox.vert", .VERTEX) or_return
+    frag := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "skybox.frag", .FRAGMENT) or_return
+    shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, allocator) or_return
+    transfer_shader_program(manager, &shader) or_return
+
+    ok = true
+    return
 }
 
 @(private)
@@ -791,6 +861,7 @@ if inc_occlusion_texture do append(&uniforms, resource.GLSLPair{ resource.GLSLDa
 MODEL_MATRIX_UNIFORM :: "m_Model"
 VIEW_MATRIX_UNIFORM :: "m_View"
 PROJECTION_MATRIX_UNIFORM :: "m_Projection"
+ENV_MAP_UNIFORM :: "environmentMap"
 
 
 
@@ -1030,7 +1101,6 @@ pre_render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline,
     ok = true
     return
 }
-
 
 
 ibl_pre_render_pass :: proc(

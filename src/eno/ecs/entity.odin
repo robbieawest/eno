@@ -265,3 +265,14 @@ make_image_environment :: proc(environment_map_uri: string, flip_map := true, al
     ok = true
     return
 }
+
+destroy_image_environment :: proc(environment: Maybe(ImageEnvironment)) {
+    if environment == nil do return
+    env := environment.?
+
+    resource.destroy_texture(&env.environment_tex)
+    if env.environment_map != nil do resource.destroy_texture(&env.environment_map.?)
+    if env.irradiance_map != nil do resource.destroy_texture(&env.irradiance_map.?)
+    if env.prefilter_map != nil do resource.destroy_texture(&env.prefilter_map.?)
+    if env.brdf_lookup != nil do resource.destroy_texture(&env.brdf_lookup.?)
+}

@@ -8,6 +8,7 @@ Camera :: struct {
     towards: [3]f32,  // A direction vector - check if needs to be norm
     up: [3]f32,
     look_at: glm.mat4,
+    perspective: glm.mat4,
     field_of_view: f32,
     aspect_ratio: f32,
     near_plane: f32,
@@ -70,7 +71,8 @@ far_plane: f32
 
 @(private)
 get_camera_perspective :: proc(camera: ^Camera) -> glm.mat4 {
-    return glm.mat4Perspective(camera.field_of_view, camera.aspect_ratio, camera.near_plane, camera.far_plane)
+    camera.perspective = glm.mat4Perspective(camera.field_of_view, camera.aspect_ratio, camera.near_plane, camera.far_plane)
+    return camera.perspective
 }
 
 
