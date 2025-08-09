@@ -158,6 +158,7 @@ RenderPassProperties :: struct {
     stencil_test: bool,
     render_skybox: bool,
     viewport: Maybe([4]i32),
+    clear: ClearMask
 }
 
 

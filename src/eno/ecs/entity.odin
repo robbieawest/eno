@@ -10,6 +10,7 @@ import "core:log"
 import "core:slice"
 import "core:strings"
 import utils "../utils"
+import glfw "vendor:glfw"
 
 // Todo: look into component/entity deletion and custom allocators
 // Relate it to every type defined in eno
@@ -256,11 +257,14 @@ ImageEnvironment :: struct {
 }
 
 // Does not create cubemap
-make_image_environment :: proc(environment_map_uri: string, flip_map := true, allocator := context.allocator) -> (env: ImageEnvironment, ok: bool) {
+make_image_environment :: proc(environment_map_uri: string, flip_map := false, allocator := context.allocator) -> (env: ImageEnvironment, ok: bool) {
     using env.environment_tex
     name = strings.clone("EnvironmentTex", allocator=allocator)
     type = .TWO_DIM
-    image = resource.load_image_from_uri(environment_map_uri, flip_image=flip_map, allocator=allocator) or_return
+    properties = resource.default_texture_properties()
+    properties[.WRAP_S] = .REPEAT
+    properties[.MIN_FILTER] = .LINEAR_MIPMAP_LINEAR
+    image = resource.load_image_from_uri(environment_map_uri, flip_image=flip_map, as_float=true, allocator=allocator) or_return
 
     ok = true
     return

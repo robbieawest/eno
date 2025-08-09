@@ -3,18 +3,15 @@
 out vec4 Colour;
 in vec3 position;
 
-// https://learnopengl.com
+const float PI = 3.14159265358979323;
 
 uniform sampler2D environmentTex;
-const vec2 invAtan = vec2(0.1591, 0.3183);
 vec2 UVFromSpherical(vec3 v) {
     vec2 uv = vec2(atan(v.z, v.x), asin(v.y));
-    uv *= invAtan;
-    uv *= 0.5;
-    return uv;
+    return vec2(uv.x / (2.0 * PI) + 0.5, 0.5 - uv.y / PI);
 }
 
 void main() {
     vec2 uv = UVFromSpherical(normalize(position));
-    Colour = vec4(texture(environmentTex, uv).rgb, 1.0);
+    Colour = vec4(textureLod(environmentTex, uv, 0.0).rgb, 1.0);
 }

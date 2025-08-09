@@ -64,7 +64,13 @@ before_frame :: proc() -> (ok: bool) {
         nil,
         render.RenderPassQuery{},
         render.RenderPassShaderGenerate.LIGHTING,
-        render.RenderPassProperties{ geometry_z_sorting = .ASC, face_culling = render.Face.BACK, viewport = [4]i32{ 0, 0, window_res.w, window_res.h }, render_skybox = true }
+        render.RenderPassProperties{
+            geometry_z_sorting = .ASC,
+            face_culling = render.Face.BACK,
+            viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
+            render_skybox = true,
+            clear = { .COLOUR_BIT, .DEPTH_BIT }
+        }
     ) or_return
 
     game_data.render_pipeline.pre_passes[0] = render.make_pre_render_pass(

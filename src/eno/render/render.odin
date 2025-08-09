@@ -179,7 +179,6 @@ render_skybox :: proc(manager: ^resource.ResourceManager, scene: ^ecs.Scene, all
     resource.set_uniform(RENDER_CONTEXT.skybox_shader, ENV_MAP_UNIFORM, i32(0))
 
     set_face_culling(false)
-    gl.DepthFunc(gl.LEQUAL)
     render_primitive_cube(RENDER_CONTEXT.skybox_comp.vao.?)
 
     return true
@@ -327,7 +326,6 @@ handle_pass_properties :: proc(pipeline: RenderPipeline, pass: RenderPass) -> (o
     enable_depth_writes(.DISABLE_DEPTH not_in masks)
     enable_stencil_wrties(.ENABLE_STENCIL in masks)
 
-
     if properties.blend_func != nil {
         set_blend_func(properties.blend_func.?)
     } else do set_default_blend_func()
@@ -339,6 +337,8 @@ handle_pass_properties :: proc(pipeline: RenderPipeline, pass: RenderPass) -> (o
     if properties.polygon_mode != nil {
         set_polygon_mode(properties.polygon_mode.?)
     } else do set_default_polygon_mode()
+
+    clear_mask(properties.clear)
 
     return true
 }
@@ -1083,14 +1083,9 @@ pre_render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline,
 
         switch input in pass.input {
         case IBLInput:
-            environment := &scene.image_environment
-            if environment^ == nil {
-                dbg.log(.ERROR, "No environment found in scene for IBL")
-                return
-            }
 
             buffer := utils.safe_index(pipeline.frame_buffers, pass.frame_buffers[0]) or_return
-            ok = ibl_pre_render_pass(manager, buffer^, &environment.?)
+            ok = ibl_pre_render_pass(manager, scene, buffer^)
             if !ok {
                 dbg.log(.ERROR, "Failed to pre render IBL maps")
                 return
@@ -1105,14 +1100,25 @@ pre_render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline,
 
 ibl_pre_render_pass :: proc(
     manager: ^resource.ResourceManager,
+    scene: ^ecs.Scene,
     buffer: FrameBuffer,
-    environment: ^ecs.ImageEnvironment,
     allocator := context.allocator,
     loc := #caller_location
 ) -> (ok: bool) {
     dbg.log(.INFO, "IBL Pre render pass")
 
-    transfer_texture(&environment.environment_tex) or_return
+    environment_m := &scene.image_environment
+    if environment_m^ == nil {
+        dbg.log(.ERROR, "No environment found in scene for IBL")
+        return
+    }
+    environment: ^ecs.ImageEnvironment = &environment_m.?
+
+    set_depth_test(true)
+    gl.DepthFunc(gl.LEQUAL)
+    gl.Enable(gl.TEXTURE_CUBE_MAP_SEAMLESS)
+
+    transfer_texture(&environment.environment_tex, gl.RGB16F, 0, gl.RGBA, gl.FLOAT, true) or_return
 
     cube_comp := create_primitive_cube()
     defer release_gl_component(cube_comp)
@@ -1202,9 +1208,8 @@ create_environment_map :: proc(
 
     properties = resource.default_texture_properties()
     properties[.MIN_FILTER] = .LINEAR_MIPMAP_LINEAR
-    defer delete(properties)
 
-    gpu_texture = make_texture(w,h , nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties, false)
+    gpu_texture = make_texture(w, h, nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties, false)
     type = .CUBEMAP
 
     shader := get_environment_map_shader(manager, allocator) or_return
@@ -1219,11 +1224,13 @@ create_environment_map :: proc(
     bind_framebuffer_raw(fbo)
     for i in 0..<6 {
         resource.set_uniform(&shader, "m_View", views[i])
-        bind_texture_to_frame_buffer(fbo, env, .COLOUR, u32(i), 0, 0)
+        bind_texture_to_frame_buffer(fbo, env, .COLOUR, u32(i), 0, 0) or_return
         clear_mask({ .COLOUR_BIT, .DEPTH_BIT })
 
         render_primitive_cube(cube_vao)
     }
+
+    bind_default_framebuffer()
 
     bind_texture_raw(.CUBEMAP, gpu_texture.?)
     gen_mipmap(.CUBEMAP)

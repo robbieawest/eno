@@ -60,7 +60,7 @@ run_game :: proc() {
         t_before_frame := time.now()._nsec
 
         control.poll(&Game.controller)
-        glutils.frame_setup()
+        // glutils.frame_setup()
 
         every_ok := Game.every_frame()
 

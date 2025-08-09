@@ -178,7 +178,16 @@ bind_program :: proc(program: u32) {
 /* 2D single sample texture for gpu package internal use */
 GPUTexture :: Maybe(u32)
 
-transfer_texture :: proc(tex: ^resource.Texture, destroy_after_transfer := true, loc := #caller_location) -> (ok: bool) {
+transfer_texture :: proc(
+    tex: ^resource.Texture,
+    internal_format: i32 = gl.RGBA8,
+    lod: i32 = 0,
+    format: u32 = gl.RGBA,
+    type: u32 = gl.UNSIGNED_BYTE,
+    generate_mipmap := false,
+    destroy_after_transfer := true,
+    loc := #caller_location
+) -> (ok: bool) {
 
     if tex == nil {
         dbg.log(.ERROR, "Texture given as nil", loc=loc)
@@ -187,7 +196,7 @@ transfer_texture :: proc(tex: ^resource.Texture, destroy_after_transfer := true,
 
     if tex.gpu_texture != nil do return true
 
-    gpu_tex := make_texture(tex^)
+    gpu_tex := make_texture(tex^, internal_format, lod, format, type, generate_mipmap)
     if gpu_tex == nil {
         dbg.log(dbg.LogLevel.ERROR, "make_texture returned nil texture")
         return
@@ -203,8 +212,15 @@ transfer_texture :: proc(tex: ^resource.Texture, destroy_after_transfer := true,
 make_texture :: proc{ make_texture_, make_texture_raw }
 
 // resource.Texture refers specifically to material textures - therefore they will be colour attachments and will use RGBA16F
-make_texture_ :: proc(tex: resource.Texture) -> (texture: GPUTexture) {
-    return make_texture_raw(tex.image.w, tex.image.h, tex.image.pixel_data)
+make_texture_ :: proc(
+    tex: resource.Texture,
+    internal_format: i32 = gl.RGBA8,
+    lod: i32 = 0,
+    format: u32 = gl.RGBA,
+    type: u32 = gl.UNSIGNED_BYTE,
+    generate_mipmap := false
+) -> (texture: GPUTexture) {
+    return make_texture_raw(tex.image.w, tex.image.h, tex.image.pixel_data, internal_format, lod, format, type, tex.type, tex.properties, generate_mipmap)
 }
 
 make_texture_raw :: proc(

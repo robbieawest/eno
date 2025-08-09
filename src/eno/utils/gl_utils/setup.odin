@@ -9,7 +9,7 @@ import dbg "../../debug"
 
 opengl_setup :: proc() {
     opengl_debug_setup()
-    enable_gl_depth_test()
+    // enable_gl_depth_test()
 }
 
 opengl_debug_setup :: proc() {

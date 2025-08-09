@@ -534,7 +534,7 @@ load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: str
 }
 
 
-load_image_from_uri :: proc(uri: string, uri_base: string = "", flip_image := false, allocator := context.allocator, loc := #caller_location) -> (result: Image, ok: bool) {
+load_image_from_uri :: proc(uri: string, uri_base: string = "", flip_image := false, desired_channels := 4, as_float := false, allocator := context.allocator, loc := #caller_location) -> (result: Image, ok: bool) {
 
     path := len(uri_base) == 0 ? strings.clone(uri, allocator=allocator) : utils.concat(uri_base, uri, allocator=allocator); defer delete(path)
     file_utils.check_path(path, loc=loc) or_return
@@ -543,7 +543,8 @@ load_image_from_uri :: proc(uri: string, uri_base: string = "", flip_image := fa
     if flip_image do stbi.set_flip_vertically_on_load(1)
     defer if flip_image do stbi.set_flip_vertically_on_load(0)
 
-    result.pixel_data = stbi.load(path_cstr, &result.w, &result.h, &result.channels, 4)
+    if as_float do result.pixel_data = stbi.loadf(path_cstr, &result.w, &result.h, &result.channels, 4)
+    else do result.pixel_data = stbi.load(path_cstr, &result.w, &result.h, &result.channels, 4)
     if result.pixel_data == nil {
         dbg.log(.ERROR, "Could not read pixel data from file: %s", uri)
         return
