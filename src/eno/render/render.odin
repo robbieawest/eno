@@ -173,10 +173,10 @@ render_skybox :: proc(manager: ^resource.ResourceManager, scene: ^ecs.Scene, all
     resource.set_uniform(RENDER_CONTEXT.skybox_shader, VIEW_MATRIX_UNIFORM, view)
     resource.set_uniform(RENDER_CONTEXT.skybox_shader, PROJECTION_MATRIX_UNIFORM, scene.viewpoint.perspective)
 
-    /*
-     irr := env.prefilter_map.?
-     bind_texture(0, irr.gpu_texture.?, .CUBEMAP)
-     */
+    irr := env.irradiance_map.?
+    spec := env.prefilter_map.?
+    bind_texture(0, irr.gpu_texture.?, .CUBEMAP)
+    bind_texture(0, spec.gpu_texture.?, .CUBEMAP)
     bind_texture(0, env_map.gpu_texture.?, .CUBEMAP)
     resource.set_uniform(RENDER_CONTEXT.skybox_shader, ENV_MAP_UNIFORM, i32(0))
 
@@ -330,15 +330,21 @@ handle_pass_properties :: proc(pipeline: RenderPipeline, pass: RenderPass) -> (o
 
     if properties.blend_func != nil {
         set_blend_func(properties.blend_func.?)
-    } else do set_default_blend_func()
+    }
+    else do set_default_blend_func()
 
     if properties.face_culling != nil {
         cull_geometry_faces(properties.face_culling.?)
-    } else do set_face_culling(false)
+    }
+    else do set_face_culling(false)
 
     if properties.polygon_mode != nil {
         set_polygon_mode(properties.polygon_mode.?)
-    } else do set_default_polygon_mode()
+    }
+    else do set_default_polygon_mode()
+
+    set_multisampling(properties.multisample)
+
 
     clear_mask(properties.clear)
 
@@ -1288,7 +1294,7 @@ create_ibl_irradiance_map :: proc(
 
     bind_framebuffer_raw(fbo)
     bind_renderbuffer_raw(rbo)
-    set_render_buffer_storage(gl.DEPTH_COMPONENT24, IBL_FRAMEBUFFER_WIDTH, IBL_FRAMEBUFFER_HEIGHT)
+    set_render_buffer_storage(gl.DEPTH_COMPONENT24, IRRADIANCE_MAP_FACE_WIDTH, IRRADIANCE_MAP_FACE_HEIGHT)
 
     shader := get_ibl_irradiance_shader(manager, allocator) or_return
     defer resource.destroy_shader_program(manager, shader)
@@ -1297,6 +1303,7 @@ create_ibl_irradiance_map :: proc(
     resource.set_uniform(&shader, "m_Project", project)
     bind_texture(0, env_cubemap, .CUBEMAP) or_return
 
+    set_render_viewport(0, 0, IRRADIANCE_MAP_FACE_WIDTH, IRRADIANCE_MAP_FACE_HEIGHT)
     bind_framebuffer_raw(fbo)
     for i in 0..<6 {
         resource.set_uniform(&shader, "m_View", views[i])

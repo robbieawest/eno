@@ -69,7 +69,8 @@ before_frame :: proc() -> (ok: bool) {
             face_culling = render.Face.BACK,
             viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
             render_skybox = true,
-            clear = { .COLOUR_BIT, .DEPTH_BIT }
+            clear = { .COLOUR_BIT, .DEPTH_BIT },
+            multisample = true
         }
     ) or_return
 
@@ -85,9 +86,9 @@ before_frame :: proc() -> (ok: bool) {
     ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
 
     // todo copy light name internally
-    light := resource.PointLight{ "demo_light", true, 1.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 3.0, 3.0, 0.0 } }
+    light := resource.PointLight{ "demo_light", false, 10.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 3.0, 3.0, 0.0 } }
     light_comp := standards.make_world_component(position=light.position)
-    light2 := resource.PointLight{ "demo_light2", true, 1.0, glm.vec3{ 1.0, 0.0, 0.0 }, glm.vec3{ -5.0, 0.0, 0.0 } }
+    light2 := resource.PointLight{ "demo_light2", false, 10.0, glm.vec3{ 1.0, 0.0, 0.0 }, glm.vec3{ -5.0, 0.0, 0.0 } }
     light_comp2 := standards.make_world_component(position=light2.position)
 
     light_arch := ecs.scene_add_archetype(game.Game.scene, "lights",
@@ -96,7 +97,7 @@ before_frame :: proc() -> (ok: bool) {
         cast(ecs.ComponentInfo)(standards.WORLD_COMPONENT),
         cast(ecs.ComponentInfo)(standards.VISIBLE_COMPONENT),
     ) or_return
-    /*
+
     ecs.archetype_add_entity(game.Game.scene, light_arch, light.name,
         ecs.make_ecs_component_data(resource.LIGHT_COMPONENT.label, resource.LIGHT_COMPONENT.type, resource.Light(light)),
         ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, resource.make_light_billboard(&game.Game.resource_manager) or_return),
@@ -110,7 +111,6 @@ before_frame :: proc() -> (ok: bool) {
         ecs.make_ecs_component_data(standards.WORLD_COMPONENT.label, standards.WORLD_COMPONENT.type, light_comp2),
         ecs.make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, false),
     )
-    */
 
     game.add_event_hooks(
         game.HOOK_MOUSE_MOTION(),
@@ -121,15 +121,15 @@ before_frame :: proc() -> (ok: bool) {
     manager := &game.Game.resource_manager
     render.populate_all_shaders(&game_data.render_pipeline, manager, game.Game.scene) or_return
 
-    //game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "newport_loft.hdr") or_return
+    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "newport_loft.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "park_music_stage_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "rogland_clear_night_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "twilight_sunset_4k.hdr") or_return
-    game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "voortrekker_interior_4k.hdr") or_return
+    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "voortrekker_interior_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "metro_noord_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "drackenstein_quarry_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "fireplace_4k.hdr") or_return
-    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "freight_station_4k.hdr") or_return
+    game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "freight_station_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "golden_bay_4k.hdr") or_return
     render.pre_render(manager, game_data.render_pipeline, game.Game.scene) or_return
 

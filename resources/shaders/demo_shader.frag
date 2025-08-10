@@ -188,7 +188,7 @@ void main() {
 
         vec3 halfVec = normalize(lightDir + viewDir);
 
-        vec3 radiance = light.lightInformation.colour / (lightDist * lightDist);
+        vec3 radiance = light.lightInformation.intensity * light.lightInformation.colour / (lightDist * lightDist);
 
         vec3 BRDF = calculateBRDF(normal, viewDir, lightDir, halfVec, albedo, roughness * roughnessFactor, metallic * metallicFactor, fresnelIncidence);
         vec3 reflectance = calculateReflectance(BRDF, normal, lightDir, radiance);
@@ -209,7 +209,8 @@ void main() {
     vec2 brdf = texture(brdfLUT, vec2(max(dot(normal, viewDir), 0.0), roughness)).rg;
     vec3 specular = prefilteredColor * (F * brdf.r + brdf.g);
 
-    vec3 ambient = (kD * diffuse + specular) *  occlusion;
+    vec3 ambient = (kD * diffuse + specular) * occlusion;
+    // vec3 ambient = (kD * diffuse);
 
     vec3 colour = ambient + lightOutputted;
     // vec3 colour = lightOutputted;

@@ -734,3 +734,8 @@ clear_mask :: proc(mask: ClearMask) {
     }
     gl.Clear(gl_mask)
 }
+
+set_multisampling :: proc(on: bool) {
+    if on do gl.Enable(gl.MULTISAMPLE)
+    else do gl.Disable(gl.MULTISAMPLE)
+}
