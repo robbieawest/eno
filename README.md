@@ -50,10 +50,9 @@ A list of features detailing what eno currently implements:
 - PBR direct lighting with normal mapping
 - Central resource manager with hashing and reference counting to share/store shaders, material permutations, vertex layout permuations etc. ( `resource` package )
 - Liberal render pass interface with a general `render` procedure
+- Image based indirect lighting via environment cubemap, precalculated irradiance, prefilter and brdf lut.
 
 Shortly upcoming features:
-
-- Image based indirect lighting
 - Billboarding improvements via instancing
 - Dynamic vertex/lighting shader generation, (comptime generation: vertex layouts, material types,  runtime branching: lighting settings)
 - Imgui :O
