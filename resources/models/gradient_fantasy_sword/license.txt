@@ -1,0 +1,11 @@
+Model Information:
+* title:	Gradient Fantasy Sword
+* source:	https://sketchfab.com/3d-models/gradient-fantasy-sword-b48bf2e14315425d95ebc2076cfdd27b
+* author:	Mikołaj Michalak (Nillusion) (https://sketchfab.com/M_Michalak)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Gradient Fantasy Sword" (https://sketchfab.com/3d-models/gradient-fantasy-sword-b48bf2e14315425d95ebc2076cfdd27b) by Mikołaj Michalak (Nillusion) (https://sketchfab.com/M_Michalak) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
