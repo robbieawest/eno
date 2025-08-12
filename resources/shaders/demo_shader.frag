@@ -169,7 +169,7 @@ void main() {
     vec3 viewDir = normalize(cameraPosition - position);
 
     vec3 normal = fragNormal;
-    vec3 R = reflect(-viewDir, normal);
+    vec3 R = reflect(-viewDir, normal);  // Tangent space
 
     vec3 fresnelIncidence = mix(vec3(0.04), albedo, metallic);
 
@@ -205,7 +205,8 @@ void main() {
     vec3 diffuse = irradiance * albedo;
 
     const float MAX_REFLECTION_LOD = 4.0;
-    vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
+    vec3 RWorld = transpose(TBN) * R;  // Since tbn is orthogonal it is transitive across the reflect operation
+    vec3 prefilteredColor = textureLod(prefilterMap, RWorld, roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(max(dot(normal, viewDir), 0.0), roughness)).rg;
     vec3 specular = prefilteredColor * (F * brdf.r + brdf.g);
 

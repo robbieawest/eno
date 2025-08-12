@@ -1142,15 +1142,6 @@ ibl_pre_render_pass :: proc(
     dbg.log(.INFO, "Bound renderbuffer to frame buffer")
 
     project := glm.mat4Perspective(glm.radians_f32(90), 1, 0.1, 10)
-    views := [6]matrix[4, 4]f32 {
-        glm.mat4LookAt({0, 0, 0}, {-1, 0, 0}, {0, -1, 0}),
-        glm.mat4LookAt({0, 0, 0}, {1, 0, 0}, {0, -1, 0}),
-        glm.mat4LookAt({0, 0, 0}, {0, 1, 0}, {0, 0, -1}),
-        glm.mat4LookAt({0, 0, 0}, {0, -1, 0}, {0, 0, 1}),
-        glm.mat4LookAt({0, 0, 0}, {0, 0, -1}, {0, -1, 0}),
-        glm.mat4LookAt({0, 0, 0}, {0, 0, 1}, {0, -1, 0}),
-    }
-    /*
 
     views := [6]matrix[4, 4]f32 {
         glm.mat4LookAt({0, 0, 0}, {1, 0, 0}, {0, -1, 0}),
@@ -1160,7 +1151,6 @@ ibl_pre_render_pass :: proc(
         glm.mat4LookAt({0, 0, 0}, {0, 0, 1}, {0, -1, 0}),
         glm.mat4LookAt({0, 0, 0}, {0, 0, -1}, {0, -1, 0}),
     }
-    */
 
     if environment.environment_map == nil do environment.environment_map = create_environment_map(manager, environment.environment_tex, project, views, fbo, cube_vao, allocator=allocator) or_return
     check_framebuffer_status(buffer, loc=loc) or_return
