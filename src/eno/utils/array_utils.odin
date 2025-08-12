@@ -7,6 +7,7 @@ import "core:mem"
 import "core:slice"
 import "core:log"
 
+import "base:intrinsics"
 import "base:runtime"
 
 // Utils package must not depend on any other package
@@ -109,4 +110,16 @@ slice_to_dynamic :: proc(a: $T/[]$E) -> [dynamic]E {
         allocator = runtime.nil_allocator(),
     }
     return transmute([dynamic]E)d
+}
+
+arr_to_matrix :: proc($T: typeid/matrix[$R, $C]$E, arr: [$N]E) -> (mat: T)
+    where N == R * C {
+
+    for i in 0..<R {
+        for j in 0..<C {
+            mat[i, j] = arr[i * C + j]
+        }
+    }
+
+    return
 }

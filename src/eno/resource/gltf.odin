@@ -7,6 +7,7 @@ import dbg "../debug"
 import "../standards"
 import futils "../file_utils"
 
+import glm "core:math/linalg/glsl"
 import "core:testing"
 import "core:strings"
 
@@ -100,60 +101,97 @@ extract_gltf_scene_no_path :: proc(manager: ^ResourceManager, data: ^cgltf.data,
     result = init_model_scene_result()
 
     node_loop: for node in scene.nodes {
-        world_comp: standards.WorldComponent
-        if node.has_translation do world_comp.position = node.translation
-        if node.has_rotation do world_comp.rotation = quaternion(x=node.rotation[0], y=node.rotation[1], z=node.rotation[2], w=node.rotation[3])
-        if node.has_scale do world_comp.scale = node.scale
-        else do world_comp.scale = [3]f32{ 1.0, 1.0, 1.0 }
-        if node.mesh != nil {
-            model := extract_cgltf_mesh(manager, node.mesh^, gltf_folder_path) or_return
-            append(&result.models, ModelWorldPair{ model, world_comp })
-        }
-        /* for KHR_lights_punctual - not intending to really support right now, can rework this later if needed
-        else if node.light != nil {
-            switch node.light.type {
-                case .invalid:
-                    dbg.debug_point(.WARN, "Invalid light type found, ignoring")
-                    continue node_loop
-                case .point:
-                    light := LightSourceInformation{
-                        strings.clone_from_cstring(node.light.name),
-                        true,
-                        node.light.intensity,
-                        [4]f32{ node.light.color.x, node.light.color.y, node.light.color.z, 1.0 },
-                        world_comp.position
-                    }
-                    if node.light.type == .point do append(&result.point_lights, light)
-                    else do append(&result.directional_lights, light)
-                case .directional:
-                    light := LightSourceInformation{
-                        strings.clone_from_cstring(node.light.name),
-                        true,
-                        node.light.intensity,
-                        [4]f32{ node.light.color.x, node.light.color.y, node.light.color.z, 1.0 },
-                        world_comp.position
-                    }
-
-                case .spot:
-                    spot_light := SpotLight {
-                        {
-                            strings.clone_from_cstring(node.light.name),
-                            true,
-                            node.light.intensity,
-                            [4]f32{ node.light.color.x, node.light.color.y, node.light.color.z, 1.0 },
-                            world_comp.position
-                        },
-                        node.light.spot_inner_cone_angle,
-                        node.light.spot_outer_cone_angle
-                    }
-                    append(&result.spot_lights, spot_light)
-            }
-        }
-        */
+        pairs := extract_node(manager, node, gltf_folder_path) or_return
+        defer delete(pairs)
+        append(&result.models, ..pairs)
     }
 
     ok = true
     return
+}
+
+
+extract_node :: proc(
+    manager: ^ResourceManager,
+    node: ^cgltf.node,
+    gltf_folder_path: string,
+    allocator := context.allocator
+) -> (result: []ModelWorldPair, ok: bool) {
+    world_comp: standards.WorldComponent
+    result_dyn := make([dynamic]ModelWorldPair, allocator=allocator)
+
+    if node == nil do return result, true
+
+    dbg.log(.INFO, "Extracting node: %#v", node)
+
+    // todo matrix/TRS vectors here are relative to parent.
+    // don't want this, very cringe! got to apply them hierarchically
+    if node.has_matrix {
+        model_arr := node.matrix_
+        model_mat := utils.arr_to_matrix(matrix[4, 4]f32, model_arr)
+        world_comp.position, world_comp.scale, world_comp.rotation = utils.decompose_transform(model_mat)
+    }
+    else {
+        if node.has_translation do world_comp.position = node.translation
+        if node.has_rotation do world_comp.rotation = quaternion(x=node.rotation[0], y=node.rotation[1], z=node.rotation[2], w=node.rotation[3])
+        if node.has_scale do world_comp.scale = node.scale
+        else do world_comp.scale = [3]f32{ 1.0, 1.0, 1.0 }
+    }
+
+    if node.mesh != nil {
+        model := extract_cgltf_mesh(manager, node.mesh^, gltf_folder_path) or_return
+        dbg.log(.INFO, "Extracted model/cgltf mesh: %#v", model.name)
+        append(&result_dyn, ModelWorldPair{ model, world_comp })
+    }
+
+    for child in node.children {
+        new_model_pairs := extract_node(manager, child, gltf_folder_path, allocator=allocator) or_return
+        defer delete(new_model_pairs, allocator=allocator)
+        append_elems(&result_dyn, ..new_model_pairs)
+    }
+
+    return result_dyn[:], true
+/* for KHR_lights_punctual - not intending to really support right now, can rework this later if needed
+else if node.light != nil {
+    switch node.light.type {
+        case .invalid:
+            dbg.debug_point(.WARN, "Invalid light type found, ignoring")
+            continue node_loop
+        case .point:
+            light := LightSourceInformation{
+                strings.clone_from_cstring(node.light.name),
+                true,
+                node.light.intensity,
+                [4]f32{ node.light.color.x, node.light.color.y, node.light.color.z, 1.0 },
+                world_comp.position
+            }
+            if node.light.type == .point do append(&result.point_lights, light)
+            else do append(&result.directional_lights, light)
+        case .directional:
+            light := LightSourceInformation{
+                strings.clone_from_cstring(node.light.name),
+                true,
+                node.light.intensity,
+                [4]f32{ node.light.color.x, node.light.color.y, node.light.color.z, 1.0 },
+                world_comp.position
+            }
+
+        case .spot:
+            spot_light := SpotLight {
+                {
+                    strings.clone_from_cstring(node.light.name),
+                    true,
+                    node.light.intensity,
+                    [4]f32{ node.light.color.x, node.light.color.y, node.light.color.z, 1.0 },
+                    world_comp.position
+                },
+                node.light.spot_inner_cone_angle,
+                node.light.spot_outer_cone_angle
+            }
+            append(&result.spot_lights, spot_light)
+    }
+}
+*/
 }
 
 

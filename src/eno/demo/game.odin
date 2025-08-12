@@ -39,12 +39,13 @@ before_frame :: proc() -> (ok: bool) {
 
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
 
-    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf") or_return
+    // scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf") or_return
+    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/gradient_fantasy_sword/scene.gltf") or_return
     defer resource.destroy_model_scene_result(scene_res)
 
     models := scene_res.models
     second_helmet := models[0]
-    second_helmet.model.name = strings.clone("SciFiHelmet2")
+    second_helmet.model.name = strings.clone("model clone")
     second_helmet.world_comp = standards.make_world_component(position=glm.vec3{ 3.0, 0.0, 3.0 })
     append(&models, second_helmet)
 
@@ -121,12 +122,12 @@ before_frame :: proc() -> (ok: bool) {
     manager := &game.Game.resource_manager
     render.populate_all_shaders(&game_data.render_pipeline, manager, game.Game.scene) or_return
 
-    game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "newport_loft.hdr") or_return
+    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "newport_loft.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "park_music_stage_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "rogland_clear_night_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "twilight_sunset_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "voortrekker_interior_4k.hdr") or_return
-    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "metro_noord_4k.hdr") or_return
+    game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "metro_noord_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "drackenstein_quarry_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "fireplace_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "freight_station_4k.hdr") or_return

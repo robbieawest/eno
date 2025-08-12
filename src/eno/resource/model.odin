@@ -331,9 +331,19 @@ OcclusionTexture :: distinct ResourceIdent
 EmissiveTexture :: distinct ResourceIdent
 EmissiveFactor :: distinct [3]f32
 
+Clearcoat :: struct {
+    clearcoat_texture: ResourceIdent,
+    clearcoat_roughness_texture: ResourceIdent,
+    clearcoat_normal_texture: ResourceIdent,
+    clearcoat_factor: f32,
+    clearcoat_roughness_factor: f32
+}
+
+
+
+
 /*
 PbrSpecularGlossiness :: cgltf.pbr_specular_glossiness
-Clearcoat :: cgltf.clearcoat
 IndexOfRefraction :: cgltf.ior
 Specular :: cgltf.specular
 Sheen :: cgltf.sheen
@@ -410,6 +420,8 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
         material.properties[.EMISSIVE_TEXTURE] = { EMISSIVE_TEXTURE, EmissiveTexture(tex_id) }
         material.properties[.EMISSIVE_FACTOR] = { EMISSIVE_FACTOR, EmissiveFactor(cmat.emissive_factor) }
     }
+
+    // todo clearcoat
 
     material_type.double_sided = bool(cmat.double_sided)
     material_type.unlit = bool(cmat.unlit)

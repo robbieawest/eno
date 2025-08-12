@@ -1,6 +1,7 @@
-package math_utils
+package utils
 
 import "core:testing"
+import "core:math/linalg"
 
 @(require_results)
 pow_u32 :: proc(base, exp: u32) -> (res: u32) {
@@ -50,4 +51,30 @@ fast_expo_test :: proc(t: ^testing.T) {
 pow_test :: proc(t: ^testing.T) {
     testing.expect_value(t, pow_u32(2, 3), 8)
     testing.expect_value(t, pow_i32(2, -2), 0.25)
+}
+
+
+// Does not support negative scales
+// Nobody cares about negative scales
+decompose_transform :: proc(mat: matrix[4, 4]f32) -> (trans: [3]f32, scale: [3]f32, rot: quaternion128) {
+    trans = { mat[0, 3], mat[1, 3], mat[2, 3] }
+    scale = {
+        linalg.length([3]f32{ mat[0, 0], mat[1, 0], mat[2, 0] }),
+        linalg.length([3]f32{ mat[0, 1], mat[1, 1], mat[2, 1] }),
+        linalg.length([3]f32{ mat[0, 2], mat[1, 2], mat[2, 2] }),
+    }
+
+    rot_mat := mat
+    rot_mat[0, 3] = 0
+    rot_mat[1, 3] = 0
+    rot_mat[2, 3] = 0
+
+    for i in 0..<3 {
+        for j in 0..<3 {
+            rot_mat[i, j] /= scale[j]
+        }
+    }
+
+    rot = linalg.quaternion_from_matrix4_f32(rot_mat)
+    return
 }
