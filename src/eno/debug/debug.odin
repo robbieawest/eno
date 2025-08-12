@@ -173,7 +173,7 @@ r_Destroy_stack_item :: proc(stack_item: ^StackItem) {
 }
 
 
-MAX_DEBUG_STACK :: 16
+MAX_DEBUG_STACK :: 64
 DebugStack :: struct {
     curr_items: u32,
     stack_tail: ^StackItem,

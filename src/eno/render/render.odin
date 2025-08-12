@@ -482,52 +482,61 @@ model_and_normal :: proc(mesh: ^resource.Mesh, world: ^standards.WorldComponent,
     return
 }
 
-/*
-    Specifically used in respect to the lighting shader stored inside the material
-*/
+// Cannot use material infos from Material struct because some textures are
+//  not available even if the specific mat property is used
+MAX_MATERIAL_USAGE :: u32  // Must be reflected as the same type in any shaders
+MaterialUsage :: enum {
+    PBRMetallicRoughness =              0,
+    PBRMetallicRoughnessTexAvailable =  1,
+    BaseColourTexAvailable =            2,
+    EmissiveFactor =                    3,
+    EmissiveTexture =                   4,
+    OcclusionTexture =                  5,
+    NormalTexture =                     6,
+    BaseColourTexture =                 7
+}
+
 @(private)
 bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material, lighting_shader: ^resource.ShaderProgram, curr_tex_unit: i32 = 0) -> (ok: bool) {
 
     texture_unit := curr_tex_unit
-    infos: resource.MaterialPropertyInfos
+
+    usages: bit_set[MaterialUsage; MAX_MATERIAL_USAGE]
     for info, property in material.properties {
-        infos += { info }
         switch v in property.value {
             case resource.PBRMetallicRoughness:
-                base_colour := resource.get_texture(manager, v.base_colour) or_return
-                if base_colour == nil {
-                    dbg.log(dbg.LogLevel.ERROR, "PBR Metallic Roughness base colour texture unavailable")
-                    return
-                }
-                metallic_roughness := resource.get_texture(manager, v.metallic_roughness) or_return
-                if metallic_roughness == nil {
-                    dbg.log(dbg.LogLevel.ERROR, "PBR Metallic Roughness metallic roughness texture unavailable")
-                    return
+                usages += { .PBRMetallicRoughness }
+                if v.base_colour != nil {
+                    usages += { .BaseColourTexAvailable}
+                    base_colour := resource.get_texture(manager, v.base_colour) or_return
+
+                    transfer_texture(base_colour)
+                    bind_texture(texture_unit, base_colour.gpu_texture) or_return
+                    resource.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, texture_unit)
+                    texture_unit += 1
                 }
 
-                transfer_texture(base_colour)
-                bind_texture(texture_unit, base_colour.gpu_texture) or_return
-                resource.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, texture_unit)
-                texture_unit += 1
+                if v.metallic_roughness != nil {
+                    usages += { .PBRMetallicRoughnessTexAvailable }
+                    metallic_roughness := resource.get_texture(manager, v.metallic_roughness) or_return
 
-                transfer_texture(metallic_roughness)
-                bind_texture(texture_unit, metallic_roughness.gpu_texture) or_return
-                resource.set_uniform(lighting_shader, resource.PBR_METALLIC_ROUGHNESS, texture_unit)
-                texture_unit += 1
+                    transfer_texture(metallic_roughness)
+                    bind_texture(texture_unit, metallic_roughness.gpu_texture) or_return
+                    resource.set_uniform(lighting_shader, resource.PBR_METALLIC_ROUGHNESS, texture_unit)
+                    texture_unit += 1
+                }
 
                 resource.set_uniform(lighting_shader, resource.BASE_COLOUR_FACTOR, v.base_colour_factor[0], v.base_colour_factor[1], v.base_colour_factor[2], v.base_colour_factor[3])
                 resource.set_uniform(lighting_shader, resource.METALLIC_FACTOR, v.metallic_factor)
                 resource.set_uniform(lighting_shader, resource.ROUGHNESS_FACTOR, v.roughness_factor)
 
             case resource.EmissiveFactor:
+                usages += { .EmissiveFactor }
                 resource.set_uniform(lighting_shader, resource.EMISSIVE_FACTOR, v[0], v[1], v[2])
 
             case resource.EmissiveTexture:
-                emissive_texture, tex_ok := resource.get_texture(manager, resource.ResourceIdent(v))
-                if !tex_ok || emissive_texture == nil {
-                    dbg.log(dbg.LogLevel.ERROR, "Emissive texture unavailable")
-                    return
-                }
+                usages += { .EmissiveTexture }
+                emissive_texture := resource.get_texture(manager, resource.ResourceIdent(v)) or_return
 
                 transfer_texture(emissive_texture)
                 bind_texture(texture_unit, emissive_texture.gpu_texture.?) or_return
@@ -535,11 +544,8 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 texture_unit += 1
 
             case resource.OcclusionTexture:
-                occlusion_texture, tex_ok := resource.get_texture(manager, resource.ResourceIdent(v))
-                if !tex_ok || occlusion_texture == nil {
-                    dbg.log(dbg.LogLevel.ERROR, "Occlusion texture unavailable")
-                    return
-                }
+                usages += { .OcclusionTexture }
+                occlusion_texture:= resource.get_texture(manager, resource.ResourceIdent(v)) or_return
 
                 transfer_texture(occlusion_texture)
                 bind_texture(texture_unit, occlusion_texture.gpu_texture.?) or_return
@@ -547,31 +553,17 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 texture_unit += 1
 
             case resource.NormalTexture:
-                normal_texture, tex_ok := resource.get_texture(manager, resource.ResourceIdent(v))
-                if !tex_ok || normal_texture  == nil {
-                    dbg.log(dbg.LogLevel.ERROR, "Normal texture unavailable")
-                    return
-                }
+                usages += { .NormalTexture }
+                normal_texture := resource.get_texture(manager, resource.ResourceIdent(v)) or_return
 
                 transfer_texture(normal_texture)
                 bind_texture(texture_unit, normal_texture.gpu_texture.?) or_return
                 resource.set_uniform(lighting_shader, resource.NORMAL_TEXTURE, texture_unit)
                 texture_unit += 1
-            case resource.BaseColourTexture:
-                base_colour, tex_ok := resource.get_texture(manager, resource.ResourceIdent(v))
-                if !tex_ok || base_colour == nil {
-                    dbg.log(dbg.LogLevel.ERROR, "Base colour texture unavailable")
-                    return
-                }
-
-                transfer_texture(base_colour)
-                bind_texture(texture_unit, base_colour.gpu_texture) or_return
-                resource.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, texture_unit)
-                texture_unit += 1
         }
     }
 
-    // resource.set_uniform(lighting_shader, resource.MATERIAL_INFOS, transmute(u32)infos)
+    resource.set_uniform(lighting_shader, resource.MATERIAL_INFOS, transmute(MAX_MATERIAL_USAGE)usages)
     return true
 }
 

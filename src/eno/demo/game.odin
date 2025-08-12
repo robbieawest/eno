@@ -40,14 +40,16 @@ before_frame :: proc() -> (ok: bool) {
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
 
     // scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf") or_return
-    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/gradient_fantasy_sword/scene.gltf") or_return
+    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/Supra/scene.gltf") or_return
     defer resource.destroy_model_scene_result(scene_res)
 
     models := scene_res.models
+    /*
     second_helmet := models[0]
     second_helmet.model.name = strings.clone("model clone")
     second_helmet.world_comp = standards.make_world_component(position=glm.vec3{ 3.0, 0.0, 3.0 })
     append(&models, second_helmet)
+    */
 
     ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
 

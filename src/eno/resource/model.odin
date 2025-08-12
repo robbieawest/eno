@@ -164,6 +164,7 @@ create_billboard_model_from_id :: proc(manager: ^ResourceManager, id: ResourceId
     billboard_mesh := primitive_square_mesh_data(manager, true, allocator)
     billboard_mesh.is_billboard = true
 
+    /*
     material: Material
     material.properties = make(map[MaterialPropertyInfo]MaterialProperty)
     material.properties[.BASE_COLOUR_TEXTURE] = { BASE_COLOUR_TEXTURE, BaseColourTexture(id) }
@@ -179,6 +180,7 @@ create_billboard_model_from_id :: proc(manager: ^ResourceManager, id: ResourceId
     material.type = id
     billboard_mesh.material = material
     model.meshes[0] = billboard_mesh
+    */
 
     ok = true
     return
@@ -220,7 +222,9 @@ primitive_square_mesh_data :: proc(manager: ^ResourceManager, unique_layout: boo
 // base colour, pbr metallic, normal, occlusion and emissive texure/factor are supported currently
 MATERIAL_INFOS :: "materialInfos"
 
+
 PBR_METALLIC_ROUGHNESS :: "pbrMetallicRoughness"
+// For specifying shader uniforms:
 METALLIC_FACTOR :: "metallicFactor"
 ROUGHNESS_FACTOR :: "roughnessFactor"
 BASE_COLOUR_TEXTURE :: "baseColourTexture"
@@ -247,7 +251,6 @@ DOUBLE_SIDED:: "doubleSided"
 UNLIT :: "unlit"
 
 MaterialPropertyInfo :: enum {
-    BASE_COLOUR_TEXTURE,
     PBR_METALLIC_ROUGHNESS,
     PBR_SPECULAR_GLOSSINESS,
     CLEARCOAT,
@@ -267,8 +270,8 @@ MaterialPropertyInfo :: enum {
     ALPHA_MODE0,
     ALPHA_CUTOFF
 }
-MaterialPropertyInfos :: bit_set[MaterialPropertyInfo; u32]
 
+MaterialPropertyInfos :: bit_set[MaterialPropertyInfo]
 Material :: struct {
     name: string,
     type: ResourceIdent,
@@ -302,8 +305,6 @@ destroy_material :: proc(manager: ^ResourceManager, material: Material, allocato
                 ok &= remove_texture(manager, ResourceIdent(v))
             case NormalTexture:
                 ok &= remove_texture(manager, ResourceIdent(v))
-            case BaseColourTexture:
-                ok &= remove_texture(manager, ResourceIdent(v))
         }
     }
 
@@ -318,23 +319,22 @@ destroy_material_type :: proc(manager: ^ResourceManager, type: MaterialType) -> 
 
 
 PBRMetallicRoughness :: struct {
-    base_colour: ResourceIdent,
-    metallic_roughness: ResourceIdent,
+    base_colour: ResourceID,
+    metallic_roughness: ResourceID,
     base_colour_factor: [4]f32,
     metallic_factor: f32,
     roughness_factor: f32
 }
 
-BaseColourTexture :: distinct ResourceIdent
 NormalTexture :: distinct ResourceIdent
 OcclusionTexture :: distinct ResourceIdent
 EmissiveTexture :: distinct ResourceIdent
 EmissiveFactor :: distinct [3]f32
 
 Clearcoat :: struct {
-    clearcoat_texture: ResourceIdent,
-    clearcoat_roughness_texture: ResourceIdent,
-    clearcoat_normal_texture: ResourceIdent,
+    clearcoat_texture: ResourceID,
+    clearcoat_roughness_texture: ResourceID,
+    clearcoat_normal_texture: ResourceID,
     clearcoat_factor: f32,
     clearcoat_roughness_factor: f32
 }
@@ -363,7 +363,6 @@ AlphaCutoff :: f32
 MaterialProperty :: struct {
     tag: string,
     value: union {
-        BaseColourTexture,
         PBRMetallicRoughness,
         NormalTexture,
         OcclusionTexture,
@@ -378,15 +377,22 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
     if cmat.name != nil do material.name = strings.clone_from_cstring(cmat.name)
 
     material_type: MaterialType
-
     if cmat.has_pbr_metallic_roughness {
         material_type.properties |= { .PBR_METALLIC_ROUGHNESS }
 
-        base_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.base_color_texture.texture, gltf_file_location) or_return
-        met_rough_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.metallic_roughness_texture.texture, gltf_file_location) or_return
+        met_rough := cmat.pbr_metallic_roughness
 
-        base_tex_id := add_texture(manager, base_tex) or_return
-        met_rough_id := add_texture(manager, met_rough_tex) or_return
+        base_tex_id: ResourceID
+        if met_rough.base_color_texture.texture != nil {
+            base_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.base_color_texture.texture, gltf_file_location) or_return
+            base_tex_id = add_texture(manager, base_tex) or_return
+        }
+
+        met_rough_id: ResourceID
+        if met_rough.metallic_roughness_texture.texture != nil {
+            met_rough_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.metallic_roughness_texture.texture, gltf_file_location) or_return
+            met_rough_id = add_texture(manager, met_rough_tex) or_return
+        }
 
         metallic_roughness := PBRMetallicRoughness {
             base_tex_id,
@@ -397,7 +403,6 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
         }
         material.properties[.PBR_METALLIC_ROUGHNESS] = { PBR_METALLIC_ROUGHNESS, metallic_roughness }
     }
-
     if cmat.normal_texture.texture != nil {
         material_type.properties |= { .NORMAL_TEXTURE }
 

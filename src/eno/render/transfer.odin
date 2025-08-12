@@ -196,7 +196,7 @@ transfer_texture :: proc(
 
     if tex.gpu_texture != nil do return true
 
-    gpu_tex := make_texture(tex^, internal_format, lod, format, type, generate_mipmap)
+    gpu_tex := make_texture(tex^, internal_format, lod, format, type, generate_mipmap, loc)
     if gpu_tex == nil {
         dbg.log(dbg.LogLevel.ERROR, "make_texture returned nil texture")
         return
@@ -218,9 +218,10 @@ make_texture_ :: proc(
     lod: i32 = 0,
     format: u32 = gl.RGBA,
     type: u32 = gl.UNSIGNED_BYTE,
-    generate_mipmap := false
+    generate_mipmap := false,
+    loc := #caller_location
 ) -> (texture: GPUTexture) {
-    return make_texture_raw(tex.image.w, tex.image.h, tex.image.pixel_data, internal_format, lod, format, type, tex.type, tex.properties, generate_mipmap)
+    return make_texture_raw(tex.image.w, tex.image.h, tex.image.pixel_data, internal_format, lod, format, type, tex.type, tex.properties, generate_mipmap, loc)
 }
 
 make_texture_raw :: proc(
@@ -232,9 +233,10 @@ make_texture_raw :: proc(
     type: u32 = gl.UNSIGNED_BYTE,
     texture_type: resource.TextureType = .TWO_DIM,
     texture_properties: resource.TextureProperties = {},
-    generate_mipmap := false
+    generate_mipmap := false,
+    loc := #caller_location
 ) -> (texture: GPUTexture) {
-    dbg.log(.INFO, "Making new texture, w: %d, h: %d", w, h)
+    dbg.log(.INFO, "Making new texture, w: %d, h: %d", w, h, loc=loc)
     id: u32
     gl.GenTextures(1, &id)
     texture = id
@@ -248,7 +250,7 @@ make_texture_raw :: proc(
             for i in 0..<6 {
                 gl.TexImage2D(u32(gl.TEXTURE_CUBE_MAP_POSITIVE_X + i), lod, internal_format, w, h, 0, format, type, data)
             }
-        case .THREE_DIM: dbg.log(.ERROR, "Texture type not supported")
+        case .THREE_DIM: dbg.log(.ERROR, "Texture type not supported", loc=loc)
     }
 
     if len(texture_properties) == 0 {
