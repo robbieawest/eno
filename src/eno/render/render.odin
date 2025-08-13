@@ -486,14 +486,14 @@ model_and_normal :: proc(mesh: ^resource.Mesh, world: ^standards.WorldComponent,
 //  not available even if the specific mat property is used
 MAX_MATERIAL_USAGE :: u32  // Must be reflected as the same type in any shaders
 MaterialUsage :: enum {
-    PBRMetallicRoughness =              0,
-    PBRMetallicRoughnessTexAvailable =  1,
-    BaseColourTexAvailable =            2,
-    EmissiveFactor =                    3,
-    EmissiveTexture =                   4,
-    OcclusionTexture =                  5,
-    NormalTexture =                     6,
-    BaseColourTexture =                 7
+    PBRMetallicRoughness,
+    PBRMetallicRoughnessTexAvailable,
+    BaseColourTexAvailable,
+    EmissiveFactor,
+    EmissiveTexture,
+    OcclusionTexture,
+    NormalTexture,
+    BaseColourTexture
 }
 
 @(private)

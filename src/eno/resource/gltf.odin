@@ -115,6 +115,7 @@ extract_node :: proc(
     manager: ^ResourceManager,
     node: ^cgltf.node,
     gltf_folder_path: string,
+    parent_world_comp: Maybe(standards.WorldComponent) = nil,
     allocator := context.allocator
 ) -> (result: []ModelWorldPair, ok: bool) {
     world_comp: standards.WorldComponent
@@ -137,6 +138,7 @@ extract_node :: proc(
         if node.has_scale do world_comp.scale = node.scale
         else do world_comp.scale = [3]f32{ 1.0, 1.0, 1.0 }
     }
+    if parent_world_comp != nil do world_comp = utils.combine_world_components(parent_world_comp.?, world_comp)
 
     if node.mesh != nil {
         model := extract_cgltf_mesh(manager, node.mesh^, gltf_folder_path) or_return
@@ -145,7 +147,7 @@ extract_node :: proc(
     }
 
     for child in node.children {
-        new_model_pairs := extract_node(manager, child, gltf_folder_path, allocator=allocator) or_return
+        new_model_pairs := extract_node(manager, child, gltf_folder_path, world_comp, allocator=allocator) or_return
         defer delete(new_model_pairs, allocator=allocator)
         append_elems(&result_dyn, ..new_model_pairs)
     }
@@ -246,7 +248,7 @@ extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh, gltf_fil
             }
             layout.infos[i] = attribute_info
         }
-
+        dbg.log(.INFO, "Read vertex layout: %#v", layout)
         layout_id := add_vertex_layout(manager, layout) or_return
         mesh_ret.layout = layout_id
 

@@ -261,6 +261,11 @@ make_texture_raw :: proc(
     }
     else do set_texture_properties(texture_type, texture_properties)
 
+    generate_mipmap := generate_mipmap
+    generate_mipmap |= texture_properties[.MIN_FILTER] == .LINEAR_MIPMAP_LINEAR
+    generate_mipmap |= texture_properties[.MIN_FILTER] == .LINEAR_MIPMAP_NEAREST
+    generate_mipmap |= texture_properties[.MIN_FILTER] == .NEAREST_MIPMAP_LINEAR
+    generate_mipmap |= texture_properties[.MIN_FILTER] == .NEAREST_MIPMAP_NEAREST
     if generate_mipmap do gen_mipmap(texture_type)
 
     return
