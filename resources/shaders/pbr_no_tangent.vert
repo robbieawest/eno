@@ -21,23 +21,13 @@ out vec3 cameraPosition;
 out mat3 TBN;
 
 void main() {
+    // All in world space
     texCoords = aTexCoords;
 
     position = vec3(m_Model * vec4(aPosition, 1.0));
     gl_Position = Camera.m_Project * Camera.m_View * vec4(position, 1.0);
 
-    // Tangent space
     geomNormal = normalize(m_Normal * aNormal);
 
-    vec3 tangent = normalize(cross(geomNormal, vec3(0.0, 1.0, 1.0)));
-    vec3 bitangent = cross(geomNormal, tangent);
-    TBN = transpose(mat3(tangent, bitangent, geomNormal));
-
-    // Apply TBN to outgoing values
-    position = TBN * position;
-    cameraPosition = TBN * Camera.position;
-
-    // TBN will be used to translate light positions to tangent space in fragment shader
-    // - this is biting the bullet, sending a fixed buffer of tangent light positions from vertex -> fragment is more complex and the performance benefit is
-    // dubious
+    cameraPosition = Camera.position;
 }

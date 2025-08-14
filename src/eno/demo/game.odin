@@ -41,9 +41,9 @@ before_frame :: proc() -> (ok: bool) {
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
 
     // scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf") or_return
-    // scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/Supra/scene.gltf") or_return
+    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/Supra/scene.gltf") or_return
     // scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/gradient_fantasy_sword/scene.gltf") or_return
-    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/CompareClearcoat/glTF/CompareClearcoat.gltf") or_return
+    // scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/CompareClearcoat/glTF/CompareClearcoat.gltf") or_return
     defer resource.destroy_model_scene_result(scene_res)
 
     models := scene_res.models
@@ -91,7 +91,7 @@ before_frame :: proc() -> (ok: bool) {
     ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
 
     // todo copy light name internally
-    light := resource.PointLight{ "demo_light", false, 10.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 3.0, 3.0, 0.0 } }
+    light := resource.PointLight{ "demo_light", true, 10.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 2.5, 2.5, 2.5 } }
     light_comp := standards.make_world_component(position=light.position)
     light2 := resource.PointLight{ "demo_light2", false, 10.0, glm.vec3{ 1.0, 0.0, 0.0 }, glm.vec3{ -5.0, 0.0, 0.0 } }
     light_comp2 := standards.make_world_component(position=light2.position)

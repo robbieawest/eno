@@ -107,7 +107,7 @@ render :: proc(
 
         // render meshes
         for shader_pass_id, &mesh_datas in shader_map {
-            dbg.log(.INFO, "Rendering for shader pass")
+            // dbg.log(.INFO, "Rendering for shader pass")
 
             shader_pass := resource.get_shader_pass(manager, shader_pass_id) or_return
 
@@ -117,7 +117,7 @@ render :: proc(
             update_lights_ssbo(scene) or_return
 
             for &mesh_data in mesh_datas {
-                dbg.log(.INFO, "Rendering mesh data")
+                // dbg.log(.INFO, "Rendering mesh data")
                 model_mat, normal_mat := model_and_normal(mesh_data.mesh, mesh_data.world, scene.viewpoint)
                 transfer_mesh(manager, mesh_data.mesh) or_return
 
@@ -149,7 +149,7 @@ render_skybox :: proc(manager: ^resource.ResourceManager, scene: ^ecs.Scene, all
         dbg.log(.ERROR, "Scene image environment map must be avaiable to render skybox")
         return
     }
-    dbg.log(.INFO, "Rendering skybox")
+    // dbg.log(.INFO, "Rendering skybox")
     env_map := env.environment_map.?
     if env_map.gpu_texture == nil {
         dbg.log(.ERROR, "Environment cubemap gpu texture is not provided")
@@ -1033,14 +1033,22 @@ generate_shader_pass_for_mesh :: proc(
     material_type := resource.get_material(manager, mesh.material.type) or_return
     log.infof("layout: %v, mat: %v", mesh.layout, mesh.material.type)
 
+    contains_tangent := false
+    for info in vertex_layout.infos {
+        if info.type == .tangent  {
+            contains_tangent = true
+            break
+        }
+    }
+
     if vertex_layout.shader == nil {
         dbg.log(dbg.LogLevel.INFO, "Creating vertex shader for layout")
-        vertex_layout.shader = generate_vertex_shader(manager, vertex_layout^, shader_generate, allocator) or_return
+        vertex_layout.shader = generate_vertex_shader(manager, shader_generate, contains_tangent, allocator) or_return
     }
 
     if material_type.shader == nil {
         dbg.log(dbg.LogLevel.INFO, "Creating lighting shader for material type")
-        material_type.shader = generate_lighting_shader(manager, shader_generate, allocator) or_return
+        material_type.shader = generate_lighting_shader(manager, shader_generate, contains_tangent, allocator) or_return
     }
 
     // Grabbing shaders here makes it impossible to compile a shader twice
@@ -1064,22 +1072,12 @@ generate_shader_pass_for_mesh :: proc(
 @(private)
 generate_vertex_shader :: proc(
     manager: ^resource.ResourceManager,
-    vertex_layout: resource.VertexLayout,
     pass_type: RenderPassShaderGenerate,
+    contains_tangent: bool,
     allocator := context.allocator
 ) -> (id: resource.ResourceIdent, ok: bool) {
     // Todo dynamic
     dbg.log(.INFO, "Generating vertex shader")
-
-    contains_tangent := false
-    for info in vertex_layout.infos {
-        if info.type == .tangent  {
-            contains_tangent = true
-            break
-        }
-    }
-
-    dbg.log(.INFO, "Contains tangent: %v", contains_tangent)
 
     single_shader: resource.Shader
     if contains_tangent do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr.vert", .VERTEX, allocator) or_return
@@ -1094,12 +1092,15 @@ generate_vertex_shader :: proc(
 generate_lighting_shader :: proc(
     manager: ^resource.ResourceManager,
     pass_type: RenderPassShaderGenerate,
+    contains_tangent: bool,
     allocator := context.allocator
 ) -> (id: resource.ResourceIdent, ok: bool) {
     // Todo dynamic
     dbg.log(.INFO, "Generating lighting shader")
 
-    single_shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr.frag", .FRAGMENT, allocator) or_return
+    single_shader: resource.Shader
+    if contains_tangent do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr.frag", .FRAGMENT, allocator) or_return
+    else do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr_no_tangent.frag", .FRAGMENT, allocator) or_return
     id = resource.add_shader(manager, single_shader) or_return
     ok = true
     return
@@ -1346,8 +1347,8 @@ get_ibl_irradiance_shader :: proc(manager: ^resource.ResourceManager, allocator 
     return
 }
 
-PREFILTER_MAP_FACE_WIDTH :: 128
-PREFILTER_MAP_FACE_HEIGHT :: 128
+PREFILTER_MAP_FACE_WIDTH :: 256
+PREFILTER_MAP_FACE_HEIGHT :: 256
 create_ibl_prefilter_map :: proc(
     manager: ^resource.ResourceManager,
     env_cubemap: GPUTexture,

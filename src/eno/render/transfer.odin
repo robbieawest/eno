@@ -339,7 +339,7 @@ bind_texture :: proc(#any_int texture_unit: u32, texture: GPUTexture, texture_ty
         dbg.log(dbg.LogLevel.ERROR, "Texture unit is greater than 31 - active textures limit exceeded")
         return
     }
-    dbg.log(.INFO, "Binding texture '%d' of type '%v' to unit '%d'", texture.?, texture_type, texture_unit, loc=loc)
+    // dbg.log(.INFO, "Binding texture '%d' of type '%v' to unit '%d'", texture.?, texture_type, texture_unit, loc=loc)
 
     gl.ActiveTexture(u32(gl.TEXTURE0) + texture_unit)
     bind_texture_raw(texture_type, texture.?)

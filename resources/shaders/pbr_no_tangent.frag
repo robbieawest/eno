@@ -71,12 +71,11 @@ PointLight getPointLight(uint index) {
     return light;
 }
 
-
-in vec3 position;  // Tangent space
-in vec3 geomNormal;  // Tangent space
+// All world space
+in vec3 position;
+in vec3 geomNormal;
 in vec2 texCoords;
-in vec3 cameraPosition;  // Tangent space
-in mat3 TBN;
+in vec3 cameraPosition;
 out vec4 Colour;
 
 layout(binding = 0) uniform sampler2D baseColourTexture;
@@ -102,8 +101,17 @@ uniform uint materialUsages;
 
 float PI = 3.14159265358979323;
 
-vec3 convertToTangentSpace(vec3 v) {
-    return TBN * v;
+mat3 calculateTBN() {
+
+    vec3 Q1  = dFdx(position);
+    vec3 Q2  = dFdy(position);
+    vec2 st1 = dFdx(texCoords);
+    vec2 st2 = dFdy(texCoords);
+
+    vec3 gNormal = normalize(geomNormal);
+    vec3 tangent = normalize(Q1 * st2.t - Q2 * st1.t);
+    vec3 bitangent = -normalize(cross(gNormal, tangent));
+    return mat3(tangent, bitangent, gNormal);
 }
 
 float DistributionGGX(vec3 N, vec3 H, float roughness) {
@@ -167,37 +175,34 @@ vec3 calculateReflectance(vec3 BRDF, vec3 N, vec3 L, vec3 radiance) {
 
 void main() {
     vec3 albedo = baseColourFactor.rgb;
-    albedo *= texture(baseColourTexture, texCoords).rgb;
     if ((materialUsages | uint(4)) != 0) {
         albedo *= texture(baseColourTexture, texCoords).rgb;
     }
 
-    float roughness = 0.5;
-    float metallic = 0.0;
+    float roughness = roughnessFactor;
+    float metallic = metallicFactor;
     if ((materialUsages | uint(2)) != 0) {
         vec2 metallicRoughness = texture(pbrMetallicRoughness, texCoords).gb;
-        roughness = metallicRoughness.x;
-        metallic = metallicRoughness.y;
+        roughness *= metallicRoughness.x;
+        metallic *= metallicRoughness.y;
     }
 
     vec3 normal = vec3(1.0);
-    if ((materialUsages | uint(64)) != 0) {
-        normal = normalize(texture(normalTexture, texCoords).rgb * 2.0 - 1.0);
+    if ((materialUsages | uint(64)) == 0) {
+        normal = texture(normalTexture, texCoords).rgb * 2.0 - 1.0;
+        normal = calculateTBN() * normal;
     }
-    else {
-        normal = geomNormal;
-    }
-    normal = geomNormal;
+    else normal = geomNormal;
+    normal = normalize(normal);
 
-/*
-    if ((materialUsages | uint(32)) != 0) {
+    vec3 occlusion;
+    if ((materialUsages | uint(32)) == 0) {
         occlusion = texture(occlusionTexture, texCoords).rgb;
     }
-    */
+    else occlusion = vec3(1.0);
 
-    vec3 occlusion = vec3(1.0);
     vec3 viewDir = normalize(cameraPosition - position);
-    vec3 R = reflect(-viewDir, normal);  // Tangent space
+    vec3 R = reflect(-viewDir, normal);
 
     vec3 fresnelIncidence = mix(vec3(0.04), albedo, metallic);
 
@@ -211,7 +216,7 @@ void main() {
     uint bufIndex = Lights.numSpotLights * spotLightSize + Lights.numDirectionalLights * directionalLightSize;
     for (uint i = 0; i < Lights.numPointLights; i++) {
         PointLight light = getPointLight(bufIndex);
-        vec3 lightPos = convertToTangentSpace(light.lightInformation.position);
+        vec3 lightPos = light.lightInformation.position;
         vec3 lightDir = normalize(lightPos - position);
         float lightDist = length(lightDir);
 
@@ -234,8 +239,8 @@ void main() {
     vec3 diffuse = irradiance * albedo;
 
     const float MAX_REFLECTION_LOD = 4.0;
-    vec3 RWorld = transpose(TBN) * R;  // Since tbn is orthogonal it is transitive across the reflect operation
-    vec3 prefilteredColor = textureLod(prefilterMap, RWorld, roughness * MAX_REFLECTION_LOD).rgb;
+
+    vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(max(dot(normal, viewDir), 0.0), roughness)).rg;
     vec3 specular = prefilteredColor * (F * brdf.r + brdf.g);
 
@@ -249,4 +254,6 @@ void main() {
     colour = colour / (colour + vec3(1.0));
     colour = pow(colour, vec3(1.0 / 2.2));
     Colour = vec4(colour, 1.0);
+
+    // Colour = vec4(normal, 1.0);
 }

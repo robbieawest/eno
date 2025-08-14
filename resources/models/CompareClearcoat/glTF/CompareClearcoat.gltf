@@ -291,7 +291,7 @@
         "metallicRoughnessTexture": {
           "index": 1
         },
-        "roughnessFactor": 0
+        "roughnessFactor": 0.1
       }
     },
     {
