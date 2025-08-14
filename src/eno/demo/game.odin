@@ -35,25 +35,53 @@ every_frame :: proc() -> (ok: bool) {
     return
 }
 
+load_supra :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
 
-before_frame :: proc() -> (ok: bool) {
-
-    arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
-
-    // scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf") or_return
     scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/Supra/scene.gltf") or_return
-    // scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/gradient_fantasy_sword/scene.gltf") or_return
-    // scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/CompareClearcoat/glTF/CompareClearcoat.gltf") or_return
+    models := scene_res.models
+
+    supra := &models[0]
+    // supra.world_comp.rotation =
+
     defer resource.destroy_model_scene_result(scene_res)
+    ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
+    return true
+}
+
+load_sword :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
+    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/gradient_fantasy_sword/scene.gltf") or_return
+    models := scene_res.models
+    defer resource.destroy_model_scene_result(scene_res)
+    ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
+    return true
+}
+
+load_clearcoat_test :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
+    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/CompareClearcoat/glTF/CompareClearcoat.gltf") or_return
+    models := scene_res.models
+    defer resource.destroy_model_scene_result(scene_res)
+    ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
+    return true
+}
+
+load_helmet :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
+    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf") or_return
 
     models := scene_res.models
-    /*
     second_helmet := models[0]
     second_helmet.model.name = strings.clone("model clone")
     second_helmet.world_comp = standards.make_world_component(position=glm.vec3{ 3.0, 0.0, 3.0 })
     append(&models, second_helmet)
-    */
+
+    defer resource.destroy_model_scene_result(scene_res)
     ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
+    return true
+}
+
+before_frame :: proc() -> (ok: bool) {
+
+    arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
+    load_helmet(arch) or_return
 
     game_data := new(GameData)
 
@@ -91,7 +119,7 @@ before_frame :: proc() -> (ok: bool) {
     ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
 
     // todo copy light name internally
-    light := resource.PointLight{ "demo_light", true, 10.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 2.5, 2.5, 2.5 } }
+    light := resource.PointLight{ "demo_light", false, 10.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 2.5, 2.5, 2.5 } }
     light_comp := standards.make_world_component(position=light.position)
     light2 := resource.PointLight{ "demo_light2", false, 10.0, glm.vec3{ 1.0, 0.0, 0.0 }, glm.vec3{ -5.0, 0.0, 0.0 } }
     light_comp2 := standards.make_world_component(position=light2.position)
@@ -127,11 +155,11 @@ before_frame :: proc() -> (ok: bool) {
     render.populate_all_shaders(&game_data.render_pipeline, manager, game.Game.scene) or_return
 
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "newport_loft.hdr") or_return
-    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "park_music_stage_4k.hdr") or_return
+    game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "park_music_stage_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "rogland_clear_night_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "twilight_sunset_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "voortrekker_interior_4k.hdr") or_return
-    game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "metro_noord_4k.hdr") or_return
+    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "metro_noord_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "drackenstein_quarry_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "fireplace_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "freight_station_4k.hdr") or_return

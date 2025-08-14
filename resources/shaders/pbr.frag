@@ -167,35 +167,31 @@ vec3 calculateReflectance(vec3 BRDF, vec3 N, vec3 L, vec3 radiance) {
 
 void main() {
     vec3 albedo = baseColourFactor.rgb;
-    albedo *= texture(baseColourTexture, texCoords).rgb;
     if ((materialUsages | uint(4)) != 0) {
         albedo *= texture(baseColourTexture, texCoords).rgb;
     }
 
-    float roughness = 0.5;
-    float metallic = 0.0;
+    float roughness = roughnessFactor;
+    float metallic = metallicFactor;
     if ((materialUsages | uint(2)) != 0) {
         vec2 metallicRoughness = texture(pbrMetallicRoughness, texCoords).gb;
-        roughness = metallicRoughness.x;
-        metallic = metallicRoughness.y;
+        roughness *= metallicRoughness.x;
+        metallic *= metallicRoughness.y;
     }
 
     vec3 normal = vec3(1.0);
     if ((materialUsages | uint(64)) != 0) {
-        normal = normalize(texture(normalTexture, texCoords).rgb * 2.0 - 1.0);
+        normal = texture(normalTexture, texCoords).rgb * 2.0 - 1.0;
     }
-    else {
-        normal = geomNormal;
-    }
-    normal = geomNormal;
+    else normal = geomNormal;
+    normal = normalize(normal);
 
-/*
+    vec3 occlusion;
     if ((materialUsages | uint(32)) != 0) {
         occlusion = texture(occlusionTexture, texCoords).rgb;
     }
-    */
+    else occlusion = vec3(1.0);
 
-    vec3 occlusion = vec3(1.0);
     vec3 viewDir = normalize(cameraPosition - position);
     vec3 R = reflect(-viewDir, normal);  // Tangent space
 
@@ -234,7 +230,7 @@ void main() {
     vec3 diffuse = irradiance * albedo;
 
     const float MAX_REFLECTION_LOD = 4.0;
-    vec3 RWorld = transpose(TBN) * R;  // Since tbn is orthogonal it is transitive across the reflect operation
+    vec3 RWorld = normalize(transpose(TBN) * R);  // Since tbn is orthogonal it is transitive across the reflect operation
     vec3 prefilteredColor = textureLod(prefilterMap, RWorld, roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(max(dot(normal, viewDir), 0.0), roughness)).rg;
     vec3 specular = prefilteredColor * (F * brdf.r + brdf.g);
