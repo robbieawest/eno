@@ -68,6 +68,7 @@ create_and_transfer_vao :: proc{ create_and_transfer_vao_raw, create_and_transfe
 
 @(private)
 create_and_transfer_vao_raw :: proc(vao: ^u32) {
+    dbg.log(.INFO, "Creating and transferring vao")
     gl.GenVertexArrays(1, vao)
     bind_vao(vao^)
 }
@@ -102,6 +103,7 @@ create_and_transfer_vbo_maybe :: proc(vbo: ^Maybe(u32), vertex_data: resource.Ve
 
 @(private)
 create_and_transfer_vbo_raw :: proc(vbo: ^u32, vertex_data: resource.VertexData, layout: []resource.MeshAttributeInfo) -> (ok: bool) {
+    dbg.log(.INFO, "Creating and transferring vbo")
     if len(vertex_data) == 0 {
         dbg.log(.ERROR, "No vertices given to express");
         return
@@ -114,12 +116,14 @@ create_and_transfer_vbo_raw :: proc(vbo: ^u32, vertex_data: resource.VertexData,
 
     transfer_buffer_data(gl.ARRAY_BUFFER, raw_data(vertex_data), len(vertex_data) * size_of(f32), BufferUsage{ .WRITE_ONCE_READ_MANY, .DRAW })
 
+    for attrib in 0..<max_vertex_attributes() do gl.DisableVertexAttribArray(attrib);
+
     offset, current_ind: u32 = 0, 0
     for attribute_info in layout {
-        gl.VertexAttribPointer(current_ind, i32(attribute_info.float_stride), gl.FLOAT, gl.FALSE, i32(total_byte_stride), uintptr(offset) * size_of(f32))
+        gl.VertexAttribPointer(current_ind, i32(attribute_info.float_stride), gl.FLOAT, gl.FALSE, i32(total_byte_stride), uintptr(offset))
         gl.EnableVertexAttribArray(current_ind)
 
-        offset += attribute_info.float_stride
+        offset += attribute_info.byte_stride
         current_ind += 1
     }
 
@@ -130,6 +134,13 @@ create_and_transfer_vbo_raw :: proc(vbo: ^u32, vertex_data: resource.VertexData,
 @(private)
 bind_vbo :: proc(vbo: u32) {
     gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
+}
+
+@(private)
+max_vertex_attributes :: proc() -> u32 {
+    max: i32
+    gl.GetIntegerv(gl.MAX_VERTEX_ATTRIBS, &max)
+    return u32(max)
 }
 
 
@@ -151,7 +162,7 @@ create_and_transfer_ebo_maybe :: proc(ebo: ^Maybe(u32), data: ^resource.Mesh) ->
 
 @(private)
 create_and_transfer_ebo_raw :: proc(ebo: ^u32, data: ^resource.Mesh) -> (ok: bool) {
-    dbg.log(.INFO, "Expressing gl mesh indices")
+    dbg.log(.INFO, "Creating and transferring ebo")
     if len(data.index_data) == 0 {
         dbg.log(.ERROR, "Cannot express 0 indices")
         return
@@ -328,6 +339,7 @@ bind_texture :: proc(#any_int texture_unit: u32, texture: GPUTexture, texture_ty
         dbg.log(dbg.LogLevel.ERROR, "Texture unit is greater than 31 - active textures limit exceeded")
         return
     }
+    dbg.log(.INFO, "Binding texture '%d' of type '%v' to unit '%d'", texture.?, texture_type, texture_unit, loc=loc)
 
     gl.ActiveTexture(u32(gl.TEXTURE0) + texture_unit)
     bind_texture_raw(texture_type, texture.?)

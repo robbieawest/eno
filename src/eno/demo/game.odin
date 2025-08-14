@@ -24,6 +24,7 @@ GameData :: struct {
     render_pipeline: render.RenderPipeline
 }
 
+
 every_frame :: proc() -> (ok: bool) {
     // set_light_position() or_return
     render.render(&game.Game.resource_manager, (cast(^GameData)game.Game.game_data).render_pipeline, game.Game.scene) or_return
@@ -40,7 +41,9 @@ before_frame :: proc() -> (ok: bool) {
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
 
     // scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf") or_return
-    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/gradient_fantasy_sword/scene.gltf") or_return
+    // scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/Supra/scene.gltf") or_return
+    // scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/gradient_fantasy_sword/scene.gltf") or_return
+    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/CompareClearcoat/glTF/CompareClearcoat.gltf") or_return
     defer resource.destroy_model_scene_result(scene_res)
 
     models := scene_res.models
@@ -50,7 +53,6 @@ before_frame :: proc() -> (ok: bool) {
     second_helmet.world_comp = standards.make_world_component(position=glm.vec3{ 3.0, 0.0, 3.0 })
     append(&models, second_helmet)
     */
-
     ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
 
     game_data := new(GameData)
@@ -138,6 +140,7 @@ before_frame :: proc() -> (ok: bool) {
 
     return true
 }
+
 
 set_light_position :: proc() -> (ok: bool) {
     isVisibleQueryData := true

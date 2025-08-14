@@ -103,22 +103,25 @@ render :: proc(
         shader_map := group_meshes_by_shader(pipeline.shader_store, &pass, mesh_data^, temp_allocator) or_return
 
         handle_pass_properties(pipeline, pass) or_return
+        check_framebuffer_status_raw() or_return
 
         // render meshes
-        for shader_pass_id, &mesh_datas  in shader_map {
+        for shader_pass_id, &mesh_datas in shader_map {
+            dbg.log(.INFO, "Rendering for shader pass")
 
             shader_pass := resource.get_shader_pass(manager, shader_pass_id) or_return
 
             attach_program(shader_pass^)
-            tex_unit := bind_ibl_uniforms(scene, shader_pass) or_return
+            bind_ibl_uniforms(scene, shader_pass) or_return
             update_camera_ubo(scene) or_return
             update_lights_ssbo(scene) or_return
 
             for &mesh_data in mesh_datas {
+                dbg.log(.INFO, "Rendering mesh data")
                 model_mat, normal_mat := model_and_normal(mesh_data.mesh, mesh_data.world, scene.viewpoint)
                 transfer_mesh(manager, mesh_data.mesh) or_return
 
-                bind_material_uniforms(manager, mesh_data.mesh.material, shader_pass, tex_unit) or_return
+                bind_material_uniforms(manager, mesh_data.mesh.material, shader_pass) or_return
                 resource.set_uniform(shader_pass, standards.MODEL_MAT, model_mat)
                 resource.set_uniform(shader_pass, standards.NORMAL_MAT, normal_mat)
 
@@ -146,6 +149,7 @@ render_skybox :: proc(manager: ^resource.ResourceManager, scene: ^ecs.Scene, all
         dbg.log(.ERROR, "Scene image environment map must be avaiable to render skybox")
         return
     }
+    dbg.log(.INFO, "Rendering skybox")
     env_map := env.environment_map.?
     if env_map.gpu_texture == nil {
         dbg.log(.ERROR, "Environment cubemap gpu texture is not provided")
@@ -175,8 +179,8 @@ render_skybox :: proc(manager: ^resource.ResourceManager, scene: ^ecs.Scene, all
 
     irr := env.irradiance_map.?
     spec := env.prefilter_map.?
-    bind_texture(0, irr.gpu_texture.?, .CUBEMAP)
-    bind_texture(0, spec.gpu_texture.?, .CUBEMAP)
+    // bind_texture(0, irr.gpu_texture.?, .CUBEMAP)
+    // bind_texture(0, spec.gpu_texture.?, .CUBEMAP)
     bind_texture(0, env_map.gpu_texture.?, .CUBEMAP)
     resource.set_uniform(RENDER_CONTEXT.skybox_shader, ENV_MAP_UNIFORM, i32(0))
 
@@ -198,7 +202,7 @@ create_skybox_shader :: proc(manager: ^resource.ResourceManager, allocator := co
 }
 
 @(private)
-bind_ibl_uniforms :: proc(scene: ^ecs.Scene, shader: ^resource.ShaderProgram) -> (tex_unit: i32, ok: bool) {
+bind_ibl_uniforms :: proc(scene: ^ecs.Scene, shader: ^resource.ShaderProgram) -> (ok: bool) {
     m_env := scene.image_environment
     if m_env == nil {
         dbg.log(.ERROR, "Scene image environment for ibl not yet setup")
@@ -216,18 +220,18 @@ bind_ibl_uniforms :: proc(scene: ^ecs.Scene, shader: ^resource.ShaderProgram) ->
 
     // log.infof("%#v %#v %#v", irradiance_map, prefilter_map, brdf_lut)
 
+    texture_unit: i32
+    texture_unit = i32(PBRSamplerBindingLocation.IRRADIANCE_MAP)
+    bind_texture(texture_unit, irradiance_map.gpu_texture, irradiance_map.type) or_return
+    resource.set_uniform(shader, "irradianceMap", texture_unit)
 
-    bind_texture(tex_unit, irradiance_map.gpu_texture, irradiance_map.type) or_return
-    resource.set_uniform(shader, "irradianceMap", tex_unit)
-    tex_unit += 1
+    texture_unit = i32(PBRSamplerBindingLocation.BRDF_LUT)
+    bind_texture(texture_unit, brdf_lut.gpu_texture, brdf_lut.type) or_return
+    resource.set_uniform(shader, "brdfLUT", texture_unit)
 
-    bind_texture(tex_unit, brdf_lut.gpu_texture, brdf_lut.type) or_return
-    resource.set_uniform(shader, "brdfLUT", tex_unit)
-    tex_unit += 1
-
-    bind_texture(tex_unit, prefilter_map.gpu_texture, prefilter_map.type) or_return
-    resource.set_uniform(shader, "prefilterMap", tex_unit)
-    tex_unit += 1
+    texture_unit = i32(PBRSamplerBindingLocation.PREFILTER_MAP)
+    bind_texture(texture_unit, prefilter_map.gpu_texture, prefilter_map.type) or_return
+    resource.set_uniform(shader, "prefilterMap", texture_unit)
 
     ok = true
     return
@@ -487,19 +491,34 @@ model_and_normal :: proc(mesh: ^resource.Mesh, world: ^standards.WorldComponent,
 MAX_MATERIAL_USAGE :: u32  // Must be reflected as the same type in any shaders
 MaterialUsage :: enum {
     PBRMetallicRoughness,
-    PBRMetallicRoughnessTexAvailable,
-    BaseColourTexAvailable,
+    PBRMetallicRoughnessTexture,
+    BaseColourTexture,
     EmissiveFactor,
     EmissiveTexture,
     OcclusionTexture,
     NormalTexture,
-    BaseColourTexture
+    ClearcoatTexture,
+    ClearcoatRoughnessTexture,
+    ClearcoatNormalTexture
+}
+
+// Arbitrary, PBR shaders defining materials must match these sampler binding locations
+PBRSamplerBindingLocation :: enum u32 {
+    BASE_COLOUR,
+    EMISSIVE,
+    OCCLUSION,
+    NORMAL,
+    PBR_METALLIC_ROUGHNESS,
+    CLEARCOAT,
+    CLEARCOAT_ROUGHNESS,
+    CLEARCOAT_NORMAL,
+    BRDF_LUT,
+    IRRADIANCE_MAP,
+    PREFILTER_MAP
 }
 
 @(private)
-bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material, lighting_shader: ^resource.ShaderProgram, curr_tex_unit: i32 = 0) -> (ok: bool) {
-
-    texture_unit := curr_tex_unit
+bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material, lighting_shader: ^resource.ShaderProgram) -> (ok: bool) {
 
     usages: bit_set[MaterialUsage; MAX_MATERIAL_USAGE]
     for info, property in material.properties {
@@ -507,23 +526,23 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
             case resource.PBRMetallicRoughness:
                 usages += { .PBRMetallicRoughness }
                 if v.base_colour != nil {
-                    usages += { .BaseColourTexAvailable}
+                    usages += { .BaseColourTexture}
                     base_colour := resource.get_texture(manager, v.base_colour) or_return
+                    texture_unit := i32(PBRSamplerBindingLocation.BASE_COLOUR)
 
                     transfer_texture(base_colour)
                     bind_texture(texture_unit, base_colour.gpu_texture) or_return
                     resource.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, texture_unit)
-                    texture_unit += 1
                 }
 
                 if v.metallic_roughness != nil {
-                    usages += { .PBRMetallicRoughnessTexAvailable }
+                    usages += { .PBRMetallicRoughnessTexture }
                     metallic_roughness := resource.get_texture(manager, v.metallic_roughness) or_return
+                    texture_unit := i32(PBRSamplerBindingLocation.PBR_METALLIC_ROUGHNESS)
 
                     transfer_texture(metallic_roughness)
                     bind_texture(texture_unit, metallic_roughness.gpu_texture) or_return
                     resource.set_uniform(lighting_shader, resource.PBR_METALLIC_ROUGHNESS, texture_unit)
-                    texture_unit += 1
                 }
 
                 resource.set_uniform(lighting_shader, resource.BASE_COLOUR_FACTOR, v.base_colour_factor[0], v.base_colour_factor[1], v.base_colour_factor[2], v.base_colour_factor[3])
@@ -537,33 +556,34 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
             case resource.EmissiveTexture:
                 usages += { .EmissiveTexture }
                 emissive_texture := resource.get_texture(manager, resource.ResourceIdent(v)) or_return
+                texture_unit := i32(PBRSamplerBindingLocation.EMISSIVE)
 
                 transfer_texture(emissive_texture)
                 bind_texture(texture_unit, emissive_texture.gpu_texture.?) or_return
                 resource.set_uniform(lighting_shader, resource.EMISSIVE_TEXTURE, texture_unit)
-                texture_unit += 1
 
             case resource.OcclusionTexture:
                 usages += { .OcclusionTexture }
-                occlusion_texture:= resource.get_texture(manager, resource.ResourceIdent(v)) or_return
+                occlusion_texture := resource.get_texture(manager, resource.ResourceIdent(v)) or_return
+                texture_unit := i32(PBRSamplerBindingLocation.OCCLUSION)
 
                 transfer_texture(occlusion_texture)
                 bind_texture(texture_unit, occlusion_texture.gpu_texture.?) or_return
                 resource.set_uniform(lighting_shader, resource.OCCLUSION_TEXTURE, texture_unit)
-                texture_unit += 1
 
             case resource.NormalTexture:
                 usages += { .NormalTexture }
                 normal_texture := resource.get_texture(manager, resource.ResourceIdent(v)) or_return
+                texture_unit := i32(PBRSamplerBindingLocation.NORMAL)
 
                 transfer_texture(normal_texture)
                 bind_texture(texture_unit, normal_texture.gpu_texture.?) or_return
                 resource.set_uniform(lighting_shader, resource.NORMAL_TEXTURE, texture_unit)
-                texture_unit += 1
+            // todo clearcoat
         }
     }
 
-    resource.set_uniform(lighting_shader, resource.MATERIAL_INFOS, transmute(MAX_MATERIAL_USAGE)usages)
+    resource.set_uniform(lighting_shader, resource.MATERIAL_USAGES, transmute(MAX_MATERIAL_USAGE)usages)
     return true
 }
 
@@ -1015,7 +1035,7 @@ generate_shader_pass_for_mesh :: proc(
 
     if vertex_layout.shader == nil {
         dbg.log(dbg.LogLevel.INFO, "Creating vertex shader for layout")
-        vertex_layout.shader = generate_vertex_shader(manager, shader_generate, allocator) or_return
+        vertex_layout.shader = generate_vertex_shader(manager, vertex_layout^, shader_generate, allocator) or_return
     }
 
     if material_type.shader == nil {
@@ -1044,13 +1064,27 @@ generate_shader_pass_for_mesh :: proc(
 @(private)
 generate_vertex_shader :: proc(
     manager: ^resource.ResourceManager,
+    vertex_layout: resource.VertexLayout,
     pass_type: RenderPassShaderGenerate,
     allocator := context.allocator
 ) -> (id: resource.ResourceIdent, ok: bool) {
     // Todo dynamic
     dbg.log(.INFO, "Generating vertex shader")
 
-    single_shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.vert", .VERTEX, allocator) or_return
+    contains_tangent := false
+    for info in vertex_layout.infos {
+        if info.type == .tangent  {
+            contains_tangent = true
+            break
+        }
+    }
+
+    dbg.log(.INFO, "Contains tangent: %v", contains_tangent)
+
+    single_shader: resource.Shader
+    if contains_tangent do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr.vert", .VERTEX, allocator) or_return
+    else do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr_no_tangent.vert", .VERTEX, allocator) or_return
+
     id = resource.add_shader(manager, single_shader) or_return
     ok = true
     return
@@ -1065,7 +1099,7 @@ generate_lighting_shader :: proc(
     // Todo dynamic
     dbg.log(.INFO, "Generating lighting shader")
 
-    single_shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "demo_shader.frag", .FRAGMENT, allocator) or_return
+    single_shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr.frag", .FRAGMENT, allocator) or_return
     id = resource.add_shader(manager, single_shader) or_return
     ok = true
     return
@@ -1481,23 +1515,14 @@ create_primitive_cube :: proc() -> (comp: resource.GLComponent) {
         -1.0,  1.0,  1.0,  0.0,  1.0,  0.0, 0.0, 0.0
     }
 
-    vao: u32
-    gl.GenVertexArrays(1, &vao)
-    gl.BindVertexArray(vao)
-    comp.vao = vao
-
-    vbo: u32
-    gl.GenBuffers(1, &vbo)
-    gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
-    gl.BufferData(gl.ARRAY_BUFFER, size_of(verts), raw_data(&verts), gl.STATIC_DRAW)
-    comp.vbo = vbo
-
-    gl.EnableVertexAttribArray(0)
-    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 32, 0)
-    gl.EnableVertexAttribArray(1)
-    gl.VertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 32, 12)
-    gl.EnableVertexAttribArray(2)
-    gl.VertexAttribPointer(2, 2, gl.FLOAT, gl.FALSE, 32, 24)
+    create_and_transfer_vao(&comp.vao)
+    verts_dyn := transmute([dynamic]f32)runtime.Raw_Dynamic_Array{ &verts[0], len(verts), len(verts), context.allocator }
+    layout := []resource.MeshAttributeInfo{
+        resource.MeshAttributeInfo{ .position, .vec3, .f32, 12, 3, "" },
+        resource.MeshAttributeInfo{ .normal, .vec2, .f32, 12, 3, "" },
+        resource.MeshAttributeInfo{ .texcoord, .vec2, .f32, 8, 2, "" },
+    }
+    create_and_transfer_vbo_maybe(&comp.vbo, verts_dyn, layout)
 
     return
 }

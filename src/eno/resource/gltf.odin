@@ -7,7 +7,6 @@ import dbg "../debug"
 import "../standards"
 import futils "../file_utils"
 
-import glm "core:math/linalg/glsl"
 import "core:testing"
 import "core:strings"
 
@@ -123,7 +122,7 @@ extract_node :: proc(
 
     if node == nil do return result, true
 
-    dbg.log(.INFO, "Extracting node: %#v", node)
+    // dbg.log(.INFO, "Extracting node: %#v", node)
 
     // todo matrix/TRS vectors here are relative to parent.
     // don't want this, very cringe! got to apply them hierarchically

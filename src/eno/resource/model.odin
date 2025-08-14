@@ -220,7 +220,7 @@ primitive_square_mesh_data :: proc(manager: ^ResourceManager, unique_layout: boo
 
 // Textures and materials
 // base colour, pbr metallic, normal, occlusion and emissive texure/factor are supported currently
-MATERIAL_INFOS :: "materialInfos"
+MATERIAL_USAGES :: "materialUsages"
 
 
 PBR_METALLIC_ROUGHNESS :: "pbrMetallicRoughness"
@@ -528,34 +528,32 @@ properties_from_texture_sampler :: proc(sampler: ^cgltf.sampler, allocator := co
     defer dbg.log(.INFO, "Created properties: %#v", properties)
     if sampler == nil do return
 
-    switch sampler.mag_filter {
-        case 9728: properties[.MAG_FILTER] = .NEAREST
-        case 9729: properties[.MAG_FILTER] = .LINEAR
+    #partial switch sampler.mag_filter {
+        case .nearest: properties[.MAG_FILTER] = .NEAREST
+        case .linear: properties[.MAG_FILTER] = .LINEAR
         case: dbg.log(.WARN, "Sampler mag filter '%d' invalid, ignoring", sampler.mag_filter)
     }
 
-    switch sampler.min_filter {
-        case 9728: properties[.MIN_FILTER] = .NEAREST
-        case 9729: properties[.MIN_FILTER] = .LINEAR
-        case 9984: properties[.MIN_FILTER] = .NEAREST_MIPMAP_NEAREST
-        case 9985: properties[.MIN_FILTER] = .LINEAR_MIPMAP_NEAREST
-        case 9986: properties[.MIN_FILTER] = .NEAREST_MIPMAP_LINEAR
-        case 9987: properties[.MIN_FILTER] = .LINEAR_MIPMAP_LINEAR
+    #partial switch sampler.min_filter {
+        case .nearest: properties[.MIN_FILTER] = .NEAREST
+        case .linear: properties[.MIN_FILTER] = .LINEAR
+        case .nearest_mipmap_nearest: properties[.MIN_FILTER] = .NEAREST_MIPMAP_NEAREST
+        case .linear_mipmap_nearest: properties[.MIN_FILTER] = .LINEAR_MIPMAP_NEAREST
+        case .nearest_mipmap_linear: properties[.MIN_FILTER] = .NEAREST_MIPMAP_LINEAR
+        case .linear_mipmap_linear: properties[.MIN_FILTER] = .LINEAR_MIPMAP_LINEAR
         case: dbg.log(.WARN, "Sampler min filter '%d' invalid, ignoring", sampler.min_filter)
     }
 
     switch sampler.wrap_s {
-        case 33071: properties[.WRAP_S] = .CLAMP_EDGE
-        case 33648: properties[.WRAP_S] = .MIRROR_REPEAT
-        case 10497: properties[.WRAP_S] = .REPEAT
-        case: dbg.log(.WARN, "Sampler wrap s '%d' invalid, ignoring", sampler.wrap_s)
+        case .clamp_to_edge: properties[.WRAP_S] = .CLAMP_EDGE
+        case .mirrored_repeat: properties[.WRAP_S] = .MIRROR_REPEAT
+        case .repeat: properties[.WRAP_S] = .REPEAT
     }
 
     switch sampler.wrap_t {
-        case 33071: properties[.WRAP_T] = .CLAMP_EDGE
-        case 33648: properties[.WRAP_T] = .MIRROR_REPEAT
-        case 10497: properties[.WRAP_T] = .REPEAT
-        case: dbg.log(.WARN, "Sampler wrap t '%d' invalid, ignoring", sampler.wrap_t)
+        case .clamp_to_edge: properties[.WRAP_T] = .CLAMP_EDGE
+        case .mirrored_repeat: properties[.WRAP_T] = .MIRROR_REPEAT
+        case .repeat: properties[.WRAP_T] = .REPEAT
     }
     return
 }

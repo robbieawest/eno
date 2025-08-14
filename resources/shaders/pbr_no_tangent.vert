@@ -9,14 +9,13 @@ layout (std140, binding = 0) uniform CameraInfo {
 
 layout (location = 0) in vec3 aNormal;
 layout (location = 1) in vec3 aPosition;
-layout (location = 2) in vec4 aTangent;
-layout (location = 3) in vec2 aTexCoords;
+layout (location = 2) in vec2 aTexCoords;
 
 uniform mat4 m_Model;
 uniform mat3 m_Normal;
 
 out vec3 position;
-out vec3 normal;
+out vec3 geomNormal;
 out vec2 texCoords;
 out vec3 cameraPosition;
 out mat3 TBN;
@@ -28,16 +27,11 @@ void main() {
     gl_Position = Camera.m_Project * Camera.m_View * vec4(position, 1.0);
 
     // Tangent space
-    normal = normalize(m_Normal * aNormal);
+    geomNormal = normalize(m_Normal * aNormal);
 
-    float bitangentSign = aTangent.w;
-    vec3 tangent = normalize(m_Normal * vec3(aTangent));
-    // vec3 tangent = normalize(cross(normal, vec3(0.0, 1.0, 1.0)));  // approximation
-
-    // Orthogonalize tangent to normal
-    tangent = normalize(tangent - dot(tangent, normal) * normal);
-    vec3 bitangent = cross(normal, tangent) * bitangentSign;
-    TBN = transpose(mat3(tangent, bitangent, normal));
+    vec3 tangent = normalize(cross(geomNormal, vec3(0.0, 1.0, 1.0)));
+    vec3 bitangent = cross(geomNormal, tangent);
+    TBN = transpose(mat3(tangent, bitangent, geomNormal));
 
     // Apply TBN to outgoing values
     position = TBN * position;

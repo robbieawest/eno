@@ -18,7 +18,7 @@ WindowTarget :: ^SDL.Window
 initialize_window :: proc(width, height: i32, window_tag: string, extra_params: ..i32) -> (win_ret: WindowTarget) {
     window: ^SDL.Window
     c_window_tag := strings.clone_to_cstring(window_tag)
-    
+
     if len(extra_params) != 0 {
         if len(extra_params) != 2 {
             dbg.log(.ERROR, "Not enough params given to initialize SDL window")
@@ -30,11 +30,7 @@ initialize_window :: proc(width, height: i32, window_tag: string, extra_params: 
         window = SDL.CreateWindow(c_window_tag, SDL.WINDOWPOS_UNDEFINED, SDL.WINDOWPOS_UNDEFINED, width, height, SDL.WINDOW_OPENGL)
     }
 
-    SDL.CreateRenderer(window, -1, SDL.RENDERER_ACCELERATED)
-    if (SDL.GL_SetSwapInterval(1) < 0) {
-        dbg.log(.ERROR, "Could not set VSYNC to on")
-        return
-    }
+    // SDL.CreateRenderer(window, -1, SDL.RENDERER_ACCELERATED)
 
 	if window == nil {
         dbg.log(.ERROR, "Could not initialize SDL window")
@@ -43,12 +39,17 @@ initialize_window :: proc(width, height: i32, window_tag: string, extra_params: 
 
     WINDOW_WIDTH = width
     WINDOW_HEIGHT = height
-	
+
+    sdl_setup_gl_versioning()
     gl_context := SDL.GL_CreateContext(window)
     SDL.GL_MakeCurrent(window, gl_context)
     gl.load_up_to(4, 3, SDL.gl_set_proc_address)
 
-    sdl_setup_gl_versioning()
+    if (SDL.GL_SetSwapInterval(1) < 0) {
+        dbg.log(.ERROR, "Could not set VSYNC to on")
+        return
+    }
+
     sdl_setup_gl_multisamples()
     glutils.opengl_debug_setup()
 
@@ -60,11 +61,12 @@ initialize_window :: proc(width, height: i32, window_tag: string, extra_params: 
 }
 
 sdl_setup_gl_versioning :: proc() {
+    dbg.log(.INFO, "Setting SDL GL versioning")
     _attr_ret: i32
     _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_MAJOR_VERSION, 4)
     _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_MINOR_VERSION, 3)
     _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_PROFILE_MASK, i32(SDL.GLprofile.CORE))
-    _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_FLAGS, i32(SDL.GLcontextFlag.DEBUG_FLAG))
+    // _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_FLAGS, i32(SDL.GLcontextFlag.DEBUG_FLAG))
     if _attr_ret != 0 do dbg.log(.ERROR, "Could not set certain SDL parameters for OpenGL")
 }
 
