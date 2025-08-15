@@ -165,29 +165,34 @@ vec3 calculateReflectance(vec3 BRDF, vec3 N, vec3 L, vec3 radiance) {
     return BRDF * radiance * max(dot(N, L), 0.0);
 }
 
+bool checkBitMask(int bitPosition) {
+    return (materialUsages & (1 << bitPosition)) != 0;
+}
+
 void main() {
     vec3 albedo = baseColourFactor.rgb;
-    if ((materialUsages | uint(4)) != 0) {
+
+    if (checkBitMask(1)) {
         albedo *= texture(baseColourTexture, texCoords).rgb;
     }
 
     float roughness = roughnessFactor;
     float metallic = metallicFactor;
-    if ((materialUsages | uint(2)) != 0) {
+    if (checkBitMask(0)) {
         vec2 metallicRoughness = texture(pbrMetallicRoughness, texCoords).gb;
         roughness *= metallicRoughness.x;
         metallic *= metallicRoughness.y;
     }
 
     vec3 normal = vec3(1.0);
-    if ((materialUsages | uint(64)) != 0) {
+    if (checkBitMask(5)) {
         normal = texture(normalTexture, texCoords).rgb * 2.0 - 1.0;
     }
     else normal = geomNormal;
     normal = normalize(normal);
 
     vec3 occlusion;
-    if ((materialUsages | uint(32)) != 0) {
+    if (checkBitMask(4)) {
         occlusion = texture(occlusionTexture, texCoords).rgb;
     }
     else occlusion = vec3(1.0);

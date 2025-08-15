@@ -219,9 +219,8 @@ primitive_square_mesh_data :: proc(manager: ^ResourceManager, unique_layout: boo
 
 
 // Textures and materials
-// base colour, pbr metallic, normal, occlusion and emissive texure/factor are supported currently
+// I expect this could be done better with an enumerated array on MaterialPropertyInfo
 MATERIAL_USAGES :: "materialUsages"
-
 
 PBR_METALLIC_ROUGHNESS :: "pbrMetallicRoughness"
 // For specifying shader uniforms:
@@ -230,8 +229,15 @@ ROUGHNESS_FACTOR :: "roughnessFactor"
 BASE_COLOUR_TEXTURE :: "baseColourTexture"
 BASE_COLOUR_FACTOR :: "baseColourFactor"
 
-PBR_SPECULAR_GLOSSINESS :: "pbrSpecularGlossiness"
 CLEARCOAT :: "clearcoat"
+// For specifying shader uniforms:
+CLEARCOAT_TEXTURE :: "clearcoatTexture"
+CLEARCOAT_ROUGHNESS_TEXTURE :: "clearcoatRoughnessTexture"
+CLEARCOAT_NORMAL_TEXTURE :: "clearcoatNormalTexture"
+CLEARCOAT_FACTOR :: "clearcoatFactor"
+CLEARCOAT_ROUGHNESS_FACTOR :: "clearcoatRoughnessFactor"
+
+PBR_SPECULAR_GLOSSINESS :: "pbrSpecularGlossiness"
 TRANSMISSION :: "transmission"
 VOLUME :: "volume"
 INDEX_OF_REFRACTION :: "ior"
@@ -367,7 +373,8 @@ MaterialProperty :: struct {
         NormalTexture,
         OcclusionTexture,
         EmissiveTexture,
-        EmissiveFactor
+        EmissiveFactor,
+        Clearcoat
     }
 }
 
@@ -384,13 +391,13 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
 
         base_tex_id: ResourceID
         if met_rough.base_color_texture.texture != nil {
-            base_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.base_color_texture.texture, gltf_file_location) or_return
+            base_tex := texture_from_cgltf_texture(met_rough.base_color_texture.texture, gltf_file_location) or_return
             base_tex_id = add_texture(manager, base_tex) or_return
         }
 
         met_rough_id: ResourceID
         if met_rough.metallic_roughness_texture.texture != nil {
-            met_rough_tex := texture_from_cgltf_texture(cmat.pbr_metallic_roughness.metallic_roughness_texture.texture, gltf_file_location) or_return
+            met_rough_tex := texture_from_cgltf_texture(met_rough.metallic_roughness_texture.texture, gltf_file_location) or_return
             met_rough_id = add_texture(manager, met_rough_tex) or_return
         }
 
@@ -424,6 +431,37 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
         tex_id := add_texture(manager, tex) or_return
         material.properties[.EMISSIVE_TEXTURE] = { EMISSIVE_TEXTURE, EmissiveTexture(tex_id) }
         material.properties[.EMISSIVE_FACTOR] = { EMISSIVE_FACTOR, EmissiveFactor(cmat.emissive_factor) }
+    }
+    if cmat.has_clearcoat {
+        material_type.properties |= { .CLEARCOAT }
+        clear := cmat.clearcoat
+
+        clear_tex_id: ResourceID
+        if clear.clearcoat_texture.texture != nil {
+            clear_tex := texture_from_cgltf_texture(clear.clearcoat_texture.texture, gltf_file_location) or_return
+            clear_tex_id = add_texture(manager, clear_tex) or_return
+        }
+
+        clear_rough_tex_id: ResourceID
+        if clear.clearcoat_roughness_texture.texture != nil {
+            clear_rough_tex := texture_from_cgltf_texture(clear.clearcoat_roughness_texture.texture, gltf_file_location) or_return
+            clear_rough_tex_id = add_texture(manager, clear_rough_tex) or_return
+        }
+
+        clear_normal_tex_id: ResourceID
+        if clear.clearcoat_normal_texture.texture != nil {
+            clear_normal_tex := texture_from_cgltf_texture(clear.clearcoat_normal_texture.texture, gltf_file_location) or_return
+            clear_normal_tex_id = add_texture(manager, clear_normal_tex) or_return
+        }
+
+        clearcoat := Clearcoat{
+            clear_tex_id,
+            clear_rough_tex_id,
+            clear_normal_tex_id,
+            clear.clearcoat_factor,
+            clear.clearcoat_roughness_factor
+        }
+        material.properties[.CLEARCOAT] = MaterialProperty{ CLEARCOAT, clearcoat }
     }
 
     // todo clearcoat

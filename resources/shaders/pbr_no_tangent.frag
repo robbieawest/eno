@@ -146,6 +146,10 @@ float GeomSmith(vec3 N, vec3 V, vec3 L, float roughness) {
     return ggx1 * ggx2;
 }
 
+float KelemenVisibility(vec3 L, vec3 H) {
+    return 0.25 * pow(max(dot(L, H), 0.0), 2);
+}
+
 vec3 FresnelSchlick(vec3 V, vec3 H, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - max(dot(H, V), 0.0), 0.0, 1.0), 5.0);
 }
@@ -169,26 +173,36 @@ vec3 calculateBRDF(vec3 N, vec3 V, vec3 L, vec3 H, vec3 albedo, float roughness,
     return diffuseShare * lambertian + specular;
 }
 
+vec3 calculateClearcoatBRDF(vec3 N, vec3 L, vec3 H, float roughness, vec3 Fc) {
+    float NDF = DistributionGGX(N, H, roughness);
+    float G = KelemenVisibility(L, H);
+    return (NDF * G) * Fc;
+}
+
 vec3 calculateReflectance(vec3 BRDF, vec3 N, vec3 L, vec3 radiance) {
     return BRDF * radiance * max(dot(N, L), 0.0);
 }
 
+bool checkBitMask(int bitPosition) {
+    return (materialUsages & uint(1 << bitPosition)) != 0;
+}
+
 void main() {
     vec3 albedo = baseColourFactor.rgb;
-    if ((materialUsages | uint(4)) != 0) {
+    if (checkBitMask(1)) {
         albedo *= texture(baseColourTexture, texCoords).rgb;
     }
 
     float roughness = roughnessFactor;
     float metallic = metallicFactor;
-    if ((materialUsages | uint(2)) != 0) {
+    if (checkBitMask(0)) {
         vec2 metallicRoughness = texture(pbrMetallicRoughness, texCoords).gb;
         roughness *= metallicRoughness.x;
         metallic *= metallicRoughness.y;
     }
 
     vec3 normal = vec3(1.0);
-    if ((materialUsages | uint(64)) == 0) {
+    if (checkBitMask(5)) {
         normal = texture(normalTexture, texCoords).rgb * 2.0 - 1.0;
         normal = calculateTBN() * normal;
     }
@@ -196,15 +210,41 @@ void main() {
     normal = normalize(normal);
 
     vec3 occlusion;
-    if ((materialUsages | uint(32)) == 0) {
+    if (checkBitMask(4)) {
         occlusion = texture(occlusionTexture, texCoords).rgb;
     }
     else occlusion = vec3(1.0);
 
-    vec3 viewDir = normalize(cameraPosition - position);
-    vec3 R = reflect(-viewDir, normal);
+    float clearcoat = clearcoatFactor;
+    float clearcoatRoughness = clearcoatRoughnessFactor;
+    vec3 clearcoatNormal;
+    if (checkBitMask(6)) {
+        clearcoat *= texture(clearcoatTexture, texCoords).r;
+    }
+    if (checkBitMask(7)) {
+        clearcoatRoughness *= texture(clearcoatRoughnessTexture, texCoords).g;
+    }
+    if (checkBitMask(8)) {
+        clearcoatNormal = texture(clearcoatNormalTexture, texCoords).rgb * 2.0 - 1.0;
+        clearcoatNormal = normalize(calculateTBN() * clearcoatNormal); // Todo find a way to reuse TBN if possible
+    }
+    else clearcoatNormal = normal;
+    bool clearcoatActive = clearcoat != 0.0;
 
-    vec3 fresnelIncidence = mix(vec3(0.04), albedo, metallic);
+    // Clamp roughnesses, roughness at zero isn't great visually
+    roughness = clamp(roughness, 0.089, 1.0);
+    clearcoatRoughness = clamp(clearcoatRoughness, 0.089, 1.0);
+
+
+    vec3 viewDir = normalize(cameraPosition - position);
+
+    vec3 baseFresnelIncidence;
+    baseFresnelIncidence = mix(vec3(0.04), albedo, metallic);
+    if (clearcoatActive) {
+        // Assumes clearcoat layer IOR of 1.5
+        baseFresnelIncidence = pow((1.0 - 5.0 * sqrt(baseFresnelIncidence)) / (5.0 - sqrt(baseFresnelIncidence)), vec3(2.0));
+    }
+
 
     uint spotLightSize = 16;
     uint directionalLightSize = 12;
@@ -224,14 +264,21 @@ void main() {
 
         vec3 radiance = light.lightInformation.intensity * light.lightInformation.colour / (lightDist * lightDist);
 
-        vec3 BRDF = calculateBRDF(normal, viewDir, lightDir, halfVec, albedo, roughness * roughnessFactor, metallic * metallicFactor, fresnelIncidence);
+        vec3 BRDF = calculateBRDF(normal, viewDir, lightDir, halfVec, albedo, roughness * roughnessFactor, metallic * metallicFactor, baseFresnelIncidence);
+
+        if (clearcoatActive) {
+            vec3 clearcoatFresnel = FresnelSchlick(viewDir, halfVec, vec3(0.04)) * clearcoat;
+            BRDF *= (1.0 - clearcoatFresnel);
+            BRDF += calculateClearcoatBRDF(normal, lightDir, halfVec, clearcoatRoughness, clearcoatFresnel);
+        }
+
         vec3 reflectance = calculateReflectance(BRDF, normal, lightDir, radiance);
         lightOutputted += reflectance;
 
         bufIndex += pointLightSize;
     }
 
-    vec3 F = FresnelSchlickRoughness(normal, viewDir, fresnelIncidence, roughness);
+    vec3 F = FresnelSchlickRoughness(normal, viewDir, baseFresnelIncidence, roughness);
     vec3 kD = 1.0 - F;
     kD *= 1.0 - metallic;
 
@@ -240,14 +287,27 @@ void main() {
 
     const float MAX_REFLECTION_LOD = 4.0;
 
+    vec3 R = reflect(-viewDir, normal);
     vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(max(dot(normal, viewDir), 0.0), roughness)).rg;
     vec3 specular = prefilteredColor * (F * brdf.r + brdf.g);
 
-    vec3 ambient = (kD * diffuse + specular) * occlusion;
+    vec3 ambient = kD * diffuse + specular;
+    if (clearcoatActive) {
+        // Fresnel at incidence for clearcoat is 0.04/4% at IOR=1.5
+        // todo check out fresnel at incidence
+        vec3 Fc = FresnelSchlickRoughness(clearcoatNormal, viewDir, vec3(0.04) , clearcoatRoughness);
+        ambient *= (1.0 - Fc);
+
+        vec3 Rc = reflect(-viewDir, clearcoatNormal);
+        vec3 prefilteredColor_c = textureLod(prefilterMap, Rc, clearcoatRoughness * MAX_REFLECTION_LOD).rgb;
+        vec2 brdf_c = texture(brdfLUT, vec2(max(dot(clearcoatNormal, viewDir), 0.0), clearcoatRoughness)).rg;
+        vec3 specular_c = prefilteredColor_c * (Fc * brdf_c.r + brdf_c.g);
+        ambient += specular_c;
+    }
     // vec3 ambient = (kD * diffuse);
 
-    vec3 colour = ambient + lightOutputted;
+    vec3 colour = ambient * occlusion + lightOutputted;
     // vec3 colour = lightOutputted + vec3(0.01) * albedo;
 
     // HDR

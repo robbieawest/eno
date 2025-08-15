@@ -81,7 +81,7 @@ load_helmet :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
 before_frame :: proc() -> (ok: bool) {
 
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
-    load_helmet(arch) or_return
+    load_supra(arch) or_return
 
     game_data := new(GameData)
 
@@ -91,7 +91,7 @@ before_frame :: proc() -> (ok: bool) {
 
     game_data.render_pipeline = render.init_render_pipeline(1, 1, frame_buffers)
 
-    window_res := win.get_window_resolution(game.Game.window) or_return
+    window_res := win.get_window_resolution(game.Game.window)
     game_data.render_pipeline.passes[0] = render.make_render_pass(
         game_data.render_pipeline,
         nil,
@@ -155,10 +155,10 @@ before_frame :: proc() -> (ok: bool) {
     render.populate_all_shaders(&game_data.render_pipeline, manager, game.Game.scene) or_return
 
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "newport_loft.hdr") or_return
-    game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "park_music_stage_4k.hdr") or_return
+    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "park_music_stage_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "rogland_clear_night_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "twilight_sunset_4k.hdr") or_return
-    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "voortrekker_interior_4k.hdr") or_return
+    game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "voortrekker_interior_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "metro_noord_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "drackenstein_quarry_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "fireplace_4k.hdr") or_return

@@ -488,9 +488,9 @@ model_and_normal :: proc(mesh: ^resource.Mesh, world: ^standards.WorldComponent,
 
 // Cannot use material infos from Material struct because some textures are
 //  not available even if the specific mat property is used
+// I've made this pascal case for some reason
 MAX_MATERIAL_USAGE :: u32  // Must be reflected as the same type in any shaders
 MaterialUsage :: enum {
-    PBRMetallicRoughness,
     PBRMetallicRoughnessTexture,
     BaseColourTexture,
     EmissiveFactor,
@@ -524,7 +524,6 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
     for info, property in material.properties {
         switch v in property.value {
             case resource.PBRMetallicRoughness:
-                usages += { .PBRMetallicRoughness }
                 if v.base_colour != nil {
                     usages += { .BaseColourTexture}
                     base_colour := resource.get_texture(manager, v.base_colour) or_return
@@ -579,7 +578,39 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 transfer_texture(normal_texture)
                 bind_texture(texture_unit, normal_texture.gpu_texture.?) or_return
                 resource.set_uniform(lighting_shader, resource.NORMAL_TEXTURE, texture_unit)
-            // todo clearcoat
+            case resource.Clearcoat:
+                if v.clearcoat_texture != nil {
+                    usages += { .ClearcoatTexture}
+                    clearcoat := resource.get_texture(manager, v.clearcoat_texture) or_return
+                    texture_unit := i32(PBRSamplerBindingLocation.CLEARCOAT)
+
+                    transfer_texture(clearcoat)
+                    bind_texture(texture_unit, clearcoat.gpu_texture) or_return
+                    resource.set_uniform(lighting_shader, resource.CLEARCOAT_TEXTURE, texture_unit)
+                }
+
+                if v.clearcoat_roughness_texture != nil {
+                    usages += { .ClearcoatRoughnessTexture }
+                    clearcoat_roughness := resource.get_texture(manager, v.clearcoat_roughness_texture) or_return
+                    texture_unit := i32(PBRSamplerBindingLocation.CLEARCOAT_ROUGHNESS)
+
+                    transfer_texture(clearcoat_roughness)
+                    bind_texture(texture_unit, clearcoat_roughness.gpu_texture) or_return
+                    resource.set_uniform(lighting_shader, resource.CLEARCOAT_ROUGHNESS_TEXTURE, texture_unit)
+                }
+
+                if v.clearcoat_normal_texture != nil {
+                    usages += { .ClearcoatNormalTexture }
+                    clearcoat_normal := resource.get_texture(manager, v.clearcoat_normal_texture) or_return
+                    texture_unit := i32(PBRSamplerBindingLocation.CLEARCOAT_NORMAL)
+
+                    transfer_texture(clearcoat_normal)
+                    bind_texture(texture_unit, clearcoat_normal.gpu_texture) or_return
+                    resource.set_uniform(lighting_shader, resource.CLEARCOAT_ROUGHNESS_TEXTURE, texture_unit)
+                }
+
+                resource.set_uniform(lighting_shader, resource.CLEARCOAT_FACTOR, v.clearcoat_factor)
+                resource.set_uniform(lighting_shader, resource.CLEARCOAT_ROUGHNESS_FACTOR, v.clearcoat_roughness_factor)
         }
     }
 
@@ -1431,7 +1462,7 @@ create_ibl_brdf_lookup :: proc(
     using brdf_lut
     name = strings.clone("BrdfLUT", allocator=allocator)
     properties = resource.default_texture_properties(allocator)
-    gpu_texture = make_texture(IBL_BRDF_LUT_WIDTH, IBL_BRDF_LUT_HEIGHT, nil, gl.RG16F, 0, gl.RG, gl.FLOAT, resource.TextureType.TWO_DIM, properties, false)
+    gpu_texture = make_texture(IBL_BRDF_LUT_WIDTH, IBL_BRDF_LUT_HEIGHT, nil, gl.RG16, 0, gl.RG, gl.FLOAT, resource.TextureType.TWO_DIM, properties, false)
     type = .TWO_DIM
 
     shader := get_ibl_brdf_lut_shader(manager, allocator) or_return

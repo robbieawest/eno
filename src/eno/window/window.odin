@@ -94,41 +94,8 @@ WindowResolution :: struct {
     w: i32, h: i32
 }
 
-get_window_resolution :: proc(window_target: WindowTarget) -> (res: WindowResolution, ok: bool) #optional_ok {
-
-    win_flags: SDL.WindowFlags = transmute(SDL.WindowFlags) SDL.GetWindowFlags(window_target)
-    if .FULLSCREEN in win_flags {
-        x, y: c.int
-        sdl_err := SDL.GetRendererOutputSize(SDL.GetRenderer(window_target), &x, &y)
-        if sdl_err != 0 {
-            last_sdl_err: cstring = SDL.GetError()
-            dbg.log(.ERROR, "Failed to get fullscreen resolution, SDL error: %s", last_sdl_err)
-            return
-        }
-
-        res.w = x
-        res.h = y
-    }
-    else {
-
-        x, y: c.int
-        SDL.GetWindowSize(window_target, &x, &y)
-        /*
-        display_mode: SDL.DisplayMode
-        sdl_err := SDL.GetDesktopDisplayMode(0, &display_mode)
-        if sdl_err != 0 {
-            last_sdl_err: cstring = SDL.GetError()
-            dbg.log(.ERROR, "Failed to get window resolution, SDL error: %s", last_sdl_err)
-            return
-        }
-
-        res = WindowResolution { i32(display_mode.w), i32(display_mode.h) }
-        */
-        res.w = x
-        res.h = y
-    }
-
-    ok = true
+get_window_resolution :: proc(window_target: WindowTarget) -> (res: WindowResolution) {
+    SDL.GetWindowSize(window_target, &res.w, &res.h)
     return
 }
 
@@ -136,7 +103,7 @@ get_window_resolution :: proc(window_target: WindowTarget) -> (res: WindowResolu
 // Aspect ratio
 
 get_aspect_ratio :: proc(window_target: WindowTarget) -> (ratio: f32, ok: bool) #optional_ok {
-    res: WindowResolution; res, ok = get_window_resolution(window_target); if !ok do return
+    res := get_window_resolution(window_target);
     return get_aspect_ratio_from_resolution(res), true;
 }
 
