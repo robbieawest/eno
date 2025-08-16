@@ -93,6 +93,7 @@ before_frame :: proc() -> (ok: bool) {
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
     load_dhelmet(arch) or_return
 
+
     game_data := new(GameData)
 
     frame_buffers := []render.FrameBuffer {
@@ -172,10 +173,10 @@ before_frame :: proc() -> (ok: bool) {
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "twilight_sunset_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "voortrekker_interior_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "metro_noord_4k.hdr") or_return
-    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "drackenstein_quarry_4k.hdr") or_return
+    game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "drackenstein_quarry_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "fireplace_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "freight_station_4k.hdr") or_return
-    game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "golden_bay_4k.hdr") or_return
+    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "golden_bay_4k.hdr") or_return
     render.pre_render(manager, game_data.render_pipeline, game.Game.scene) or_return
 
     return true

@@ -200,7 +200,7 @@ vec3 IBLAmbientTerm(vec3 normal, vec3 viewDir, vec3 fresnelIncidence, vec3 albed
 
     vec2 f_ab = texture(brdfLUT, vec2(max(dot(normal, viewDir), 0.0), roughness)).rg;
 
-    const bool multiScatter = true;
+    const bool multiScatter = false;
     vec3 ambient;
     if (multiScatter) {
         // Multiple scattering https://www.jcgt.org/published/0008/01/03/paper.pdf
@@ -248,14 +248,14 @@ void main() {
     }
 
     vec3 normal = vec3(1.0);
-    if (checkBitMask(5)) {
+    if (checkBitMask(4)) {
         normal = texture(normalTexture, texCoords).rgb * 2.0 - 1.0;
     }
     else normal = geomNormal;
     normal = normalize(normal);
 
     vec3 occlusion;
-    if (checkBitMask(4)) {
+    if (checkBitMask(3)) {
         occlusion = texture(occlusionTexture, texCoords).rgb;
     }
     else occlusion = vec3(1.0);
@@ -290,8 +290,7 @@ void main() {
     }
 
     vec3 ambient = IBLAmbientTerm(normal, viewDir, fresnelIncidence, albedo, roughness, metallic);
-    vec3 colour = ambient + lightOutputted;
-    colour *= occlusion;
+    vec3 colour = ambient * occlusion + lightOutputted;
     // vec3 colour = lightOutputted + vec3(0.01) * albedo;
 
     // HDR

@@ -219,13 +219,17 @@ vec3 IBLAmbientTerm(vec3 normal, vec3 viewDir, vec3 fresnelIncidence, vec3 fresn
 
     vec2 f_ab = texture(brdfLUT, vec2(max(dot(normal, viewDir), 0.0), roughness)).rg;
 
-    const bool multiScatter = false;
     vec3 FssEss = F * f_ab.x + f_ab.y;
     vec3 specular = FssEss * radiance;
 
     if (clearcoat) return specular;
 
     vec3 ambient;
+    // Disabling this for now, results are too bright
+    // This brdf should be computed for both dielectrics and metals then mixed
+    // Using this dielectric method for metals makes it extremely bright and
+    //  white washed
+    const bool multiScatter = false;
     if (multiScatter) {
         // Multiple scattering https://www.jcgt.org/published/0008/01/03/paper.pdf
         float Ess = f_ab.x + f_ab.y;
@@ -237,6 +241,7 @@ vec3 IBLAmbientTerm(vec3 normal, vec3 viewDir, vec3 fresnelIncidence, vec3 fresn
         vec3 kD = albedo * Edss;
 
         ambient = specular + (Fms * Ems + kD) * irradiance;
+        ambient = specular + Fms * Ems * irradiance;
     }
     else {
         // Single scatter
