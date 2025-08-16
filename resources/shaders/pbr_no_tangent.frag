@@ -178,9 +178,8 @@ vec3 FresnelSchlick(vec3 V, vec3 H, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - max(dot(H, V), 0.0), 0.0, 1.0), 5.0);
 }
 
-vec3 FresnelSchlickRoughness(vec3 V, vec3 H, vec3 F0, float roughness) {
-    roughness = roughness * roughness;
-    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - max(dot(H, V), 0.0), 0.0, 1.0), 5.0);
+vec3 FresnelSchlickRoughness(vec3 N, vec3 V, vec3 F0, float perceptualRoughness) {
+    return F0 + (max(vec3(1.0 - perceptualRoughness), F0) - F0) * pow(clamp(1.0 - max(dot(V, N), 0.0), 0.0, 1.0), 5.0);
 }
 
 vec3 calculateBRDF(vec3 N, vec3 V, vec3 L, vec3 H, vec3 albedo, float roughness, float metallic, vec3 F0) {
@@ -208,50 +207,65 @@ vec3 calculateReflectance(vec3 BRDF, vec3 N, vec3 L, vec3 radiance) {
     return BRDF * radiance * max(dot(N, L), 0.0);
 }
 
-vec3 IBLAmbientTerm(vec3 normal, vec3 viewDir, vec3 fresnelIncidence, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat) {
-    vec3 F = fresnelRoughness;
+vec3 IBLMultiScatterBRDF(vec3 N, vec3 V, vec3 radiance, vec3 irradiance, vec3 albedo, vec2 f_ab, float perceptualRoughness, const bool dielectric) {
+    vec3 F0;
+    if (dielectric) F0 = vec3(0.04);
+    else F0 = albedo;
+
+    vec3 kS = FresnelSchlickRoughness(N, V, F0, perceptualRoughness);
+
+    vec3 FssEss = kS * f_ab.x + f_ab.y;
+    vec3 specular = FssEss * radiance;
+
+    float Ess = f_ab.x + f_ab.y;
+    float Ems = 1 - Ess;
+    vec3 Favg = F0 + (1.0 - F0) / 21.0;
+    vec3 Fms = FssEss * Favg / (1 - Ems * Favg);
+    vec3 FmsEms = Fms * Ems;
+
+    vec3 diffuse = irradiance;
+    // Dielectric kD term
+    if (dielectric) {  // Full dielectric, metallic = 0
+        vec3 Edss = 1.0 - (FssEss + Fms + Ems);
+        vec3 kD = albedo * Edss;
+        diffuse *= FmsEms + kD;
+    }
+    else diffuse *= FmsEms;  // Full metal, metallic = 1
+
+    return specular + diffuse;
+}
+
+vec3 IBLAmbientTerm(vec3 N, vec3 V, vec3 F0, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat) {
     // roughness = roughness * roughness;
 
     const float MAX_REFLECTION_LOD = 4.0;
-    vec3 R = reflect(-viewDir, normal);  // World space
+    vec3 R = reflect(-V, N);  // World space
     vec3 radiance = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
-    vec3 irradiance = texture(irradianceMap, normal).rgb;
+    vec3 irradiance = texture(irradianceMap, N).rgb;
 
-    vec2 f_ab = texture(brdfLUT, vec2(max(dot(normal, viewDir), 0.0), roughness)).rg;
+    vec2 f_ab = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
 
-    vec3 FssEss = F * f_ab.x + f_ab.y;
-    vec3 specular = FssEss * radiance;
+    // Clearcoat -> No metallic or diffuse effects
+    if (clearcoat) return (fresnelRoughness * f_ab.x + f_ab.y) * radiance;
 
-    if (clearcoat) return specular;
-
-    vec3 ambient;
-    // Disabling this for now, results are too bright
-    // This brdf should be computed for both dielectrics and metals then mixed
-    // Using this dielectric method for metals makes it extremely bright and
-    //  white washed
     const bool multiScatter = false;
     if (multiScatter) {
         // Multiple scattering https://www.jcgt.org/published/0008/01/03/paper.pdf
-        float Ess = f_ab.x + f_ab.y;
-        float Ems = 1 - Ess;
-        vec3 Favg = fresnelIncidence + (1.0 - fresnelIncidence) / 21.0;
-        vec3 Fms = FssEss * Favg / (1.0 - (1.0 - Ess) * Favg);
-
-        vec3 Edss = 1.0 - (FssEss + Fms * Ems);
-        vec3 kD = albedo * Edss;
-
-        ambient = specular + (Fms * Ems + kD) * irradiance;
-        ambient = specular + Fms * Ems * irradiance;
+        vec3 metalBRDF = IBLMultiScatterBRDF(N, V, radiance, irradiance, albedo, f_ab, roughness, false);
+        vec3 dielectricBRDF = IBLMultiScatterBRDF(N, V, radiance, irradiance, albedo, f_ab, roughness, true);
+        return mix(dielectricBRDF, metalBRDF, metallic);
     }
     else {
         // Single scatter
-        vec3 kD = 1.0 - F;
+        vec3 kS = fresnelRoughness;
+        vec3 specular = (kS * f_ab.x + f_ab.y) * radiance;
+
+        vec3 kD = 1.0 - kS;
         kD *= 1.0 - metallic;
         vec3 diffuse = irradiance * albedo;
-        ambient = kD * diffuse + specular;
+        return kD * diffuse + specular;
     }
 
-    return ambient;
 }
 
 bool checkBitMask(int bitPosition) {
