@@ -13,6 +13,7 @@ import "core:strings"
 import glm "core:math/linalg/glsl"
 import "core:log"
 import file_utils "../file_utils"
+import "core:math/linalg"
 
 MODEL_COMPONENT := standards.ComponentTemplate{ "Model", Model, size_of(Model) }
 LIGHT_COMPONENT := standards.ComponentTemplate{ "Light", Light, size_of(Light) }
@@ -719,14 +720,21 @@ calculate_centroid :: proc(vertex_data: VertexData, layout_infos: []MeshAttribut
     }
 
     n_vertices := len(vertex_data) / total_float_stride
+    c64: [3]f64
 
     for vi in 0..<n_vertices {
-        buf_idx := vi * position_float_offset
+        buf_idx := vi * total_float_stride + position_float_offset
+        if buf_idx + 2 >= len(vertex_data) {
+            dbg.log(.ERROR, "Buffer index out of bounds")
+            return
+        }
+
         vertex := [3]f32{ vertex_data[buf_idx], vertex_data[buf_idx + 1], vertex_data[buf_idx + 2] }
-        centroid += vertex
+        c64 += linalg.array_cast(vertex, f64)
     }
 
-    centroid /= f32(n_vertices)
+    c64 /= f64(n_vertices)
+    centroid = linalg.array_cast(c64, f32)
 
     ok = true
     return
