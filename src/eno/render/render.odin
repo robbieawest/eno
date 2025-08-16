@@ -493,7 +493,6 @@ MAX_MATERIAL_USAGE :: u32  // Must be reflected as the same type in any shaders
 MaterialUsage :: enum {
     PBRMetallicRoughnessTexture,
     BaseColourTexture,
-    EmissiveFactor,
     EmissiveTexture,
     OcclusionTexture,
     NormalTexture,
@@ -549,7 +548,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 resource.set_uniform(lighting_shader, resource.ROUGHNESS_FACTOR, v.roughness_factor)
 
             case resource.EmissiveFactor:
-                usages += { .EmissiveFactor }
+                // No usage, bundled within EmissiveTexture..
                 resource.set_uniform(lighting_shader, resource.EMISSIVE_FACTOR, v[0], v[1], v[2])
 
             case resource.EmissiveTexture:
@@ -1378,8 +1377,8 @@ get_ibl_irradiance_shader :: proc(manager: ^resource.ResourceManager, allocator 
     return
 }
 
-PREFILTER_MAP_FACE_WIDTH :: 256
-PREFILTER_MAP_FACE_HEIGHT :: 256
+PREFILTER_MAP_FACE_WIDTH :: 1024
+PREFILTER_MAP_FACE_HEIGHT :: 1024
 create_ibl_prefilter_map :: proc(
     manager: ^resource.ResourceManager,
     env_cubemap: GPUTexture,

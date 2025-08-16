@@ -117,7 +117,7 @@ extract_node :: proc(
     parent_world_comp: Maybe(standards.WorldComponent) = nil,
     allocator := context.allocator
 ) -> (result: []ModelWorldPair, ok: bool) {
-    world_comp: standards.WorldComponent
+    world_comp := standards.make_world_component()
     result_dyn := make([dynamic]ModelWorldPair, allocator=allocator)
 
     if node == nil do return result, true
@@ -125,7 +125,8 @@ extract_node :: proc(
     // dbg.log(.INFO, "Extracting node: %#v", node)
 
     // todo matrix/TRS vectors here are relative to parent.
-    // don't want this, very cringe! got to apply them hierarchically
+
+
     if node.has_matrix {
         model_arr := node.matrix_
         model_mat := utils.arr_to_matrix(matrix[4, 4]f32, model_arr)

@@ -101,6 +101,30 @@ uniform uint materialUsages;
 
 float PI = 3.14159265358979323;
 
+vec3 ReinhardTonemapping(vec3 colour) {
+    return colour / (colour + vec3(1.0));
+}
+
+// https://www.khronos.org/news/press/khronos-pbr-neutral-tone-mapper-released-for-true-to-life-color-rendering-of-3d-products
+vec3 KhronosNeutralTonemapping(vec3 colour) {
+    const float startCompression = 0.8 - 0.04;
+    const float desaturation = 0.15;
+
+    float x = min(colour.r, min(colour.g, colour.b));
+    float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
+    colour -= offset;
+
+    float peak = max(colour.r, max(colour.g, colour.b));
+    if (peak < startCompression) return colour;
+
+    const float d = 1. - startCompression;
+    float newPeak = 1. - d * d / (peak + d - startCompression);
+    colour *= newPeak / peak;
+
+    float g = 1. - 1. / (desaturation * (peak - newPeak) + 1.);
+    return mix(colour, newPeak * vec3(1, 1, 1), g);
+}
+
 mat3 calculateTBN() {
 
     vec3 Q1  = dFdx(position);
@@ -155,6 +179,7 @@ vec3 FresnelSchlick(vec3 V, vec3 H, vec3 F0) {
 }
 
 vec3 FresnelSchlickRoughness(vec3 V, vec3 H, vec3 F0, float roughness) {
+    roughness = roughness * roughness;
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - max(dot(H, V), 0.0), 0.0, 1.0), 5.0);
 }
 
@@ -183,6 +208,47 @@ vec3 calculateReflectance(vec3 BRDF, vec3 N, vec3 L, vec3 radiance) {
     return BRDF * radiance * max(dot(N, L), 0.0);
 }
 
+vec3 IBLAmbientTerm(vec3 normal, vec3 viewDir, vec3 fresnelIncidence, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat) {
+    vec3 F = fresnelRoughness;
+    // roughness = roughness * roughness;
+
+    const float MAX_REFLECTION_LOD = 4.0;
+    vec3 R = reflect(-viewDir, normal);  // World space
+    vec3 radiance = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
+    vec3 irradiance = texture(irradianceMap, normal).rgb;
+
+    vec2 f_ab = texture(brdfLUT, vec2(max(dot(normal, viewDir), 0.0), roughness)).rg;
+
+    const bool multiScatter = false;
+    vec3 FssEss = F * f_ab.x + f_ab.y;
+    vec3 specular = FssEss * radiance;
+
+    if (clearcoat) return specular;
+
+    vec3 ambient;
+    if (multiScatter) {
+        // Multiple scattering https://www.jcgt.org/published/0008/01/03/paper.pdf
+        float Ess = f_ab.x + f_ab.y;
+        float Ems = 1 - Ess;
+        vec3 Favg = fresnelIncidence + (1.0 - fresnelIncidence) / 21.0;
+        vec3 Fms = FssEss * Favg / (1.0 - (1.0 - Ess) * Favg);
+
+        vec3 Edss = 1.0 - (FssEss + Fms * Ems);
+        vec3 kD = albedo * Edss;
+
+        ambient = specular + (Fms * Ems + kD) * irradiance;
+    }
+    else {
+        // Single scatter
+        vec3 kD = 1.0 - F;
+        kD *= 1.0 - metallic;
+        vec3 diffuse = irradiance * albedo;
+        ambient = kD * diffuse + specular;
+    }
+
+    return ambient;
+}
+
 bool checkBitMask(int bitPosition) {
     return (materialUsages & uint(1 << bitPosition)) != 0;
 }
@@ -202,7 +268,7 @@ void main() {
     }
 
     vec3 normal = vec3(1.0);
-    if (checkBitMask(5)) {
+    if (checkBitMask(4)) {
         normal = texture(normalTexture, texCoords).rgb * 2.0 - 1.0;
         normal = calculateTBN() * normal;
     }
@@ -210,7 +276,7 @@ void main() {
     normal = normalize(normal);
 
     vec3 occlusion;
-    if (checkBitMask(4)) {
+    if (checkBitMask(3)) {
         occlusion = texture(occlusionTexture, texCoords).rgb;
     }
     else occlusion = vec3(1.0);
@@ -218,13 +284,13 @@ void main() {
     float clearcoat = clearcoatFactor;
     float clearcoatRoughness = clearcoatRoughnessFactor;
     vec3 clearcoatNormal;
-    if (checkBitMask(6)) {
+    if (checkBitMask(5)) {
         clearcoat *= texture(clearcoatTexture, texCoords).r;
     }
-    if (checkBitMask(7)) {
+    if (checkBitMask(8)) {
         clearcoatRoughness *= texture(clearcoatRoughnessTexture, texCoords).g;
     }
-    if (checkBitMask(8)) {
+    if (checkBitMask(7)) {
         clearcoatNormal = texture(clearcoatNormalTexture, texCoords).rgb * 2.0 - 1.0;
         clearcoatNormal = normalize(calculateTBN() * clearcoatNormal); // Todo find a way to reuse TBN if possible
     }
@@ -234,6 +300,12 @@ void main() {
     // Clamp roughnesses, roughness at zero isn't great visually
     roughness = clamp(roughness, 0.089, 1.0);
     clearcoatRoughness = clamp(clearcoatRoughness, 0.089, 1.0);
+
+    vec3 emissive = vec3(0.0);
+    if (checkBitMask(2)) {
+        emissive += texture(emissiveTexture, texCoords).rgb;
+        emissive *= emissiveFactor;
+    }
 
 
     vec3 viewDir = normalize(cameraPosition - position);
@@ -279,41 +351,24 @@ void main() {
     }
 
     vec3 F = FresnelSchlickRoughness(normal, viewDir, baseFresnelIncidence, roughness);
-    vec3 kD = 1.0 - F;
-    kD *= 1.0 - metallic;
+    vec3 ambient = IBLAmbientTerm(normal, viewDir, baseFresnelIncidence, F, albedo, roughness, metallic, false);
 
-    vec3 irradiance = texture(irradianceMap, normal).rgb;
-    vec3 diffuse = irradiance * albedo;
-
-    const float MAX_REFLECTION_LOD = 4.0;
-
-    vec3 R = reflect(-viewDir, normal);
-    vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
-    vec2 brdf = texture(brdfLUT, vec2(max(dot(normal, viewDir), 0.0), roughness)).rg;
-    vec3 specular = prefilteredColor * (F * brdf.r + brdf.g);
-
-    vec3 ambient = kD * diffuse + specular;
     if (clearcoatActive) {
         // Fresnel at incidence for clearcoat is 0.04/4% at IOR=1.5
-        // todo check out fresnel at incidence
         vec3 Fc = FresnelSchlickRoughness(clearcoatNormal, viewDir, vec3(0.04) , clearcoatRoughness);
         ambient *= (1.0 - Fc);
-
-        vec3 Rc = reflect(-viewDir, clearcoatNormal);
-        vec3 prefilteredColor_c = textureLod(prefilterMap, Rc, clearcoatRoughness * MAX_REFLECTION_LOD).rgb;
-        vec2 brdf_c = texture(brdfLUT, vec2(max(dot(clearcoatNormal, viewDir), 0.0), clearcoatRoughness)).rg;
-        vec3 specular_c = prefilteredColor_c * (Fc * brdf_c.r + brdf_c.g);
-        ambient += specular_c;
+        ambient += IBLAmbientTerm(clearcoatNormal, viewDir, vec3(0.0), Fc, vec3(0.0), clearcoatRoughness, 0.0, true);
     }
-    // vec3 ambient = (kD * diffuse);
 
-    vec3 colour = ambient * occlusion + lightOutputted;
-    // vec3 colour = lightOutputted + vec3(0.01) * albedo;
+    vec3 colour = ambient * occlusion + lightOutputted + emissive;
+    // vec3 colour = lightOutputted;
 
     // HDR
-    colour = colour / (colour + vec3(1.0));
-    colour = pow(colour, vec3(1.0 / 2.2));
-    Colour = vec4(colour, 1.0);
+    colour = KhronosNeutralTonemapping(colour);
 
-    // Colour = vec4(normal, 1.0);
+    // Gamma correction
+    float gamma = 2.2;
+    colour = pow(colour, vec3(1.0 / gamma));
+
+    Colour = vec4(colour, 1.0);
 }

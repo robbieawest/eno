@@ -78,10 +78,20 @@ load_helmet :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
     return true
 }
 
+load_dhelmet :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
+    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/DamagedHelmet/glTF/DamagedHelmet.gltf") or_return
+
+    models := scene_res.models
+
+    defer resource.destroy_model_scene_result(scene_res)
+    ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
+    return true
+}
+
 before_frame :: proc() -> (ok: bool) {
 
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
-    load_supra(arch) or_return
+    load_dhelmet(arch) or_return
 
     game_data := new(GameData)
 
@@ -118,12 +128,6 @@ before_frame :: proc() -> (ok: bool) {
     // Camera
     ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
 
-    // todo copy light name internally
-    light := resource.PointLight{ "demo_light", false, 10.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 2.5, 2.5, 2.5 } }
-    light_comp := standards.make_world_component(position=light.position)
-    light2 := resource.PointLight{ "demo_light2", false, 10.0, glm.vec3{ 1.0, 0.0, 0.0 }, glm.vec3{ -5.0, 0.0, 0.0 } }
-    light_comp2 := standards.make_world_component(position=light2.position)
-
     light_arch := ecs.scene_add_archetype(game.Game.scene, "lights",
         cast(ecs.ComponentInfo)(resource.LIGHT_COMPONENT),
         cast(ecs.ComponentInfo)(resource.MODEL_COMPONENT),
@@ -131,19 +135,27 @@ before_frame :: proc() -> (ok: bool) {
         cast(ecs.ComponentInfo)(standards.VISIBLE_COMPONENT),
     ) or_return
 
-    ecs.archetype_add_entity(game.Game.scene, light_arch, light.name,
-        ecs.make_ecs_component_data(resource.LIGHT_COMPONENT.label, resource.LIGHT_COMPONENT.type, resource.Light(light)),
-        ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, resource.make_light_billboard(&game.Game.resource_manager) or_return),
-        ecs.make_ecs_component_data(standards.WORLD_COMPONENT.label, standards.WORLD_COMPONENT.type, light_comp),
-        ecs.make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, false),
+    lights := make([dynamic]resource.PointLight)
+    defer delete(lights)
+
+    append_elems(&lights,
+        resource.PointLight{ "demo_light", false, 10.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 10.0, 5.0, 10.0 } },
+        resource.PointLight{ "demo_light2", false, 10.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 10.0, 5.0, -10.0 } },
+        resource.PointLight{ "demo_light3", false, 10.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -10.0, 5.0, 10.0 } },
+        resource.PointLight{ "demo_light4", false, 10.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -10.0, 5.0, -10.0 } },
+        resource.PointLight{ "demo_light5", false, 10.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -10.0, 0.0, 0.0 } },
     )
 
-    ecs.archetype_add_entity(game.Game.scene, light_arch, light2.name,
-        ecs.make_ecs_component_data(resource.LIGHT_COMPONENT.label, resource.LIGHT_COMPONENT.type, resource.Light(light2)),
-        ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, resource.make_light_billboard(&game.Game.resource_manager) or_return),
-        ecs.make_ecs_component_data(standards.WORLD_COMPONENT.label, standards.WORLD_COMPONENT.type, light_comp2),
-        ecs.make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, false),
-    )
+    for light in lights {
+        light_comp := standards.make_world_component(position=light.position)
+        ecs.archetype_add_entity(game.Game.scene, light_arch, light.name,
+            ecs.make_ecs_component_data(resource.LIGHT_COMPONENT.label, resource.LIGHT_COMPONENT.type, resource.Light(light)),
+            ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, resource.make_light_billboard(&game.Game.resource_manager) or_return),
+            ecs.make_ecs_component_data(standards.WORLD_COMPONENT.label, standards.WORLD_COMPONENT.type, light_comp),
+            ecs.make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, false),
+        )
+    }
+
 
     game.add_event_hooks(
         game.HOOK_MOUSE_MOTION(),
@@ -158,12 +170,12 @@ before_frame :: proc() -> (ok: bool) {
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "park_music_stage_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "rogland_clear_night_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "twilight_sunset_4k.hdr") or_return
-    game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "voortrekker_interior_4k.hdr") or_return
+    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "voortrekker_interior_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "metro_noord_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "drackenstein_quarry_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "fireplace_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "freight_station_4k.hdr") or_return
-    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "golden_bay_4k.hdr") or_return
+    game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "golden_bay_4k.hdr") or_return
     render.pre_render(manager, game_data.render_pipeline, game.Game.scene) or_return
 
     return true

@@ -191,7 +191,7 @@ GPUTexture :: Maybe(u32)
 
 transfer_texture :: proc(
     tex: ^resource.Texture,
-    internal_format: i32 = gl.RGBA8,
+    internal_format: i32 = gl.RGB8,
     lod: i32 = 0,
     format: u32 = gl.RGBA,
     type: u32 = gl.UNSIGNED_BYTE,

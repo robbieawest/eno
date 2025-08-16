@@ -102,6 +102,30 @@ uniform uint materialUsages;
 
 float PI = 3.14159265358979323;
 
+vec3 ReinhardTonemapping(vec3 colour) {
+    return colour / (colour + vec3(1.0));
+}
+
+// https://www.khronos.org/news/press/khronos-pbr-neutral-tone-mapper-released-for-true-to-life-color-rendering-of-3d-products
+vec3 KhronosNeutralTonemapping(vec3 colour) {
+    const float startCompression = 0.8 - 0.04;
+    const float desaturation = 0.15;
+
+    float x = min(colour.r, min(colour.g, colour.b));
+    float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
+    colour -= offset;
+
+    float peak = max(colour.r, max(colour.g, colour.b));
+    if (peak < startCompression) return colour;
+
+    const float d = 1. - startCompression;
+    float newPeak = 1. - d * d / (peak + d - startCompression);
+    colour *= newPeak / peak;
+
+    float g = 1. - 1. / (desaturation * (peak - newPeak) + 1.);
+    return mix(colour, newPeak * vec3(1, 1, 1), g);
+}
+
 vec3 convertToTangentSpace(vec3 v) {
     return TBN * v;
 }
@@ -142,8 +166,8 @@ vec3 FresnelSchlick(vec3 V, vec3 H, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - max(dot(H, V), 0.0), 0.0, 1.0), 5.0);
 }
 
-vec3 FresnelSchlickRoughness(vec3 V, vec3 H, vec3 F0, float roughness) {
-    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - max(dot(H, V), 0.0), 0.0, 1.0), 5.0);
+vec3 FresnelSchlickRoughness(vec3 N, vec3 V, vec3 F0, float roughness) {
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - max(dot(N, V), 0.0), 0.0, 1.0), 5.0);
 }
 
 vec3 calculateBRDF(vec3 N, vec3 V, vec3 L, vec3 H, vec3 albedo, float roughness, float metallic, vec3 F0) {
@@ -165,8 +189,47 @@ vec3 calculateReflectance(vec3 BRDF, vec3 N, vec3 L, vec3 radiance) {
     return BRDF * radiance * max(dot(N, L), 0.0);
 }
 
+vec3 IBLAmbientTerm(vec3 normal, vec3 viewDir, vec3 fresnelIncidence, vec3 albedo, float roughness, float metallic) {
+    vec3 F = FresnelSchlickRoughness(normal, viewDir, fresnelIncidence, roughness);
+
+    const float MAX_REFLECTION_LOD = 4.0;
+    vec3 R = reflect(-viewDir, normal);  // Tangent space
+    vec3 RWorld = normalize(transpose(TBN) * R);  // Since tbn is orthogonal it is transitive across the reflect operation
+    vec3 radiance = textureLod(prefilterMap, RWorld, roughness * MAX_REFLECTION_LOD).rgb;
+    vec3 irradiance = texture(irradianceMap, normal).rgb;
+
+    vec2 f_ab = texture(brdfLUT, vec2(max(dot(normal, viewDir), 0.0), roughness)).rg;
+
+    const bool multiScatter = true;
+    vec3 ambient;
+    if (multiScatter) {
+        // Multiple scattering https://www.jcgt.org/published/0008/01/03/paper.pdf
+        float Ess = f_ab.x + f_ab.y;
+        vec3 FssEss = F * f_ab.x + f_ab.y;
+        float Ems = 1 - Ess;
+        vec3 Favg = fresnelIncidence + (1.0 - fresnelIncidence) / 21.0;
+        vec3 Fms = FssEss * Favg / (1.0 - (1.0 - Ess) * Favg);
+
+        vec3 Edss = 1.0 - (FssEss + Fms * Ems);
+        vec3 kD = albedo * Edss;
+
+        ambient = FssEss * radiance + (Fms * Ems + kD) * irradiance;
+    }
+    else {
+        // Single scatter
+        vec3 kD = 1.0 - F;
+        kD *= 1.0 - metallic;
+        vec3 specular = radiance * (F * f_ab.x + f_ab.y);
+        vec3 diffuse = irradiance * albedo;
+
+        ambient = kD * diffuse + specular;
+    }
+
+    return ambient;
+}
+
 bool checkBitMask(int bitPosition) {
-    return (materialUsages & (1 << bitPosition)) != 0;
+    return (materialUsages & uint(1 << bitPosition)) != 0;
 }
 
 void main() {
@@ -198,7 +261,6 @@ void main() {
     else occlusion = vec3(1.0);
 
     vec3 viewDir = normalize(cameraPosition - position);
-    vec3 R = reflect(-viewDir, normal);  // Tangent space
 
     vec3 fresnelIncidence = mix(vec3(0.04), albedo, metallic);
 
@@ -227,27 +289,20 @@ void main() {
         bufIndex += pointLightSize;
     }
 
-    vec3 F = FresnelSchlickRoughness(normal, viewDir, fresnelIncidence, roughness);
-    vec3 kD = 1.0 - F;
-    kD *= 1.0 - metallic;
-
-    vec3 irradiance = texture(irradianceMap, normal).rgb;
-    vec3 diffuse = irradiance * albedo;
-
-    const float MAX_REFLECTION_LOD = 4.0;
-    vec3 RWorld = normalize(transpose(TBN) * R);  // Since tbn is orthogonal it is transitive across the reflect operation
-    vec3 prefilteredColor = textureLod(prefilterMap, RWorld, roughness * MAX_REFLECTION_LOD).rgb;
-    vec2 brdf = texture(brdfLUT, vec2(max(dot(normal, viewDir), 0.0), roughness)).rg;
-    vec3 specular = prefilteredColor * (F * brdf.r + brdf.g);
-
-    vec3 ambient = (kD * diffuse + specular) * occlusion;
-    // vec3 ambient = (kD * diffuse);
-
+    vec3 ambient = IBLAmbientTerm(normal, viewDir, fresnelIncidence, albedo, roughness, metallic);
     vec3 colour = ambient + lightOutputted;
+    colour *= occlusion;
     // vec3 colour = lightOutputted + vec3(0.01) * albedo;
 
     // HDR
-    colour = colour / (colour + vec3(1.0));
-    colour = pow(colour, vec3(1.0 / 2.2));
+    colour = KhronosNeutralTonemapping(colour);
+    // colour = ReinhardTonemapping(colour);
+
+    // Gamma
+    float gamma = 2.2;
+    const bool srgb = false;
+    if (srgb) colour = pow(colour, vec3(gamma));
+    else colour = pow(colour, vec3(1.0 / gamma));
+
     Colour = vec4(colour, 1.0);
 }

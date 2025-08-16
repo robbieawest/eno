@@ -425,7 +425,7 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
         material.properties[.OCCLUSION_TEXTURE] = { OCCLUSION_TEXTURE, OcclusionTexture(tex_id) }
     }
     if cmat.emissive_texture.texture != nil {
-        material_type.properties |= { .EMISSIVE_TEXTURE, .EMISSIVE_FACTOR}
+        material_type.properties |= { .EMISSIVE_TEXTURE, .EMISSIVE_FACTOR }
 
         tex := texture_from_cgltf_texture(cmat.emissive_texture.texture, gltf_file_location) or_return
         tex_id := add_texture(manager, tex) or_return
