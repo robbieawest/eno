@@ -236,8 +236,6 @@ vec3 IBLMultiScatterBRDF(vec3 N, vec3 V, vec3 radiance, vec3 irradiance, vec3 al
 }
 
 vec3 IBLAmbientTerm(vec3 N, vec3 V, vec3 F0, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat) {
-    // roughness = roughness * roughness;
-
     const float MAX_REFLECTION_LOD = 4.0;
     vec3 R = reflect(-V, N);  // World space
     vec3 radiance = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
@@ -248,7 +246,7 @@ vec3 IBLAmbientTerm(vec3 N, vec3 V, vec3 F0, vec3 fresnelRoughness, vec3 albedo,
     // Clearcoat -> No metallic or diffuse effects
     if (clearcoat) return (fresnelRoughness * f_ab.x + f_ab.y) * radiance;
 
-    const bool multiScatter = false;
+    const bool multiScatter = true;
     if (multiScatter) {
         // Multiple scattering https://www.jcgt.org/published/0008/01/03/paper.pdf
         vec3 metalBRDF = IBLMultiScatterBRDF(N, V, radiance, irradiance, albedo, f_ab, roughness, false);
@@ -265,7 +263,6 @@ vec3 IBLAmbientTerm(vec3 N, vec3 V, vec3 F0, vec3 fresnelRoughness, vec3 albedo,
         vec3 diffuse = irradiance * albedo;
         return kD * diffuse + specular;
     }
-
 }
 
 bool checkBitMask(int bitPosition) {
@@ -356,7 +353,6 @@ void main() {
         vec3 radiance = light.lightInformation.intensity * light.lightInformation.colour / (lightDist * lightDist);
 
         vec3 BRDF = calculateBRDF(normal, viewDir, lightDir, halfVec, albedo, roughness * roughnessFactor, metallic * metallicFactor, baseFresnelIncidence);
-
         if (clearcoatActive) {
             vec3 clearcoatFresnel = FresnelSchlick(viewDir, halfVec, vec3(0.04)) * clearcoat;
             BRDF *= (1.0 - clearcoatFresnel);
@@ -372,15 +368,16 @@ void main() {
     vec3 F = FresnelSchlickRoughness(normal, viewDir, baseFresnelIncidence, roughness);
     vec3 ambient = IBLAmbientTerm(normal, viewDir, baseFresnelIncidence, F, albedo, roughness, metallic, false);
 
+    vec3 Fc = vec3(0.0);
     if (clearcoatActive) {
         // Fresnel at incidence for clearcoat is 0.04/4% at IOR=1.5
-        vec3 Fc = FresnelSchlickRoughness(clearcoatNormal, viewDir, vec3(0.04) , clearcoatRoughness);
+        Fc = FresnelSchlickRoughness(clearcoatNormal, viewDir, vec3(0.04) , clearcoatRoughness);
         ambient *= (1.0 - Fc);
         ambient += IBLAmbientTerm(clearcoatNormal, viewDir, vec3(0.0), Fc, vec3(0.0), clearcoatRoughness, 0.0, true);
     }
 
-    vec3 colour = ambient * occlusion + lightOutputted + emissive;
-    // vec3 colour = lightOutputted;
+    vec3 colour = ambient * occlusion + lightOutputted;
+    colour += emissive * (1.0 - clearcoat * Fc);
 
     // HDR
     colour = KhronosNeutralTonemapping(colour);

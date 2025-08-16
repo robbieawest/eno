@@ -162,6 +162,10 @@ float GeomSmith(vec3 N, vec3 V, vec3 L, float roughness) {
     return ggx1 * ggx2;
 }
 
+float KelemenVisibility(vec3 L, vec3 H) {
+    return 0.25 * pow(max(dot(L, H), 0.0), 2);
+}
+
 vec3 FresnelSchlick(vec3 V, vec3 H, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - max(dot(H, V), 0.0), 0.0, 1.0), 5.0);
 }
@@ -185,48 +189,76 @@ vec3 calculateBRDF(vec3 N, vec3 V, vec3 L, vec3 H, vec3 albedo, float roughness,
     return diffuseShare * lambertian + specular;
 }
 
+vec3 calculateClearcoatBRDF(vec3 N, vec3 L, vec3 H, float roughness, vec3 Fc) {
+    float NDF = DistributionGGX(N, H, roughness);
+    float G = KelemenVisibility(L, H);
+    return (NDF * G) * Fc;
+}
+
 vec3 calculateReflectance(vec3 BRDF, vec3 N, vec3 L, vec3 radiance) {
     return BRDF * radiance * max(dot(N, L), 0.0);
 }
 
-vec3 IBLAmbientTerm(vec3 normal, vec3 viewDir, vec3 fresnelIncidence, vec3 albedo, float roughness, float metallic) {
-    vec3 F = FresnelSchlickRoughness(normal, viewDir, fresnelIncidence, roughness);
+vec3 IBLMultiScatterBRDF(vec3 N, vec3 V, vec3 radiance, vec3 irradiance, vec3 albedo, vec2 f_ab, float perceptualRoughness, const bool dielectric) {
+    vec3 F0;
+    if (dielectric) F0 = vec3(0.04);
+    else F0 = albedo;
 
+    vec3 kS = FresnelSchlickRoughness(N, V, F0, perceptualRoughness);
+
+    vec3 FssEss = kS * f_ab.x + f_ab.y;
+    vec3 specular = FssEss * radiance;
+
+    float Ess = f_ab.x + f_ab.y;
+    float Ems = 1 - Ess;
+    vec3 Favg = F0 + (1.0 - F0) / 21.0;
+    vec3 Fms = FssEss * Favg / (1 - Ems * Favg);
+    vec3 FmsEms = Fms * Ems;
+
+    vec3 diffuse = irradiance;
+    // Dielectric kD term
+    if (dielectric) {  // Full dielectric, metallic = 0
+                       vec3 Edss = 1.0 - (FssEss + Fms + Ems);
+                       vec3 kD = albedo * Edss;
+                       diffuse *= FmsEms + kD;
+    }
+    else diffuse *= FmsEms;  // Full metal, metallic = 1
+
+    return specular + diffuse;
+}
+
+
+vec3 IBLAmbientTerm(vec3 N, vec3 V, vec3 F0, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat) {
     const float MAX_REFLECTION_LOD = 4.0;
-    vec3 R = reflect(-viewDir, normal);  // Tangent space
+    vec3 R = reflect(-V, N);  // Tangent space
     vec3 RWorld = normalize(transpose(TBN) * R);  // Since tbn is orthogonal it is transitive across the reflect operation
-    vec3 radiance = textureLod(prefilterMap, RWorld, roughness * MAX_REFLECTION_LOD).rgb;
-    vec3 irradiance = texture(irradianceMap, normal).rgb;
+    vec3 radiance = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
+    vec3 irradiance = texture(irradianceMap, N).rgb;
 
-    vec2 f_ab = texture(brdfLUT, vec2(max(dot(normal, viewDir), 0.0), roughness)).rg;
+    vec2 f_ab = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
 
-    const bool multiScatter = false;
-    vec3 ambient;
+    // Clearcoat -> No metallic or diffuse effects
+    if (clearcoat) return (fresnelRoughness * f_ab.x + f_ab.y) * radiance;
+
+    const bool multiScatter = true;
     if (multiScatter) {
         // Multiple scattering https://www.jcgt.org/published/0008/01/03/paper.pdf
-        float Ess = f_ab.x + f_ab.y;
-        vec3 FssEss = F * f_ab.x + f_ab.y;
-        float Ems = 1 - Ess;
-        vec3 Favg = fresnelIncidence + (1.0 - fresnelIncidence) / 21.0;
-        vec3 Fms = FssEss * Favg / (1.0 - (1.0 - Ess) * Favg);
-
-        vec3 Edss = 1.0 - (FssEss + Fms * Ems);
-        vec3 kD = albedo * Edss;
-
-        ambient = FssEss * radiance + (Fms * Ems + kD) * irradiance;
+        vec3 metalBRDF = IBLMultiScatterBRDF(N, V, radiance, irradiance, albedo, f_ab, roughness, false);
+        vec3 dielectricBRDF = IBLMultiScatterBRDF(N, V, radiance, irradiance, albedo, f_ab, roughness, true);
+        return mix(dielectricBRDF, metalBRDF, metallic);
     }
     else {
         // Single scatter
-        vec3 kD = 1.0 - F;
+        vec3 kS = fresnelRoughness;
+        vec3 specular = (kS * f_ab.x + f_ab.y) * radiance;
+
+        vec3 kD = 1.0 - kS;
         kD *= 1.0 - metallic;
-        vec3 specular = radiance * (F * f_ab.x + f_ab.y);
         vec3 diffuse = irradiance * albedo;
-
-        ambient = kD * diffuse + specular;
+        return kD * diffuse + specular;
     }
-
-    return ambient;
 }
+
 
 bool checkBitMask(int bitPosition) {
     return (materialUsages & uint(1 << bitPosition)) != 0;
@@ -260,9 +292,40 @@ void main() {
     }
     else occlusion = vec3(1.0);
 
+    float clearcoat = clearcoatFactor;
+    float clearcoatRoughness = clearcoatRoughnessFactor;
+    vec3 clearcoatNormal;
+    if (checkBitMask(5)) {
+        clearcoat *= texture(clearcoatTexture, texCoords).r;
+    }
+    if (checkBitMask(8)) {
+        clearcoatRoughness *= texture(clearcoatRoughnessTexture, texCoords).g;
+    }
+    if (checkBitMask(7)) {
+        clearcoatNormal = texture(clearcoatNormalTexture, texCoords).rgb * 2.0 - 1.0;
+        clearcoatNormal = normalize(clearcoatNormal);
+    }
+    else clearcoatNormal = normal;
+    bool clearcoatActive = clearcoat != 0.0;
+
+    // Clamp roughnesses, roughness at zero isn't great visually
+    roughness = clamp(roughness, 0.089, 1.0);
+    clearcoatRoughness = clamp(clearcoatRoughness, 0.089, 1.0);
+
+    vec3 emissive = vec3(0.0);
+    if (checkBitMask(2)) {
+        emissive += texture(emissiveTexture, texCoords).rgb;
+        emissive *= emissiveFactor;
+    }
+
     vec3 viewDir = normalize(cameraPosition - position);
 
-    vec3 fresnelIncidence = mix(vec3(0.04), albedo, metallic);
+    vec3 baseFresnelIncidence;
+    baseFresnelIncidence = mix(vec3(0.04), albedo, metallic);
+    if (clearcoatActive) {
+        // Assumes clearcoat layer IOR of 1.5
+        baseFresnelIncidence = pow((1.0 - 5.0 * sqrt(baseFresnelIncidence)) / (5.0 - sqrt(baseFresnelIncidence)), vec3(2.0));
+    }
 
     uint spotLightSize = 16;
     uint directionalLightSize = 12;
@@ -282,20 +345,36 @@ void main() {
 
         vec3 radiance = light.lightInformation.intensity * light.lightInformation.colour / (lightDist * lightDist);
 
-        vec3 BRDF = calculateBRDF(normal, viewDir, lightDir, halfVec, albedo, roughness * roughnessFactor, metallic * metallicFactor, fresnelIncidence);
+        vec3 BRDF = calculateBRDF(normal, viewDir, lightDir, halfVec, albedo, roughness * roughnessFactor, metallic * metallicFactor, baseFresnelIncidence);
+        if (clearcoatActive) {
+            vec3 clearcoatFresnel = FresnelSchlick(viewDir, halfVec, vec3(0.04)) * clearcoat;
+            BRDF *= (1.0 - clearcoatFresnel);
+            BRDF += calculateClearcoatBRDF(normal, lightDir, halfVec, clearcoatRoughness, clearcoatFresnel);
+        }
+
         vec3 reflectance = calculateReflectance(BRDF, normal, lightDir, radiance);
         lightOutputted += reflectance;
 
         bufIndex += pointLightSize;
     }
 
-    vec3 ambient = IBLAmbientTerm(normal, viewDir, fresnelIncidence, albedo, roughness, metallic);
+    vec3 F = FresnelSchlickRoughness(normal, viewDir, baseFresnelIncidence, roughness);
+    vec3 ambient = IBLAmbientTerm(normal, viewDir, baseFresnelIncidence, F, albedo, roughness, metallic, false);
+
+    vec3 Fc = vec3(0.0);
+    if (clearcoatActive) {
+        // Fresnel at incidence for clearcoat is 0.04/4% at IOR=1.5
+        Fc = FresnelSchlickRoughness(clearcoatNormal, viewDir, vec3(0.04) , clearcoatRoughness);
+        ambient *= (1.0 - Fc);
+        ambient += IBLAmbientTerm(clearcoatNormal, viewDir, vec3(0.0), Fc, vec3(0.0), clearcoatRoughness, 0.0, true);
+    }
+
     vec3 colour = ambient * occlusion + lightOutputted;
-    // vec3 colour = lightOutputted + vec3(0.01) * albedo;
+    colour += emissive * (1.0 - clearcoat * Fc);
+
 
     // HDR
     colour = KhronosNeutralTonemapping(colour);
-    // colour = ReinhardTonemapping(colour);
 
     // Gamma
     float gamma = 2.2;
