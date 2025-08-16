@@ -114,7 +114,8 @@ Mesh :: struct {
     mesh_id: MeshID,  // Used in render.RenderPassStore to find the shaders for each render pass
     gl_component: GLComponent,
     is_billboard: bool,  // todo remove
-    instance_to: Maybe(InstanceTo)  // Todo support EXT_mesh_gpu_instancing gltf extension for this
+    instance_to: Maybe(InstanceTo),  // Todo support EXT_mesh_gpu_instancing gltf extension for this
+    centroid: [3]f32  // Local centroid, used in occlusion/frustum culling (if I do them) and in z-sorting. Applied hierarchically via model world component
 }
 
 // Regrettable to have this in resource
@@ -689,3 +690,44 @@ make_light_billboard :: proc(manager: ^ResourceManager) -> (model: Model, ok: bo
 POINT_LIGHT_COMPONENT := standards.ComponentTemplate{ "PointLight", PointLight, size_of(PointLight) }
 DIRECTIONAL_LIGHT_COMPONENT := standards.ComponentTemplate{ "DirectionalLight", DirectionalLight, size_of(DirectionalLight) }
 SPOT_LIGHT_COMPONENT := standards.ComponentTemplate{ "SpotLight", SpotLight, size_of(SpotLight) }
+
+
+calculate_centroid :: proc(vertex_data: VertexData, layout_infos: []MeshAttributeInfo) -> (centroid: [3]f32, ok: bool) {
+    if len(vertex_data) < 3 {
+        dbg.log(.ERROR, "Invalid number of vertices")
+        return
+    }
+
+    total_float_stride := 0
+    position_float_offset := 0
+    position_found := false
+    for info in layout_infos {
+        if !position_found && info.type == .position {
+            position_found = true
+            position_float_offset = total_float_stride
+        }
+        total_float_stride += int(info.float_stride)
+    }
+    if !position_found {
+        dbg.log(.ERROR, "Mesh layout infos contains no position")
+        return
+    }
+
+    if len(vertex_data) % total_float_stride != 0 {
+        dbg.log(.ERROR, "Invalid vertex data w.r.t. float stride")
+        return
+    }
+
+    n_vertices := len(vertex_data) / total_float_stride
+
+    for vi in 0..<n_vertices {
+        buf_idx := vi * position_float_offset
+        vertex := [3]f32{ vertex_data[buf_idx], vertex_data[buf_idx + 1], vertex_data[buf_idx + 2] }
+        centroid += vertex
+    }
+
+    centroid /= f32(n_vertices)
+
+    ok = true
+    return
+}

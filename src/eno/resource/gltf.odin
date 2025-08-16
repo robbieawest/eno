@@ -259,6 +259,8 @@ extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh, gltf_fil
         mesh_ret.vertices_count = len(mesh_ret.vertex_data)
         mesh_ret.index_data = extract_index_data_from_primitive(primitive) or_return
         mesh_ret.indices_count = len(mesh_ret.index_data)
+
+        mesh_ret.centroid = calculate_centroid(mesh_ret.vertex_data, layout.infos) or_return
     }
 
     ok = true
