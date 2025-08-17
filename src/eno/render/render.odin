@@ -357,13 +357,16 @@ handle_pass_properties :: proc(pipeline: RenderPipeline, pass: RenderPass) -> (o
 
 
 @(private)
-sort_geometry_by_depth :: proc(models_data: []MeshData, z_asc: bool) {
-    sort_proc := z_asc ? proc(a: MeshData, b: MeshData) -> bool {
-        return a.world.position.z < b.world.position.z
-    } : proc(a: MeshData, b: MeshData) -> bool {
-        return a.world.position.z > b.world.position.z
+sort_geometry_by_depth :: proc(meshes_data: []MeshData, z_asc: bool) {
+    mesh_pos :: proc(mesh_data: MeshData) -> [3]f32 {
+        return mesh_data.world.position + mesh_data.world.scale * mesh_data.mesh.centroid;
     }
-    slice.sort_by(models_data, sort_proc)
+    sort_proc := z_asc ? proc(a: MeshData, b: MeshData) -> bool {
+        return mesh_pos(a).z < mesh_pos(b).z
+    } : proc(a: MeshData, b: MeshData) -> bool {
+        return mesh_pos(a).z > mesh_pos(b).z
+    }
+    slice.sort_by(meshes_data, sort_proc)
 }
 
 
