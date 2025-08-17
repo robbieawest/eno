@@ -180,8 +180,8 @@ render_skybox :: proc(manager: ^resource.ResourceManager, scene: ^ecs.Scene, all
     irr := env.irradiance_map.?
     spec := env.prefilter_map.?
     // bind_texture(0, irr.gpu_texture.?, .CUBEMAP)
-    // bind_texture(0, spec.gpu_texture.?, .CUBEMAP)
-    bind_texture(0, env_map.gpu_texture.?, .CUBEMAP)
+    bind_texture(0, spec.gpu_texture.?, .CUBEMAP)
+    // bind_texture(0, env_map.gpu_texture.?, .CUBEMAP)
     resource.set_uniform(RENDER_CONTEXT.skybox_shader, ENV_MAP_UNIFORM, i32(0))
 
     set_face_culling(false)
@@ -484,7 +484,7 @@ apply_billboard_rotation :: proc(cam_position: glm.vec3, world: standards.WorldC
 
 model_and_normal :: proc(mesh: ^resource.Mesh, world: ^standards.WorldComponent, cam: ^cam.Camera) -> (model: glm.mat4, normal: glm.mat3) {
     world_comp := mesh.is_billboard ? apply_billboard_rotation(cam.position, world^) : world^
-    model = standards.model_from_world_component(world_comp)
+    model = standards.model_from_world_component(world_comp, mesh.transpose_transformation)
     normal = lutils.normal_mat(model)
     return
 }

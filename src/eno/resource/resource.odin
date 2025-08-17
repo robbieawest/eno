@@ -34,21 +34,29 @@ ResourceNode :: struct($T: typeid) {
 ResourceMapping :: map[ResourceHash]ResourceBucket
 
 @(private)
-hash_resource :: proc(resource: $T) -> ResourceHash {
+hash_resource :: proc(resource: $T, allocator: mem.Allocator) -> ResourceHash {
     // Extend possible to give different hash routine for a different resource type
     resource := resource
     when  T == Texture {
+        // Does not hash name, image pixel data or the gpu texture
+        // If for some reason this needs to be different, don't use hash_resource and instead provide a hash or a hash func
+        bytes := make([dynamic]byte, allocator=allocator)
+        defer delete(bytes)
+
+        append_elems(&bytes, ..utils.to_bytes(&resource.type))
+        utils.map_to_bytes(resource.properties, &bytes)
+
+        append_elems(&bytes, ..utils.to_bytes(&resource.image.w))
+        append_elems(&bytes, ..utils.to_bytes(&resource.image.h))
+        append_elems(&bytes, ..(transmute([]u8)resource.image.uri))
+
         return hash_ptr(&resource)
     }
     else when T == ShaderProgram {
-        bytes := make([dynamic]byte)
+        bytes := make([dynamic]byte, allocator=allocator)
         defer delete(bytes)
 
-        for k, v in resource.shaders {
-            key := k; value := v
-            append_elems(&bytes, ..transmute([]byte)runtime.Raw_Slice{&key, size_of(ShaderType) })
-            append_elems(&bytes, ..transmute([]byte)runtime.Raw_Slice{&value, size_of(ResourceIdent) })
-        }
+        utils.map_to_bytes(resource.shaders, &bytes)
 
         return hash_raw(bytes[:])
     }
@@ -76,7 +84,7 @@ hash_resource :: proc(resource: $T) -> ResourceHash {
 
 @(private)
 hash_ptr :: proc(ptr: ^$T) -> ResourceHash {
-    return hash.fnv64a(transmute([]byte)runtime.Raw_Slice{ ptr, type_info_of(T).size })
+    return hash.fnv64a(utils.to_bytes(ptr))
 }
 
 @(private)
@@ -189,7 +197,7 @@ add_resource :: proc(
     allocator: mem.Allocator
 ) -> (id: ResourceIdent, ok: bool) {
 
-    hash := hash_resource(resource)
+    hash := hash_resource(resource, allocator)
 
     // Reused code, could be improved but kiss
     if hash in mapping {

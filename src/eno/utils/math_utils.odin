@@ -64,17 +64,14 @@ decompose_transform :: proc(mat: matrix[4, 4]f32) -> (trans: [3]f32, scale: [3]f
         linalg.length([3]f32{ mat[0, 2], mat[1, 2], mat[2, 2] }),
     }
 
-    rot_mat := mat
-    rot_mat[0, 3] = 0
-    rot_mat[1, 3] = 0
-    rot_mat[2, 3] = 0
+    rot_mat := linalg.matrix3_from_matrix4_f32(mat)
 
-    for i in 0..<3 {
-        for j in 0..<3 {
-            rot_mat[i, j] /= scale[j]
+    for i in 0..<3 {  // columns
+        for j in 0..<3 { // rows
+            rot_mat[j, i] /= scale[i]
         }
     }
 
-    rot = linalg.quaternion_from_matrix4_f32(rot_mat)
+    rot = linalg.quaternion_from_matrix3_f32(rot_mat)
     return
 }

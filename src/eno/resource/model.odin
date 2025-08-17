@@ -116,7 +116,8 @@ Mesh :: struct {
     gl_component: GLComponent,
     is_billboard: bool,  // todo remove
     instance_to: Maybe(InstanceTo),  // Todo support EXT_mesh_gpu_instancing gltf extension for this
-    centroid: [3]f32  // Local centroid, used in occlusion/frustum culling (if I do them) and in z-sorting. Applied hierarchically via model world component
+    centroid: [3]f32,  // Local centroid, used in occlusion/frustum culling (if I do them) and in z-sorting. Applied hierarchically via model world component
+    transpose_transformation: bool
 }
 
 // Regrettable to have this in resource
@@ -393,14 +394,12 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
 
         base_tex_id: ResourceID
         if met_rough.base_color_texture.texture != nil {
-            base_tex := texture_from_cgltf_texture(met_rough.base_color_texture.texture, gltf_file_location) or_return
-            base_tex_id = add_texture(manager, base_tex) or_return
+            base_tex_id = texture_id_from_cgltf_texture(manager, met_rough.base_color_texture.texture, gltf_file_location) or_return
         }
 
         met_rough_id: ResourceID
         if met_rough.metallic_roughness_texture.texture != nil {
-            met_rough_tex := texture_from_cgltf_texture(met_rough.metallic_roughness_texture.texture, gltf_file_location) or_return
-            met_rough_id = add_texture(manager, met_rough_tex) or_return
+            met_rough_id = texture_id_from_cgltf_texture(manager, met_rough.metallic_roughness_texture.texture, gltf_file_location) or_return
         }
 
         metallic_roughness := PBRMetallicRoughness {
@@ -415,22 +414,19 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
     if cmat.normal_texture.texture != nil {
         material_type.properties |= { .NORMAL_TEXTURE }
 
-        tex := texture_from_cgltf_texture(cmat.normal_texture.texture, gltf_file_location) or_return
-        tex_id := add_texture(manager, tex) or_return
+        tex_id := texture_id_from_cgltf_texture(manager, cmat.normal_texture.texture, gltf_file_location) or_return
         material.properties[.NORMAL_TEXTURE] = { NORMAL_TEXTURE, NormalTexture(tex_id) }
     }
     if cmat.occlusion_texture.texture != nil {
         material_type.properties |= { .OCCLUSION_TEXTURE }
 
-        tex := texture_from_cgltf_texture(cmat.occlusion_texture.texture, gltf_file_location) or_return
-        tex_id := add_texture(manager, tex) or_return
+        tex_id := texture_id_from_cgltf_texture(manager, cmat.occlusion_texture.texture, gltf_file_location) or_return
         material.properties[.OCCLUSION_TEXTURE] = { OCCLUSION_TEXTURE, OcclusionTexture(tex_id) }
     }
     if cmat.emissive_texture.texture != nil {
         material_type.properties |= { .EMISSIVE_TEXTURE, .EMISSIVE_FACTOR }
 
-        tex := texture_from_cgltf_texture(cmat.emissive_texture.texture, gltf_file_location) or_return
-        tex_id := add_texture(manager, tex) or_return
+        tex_id := texture_id_from_cgltf_texture(manager, cmat.emissive_texture.texture, gltf_file_location) or_return
         material.properties[.EMISSIVE_TEXTURE] = { EMISSIVE_TEXTURE, EmissiveTexture(tex_id) }
         material.properties[.EMISSIVE_FACTOR] = { EMISSIVE_FACTOR, EmissiveFactor(cmat.emissive_factor) }
     }
@@ -440,20 +436,17 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
 
         clear_tex_id: ResourceID
         if clear.clearcoat_texture.texture != nil {
-            clear_tex := texture_from_cgltf_texture(clear.clearcoat_texture.texture, gltf_file_location) or_return
-            clear_tex_id = add_texture(manager, clear_tex) or_return
+            clear_tex_id = texture_id_from_cgltf_texture(manager, clear.clearcoat_texture.texture, gltf_file_location) or_return
         }
 
         clear_rough_tex_id: ResourceID
         if clear.clearcoat_roughness_texture.texture != nil {
-            clear_rough_tex := texture_from_cgltf_texture(clear.clearcoat_roughness_texture.texture, gltf_file_location) or_return
-            clear_rough_tex_id = add_texture(manager, clear_rough_tex) or_return
+            clear_rough_tex_id = texture_id_from_cgltf_texture(manager, clear.clearcoat_roughness_texture.texture, gltf_file_location) or_return
         }
 
         clear_normal_tex_id: ResourceID
         if clear.clearcoat_normal_texture.texture != nil {
-            clear_normal_tex := texture_from_cgltf_texture(clear.clearcoat_normal_texture.texture, gltf_file_location) or_return
-            clear_normal_tex_id = add_texture(manager, clear_normal_tex) or_return
+            clear_normal_tex_id = texture_id_from_cgltf_texture(manager, clear.clearcoat_normal_texture.texture, gltf_file_location) or_return
         }
 
         clearcoat := Clearcoat{
@@ -539,13 +532,13 @@ destroy_texture :: proc(texture: ^Texture) {
 }
 
 Image :: struct {
-    name: string,
+    uri: string,
     w, h, channels: i32,
     pixel_data: rawptr  // Can be nil for no data
 }
 
 destroy_image :: proc(image: ^Image) {
-    delete(image.name)
+    delete(image.uri)
     destroy_pixel_data(image)
 }
 
@@ -561,6 +554,27 @@ texture_from_cgltf_texture :: proc(texture: ^cgltf.texture, gltf_file_location: 
         image = load_image_from_cgltf_image(texture.image_, gltf_file_location, allocator=allocator, loc=loc) or_return,
         properties = properties_from_texture_sampler(texture.sampler, allocator)
     }, true
+}
+
+texture_id_from_cgltf_texture :: proc(
+    manager: ^ResourceManager,
+    texture: ^cgltf.texture,
+    gltf_file_location: string,
+    allocator := context.allocator,
+    loc := #caller_location
+) -> (result: ResourceIdent, ok: bool) {
+    tex := texture_from_cgltf_texture(texture, gltf_file_location, allocator, loc) or_return
+
+    pix_data := tex.image.pixel_data
+    tex.image.pixel_data = nil
+
+    result = add_texture(manager, tex) or_return
+    t_res := get_texture(manager, result) or_return
+    if t_res.image.pixel_data == nil do t_res.image.pixel_data = pix_data
+    else do stbi.image_free(pix_data)
+
+    ok = true
+    return
 }
 
 properties_from_texture_sampler :: proc(sampler: ^cgltf.sampler, allocator := context.allocator) -> (properties: TextureProperties) {
@@ -599,7 +613,7 @@ properties_from_texture_sampler :: proc(sampler: ^cgltf.sampler, allocator := co
 }
 
 load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: string, allocator := context.allocator, loc := #caller_location) -> (result: Image, ok: bool) {
-    if image.name != nil do result.name = strings.clone_from_cstring(image.name, allocator=allocator)
+    if image.name != nil do result.uri = strings.clone_from_cstring(image.uri, allocator=allocator)
     dbg.log(.INFO, "Reading cgltf image: %s", image.uri)
 
     if image.buffer_view == nil {

@@ -66,3 +66,16 @@ get_field :: proc(a: ^$T, $field: string, $field_type: typeid) -> ^field_type
           intrinsics.type_field_type(T, field) == field_type {
     return cast(^field_type)(offset_of_by_string(T, field) + uintptr(a))
 }
+
+
+to_bytes :: proc(ptr: ^$T) -> []byte {
+    return (cast([^]byte)ptr)[:type_info_of(T).size]
+}
+
+map_to_bytes :: proc(m: map[$K]$V, bytes: ^[dynamic]byte) {
+    for k, v in m {
+        key := k; value := v
+        append_elems(bytes, ..to_bytes(&key))
+        append_elems(bytes, ..to_bytes(&value))
+    }
+}

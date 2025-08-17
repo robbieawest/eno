@@ -235,7 +235,7 @@ vec3 IBLMultiScatterBRDF(vec3 N, vec3 V, vec3 radiance, vec3 irradiance, vec3 al
     return specular + diffuse;
 }
 
-vec3 IBLAmbientTerm(vec3 N, vec3 V, vec3 F0, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat) {
+vec3 IBLAmbientTerm(vec3 N, vec3 V, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat) {
     const float MAX_REFLECTION_LOD = 4.0;
     vec3 R = reflect(-V, N);  // World space
     vec3 radiance = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
@@ -291,11 +291,11 @@ void main() {
     else normal = geomNormal;
     normal = normalize(normal);
 
-    vec3 occlusion;
+    float occlusion = 1.0;
     if (checkBitMask(3)) {
-        occlusion = texture(occlusionTexture, texCoords).rgb;
+        occlusion = texture(occlusionTexture, texCoords).r;
     }
-    else occlusion = vec3(1.0);
+
 
     float clearcoat = clearcoatFactor;
     float clearcoatRoughness = clearcoatRoughnessFactor;
@@ -366,14 +366,14 @@ void main() {
     }
 
     vec3 F = FresnelSchlickRoughness(normal, viewDir, baseFresnelIncidence, roughness);
-    vec3 ambient = IBLAmbientTerm(normal, viewDir, baseFresnelIncidence, F, albedo, roughness, metallic, false);
+    vec3 ambient = IBLAmbientTerm(normal, viewDir, F, albedo, roughness, metallic, false);
 
     vec3 Fc = vec3(0.0);
     if (clearcoatActive) {
         // Fresnel at incidence for clearcoat is 0.04/4% at IOR=1.5
         Fc = FresnelSchlickRoughness(clearcoatNormal, viewDir, vec3(0.04) , clearcoatRoughness);
         ambient *= (1.0 - Fc);
-        ambient += IBLAmbientTerm(clearcoatNormal, viewDir, vec3(0.0), Fc, vec3(0.0), clearcoatRoughness, 0.0, true);
+        ambient += IBLAmbientTerm(clearcoatNormal, viewDir, Fc, vec3(0.0), clearcoatRoughness, 0.0, true);
     }
 
     vec3 colour = ambient * occlusion + lightOutputted;
@@ -384,7 +384,9 @@ void main() {
 
     // Gamma correction
     float gamma = 2.2;
-    colour = pow(colour, vec3(1.0 / gamma));
+    const bool srgb = false;
+    if (srgb) colour = pow(colour, vec3(gamma));
+    else colour = pow(colour, vec3(1.0 / gamma));
 
     Colour = vec4(colour, 1.0);
 }

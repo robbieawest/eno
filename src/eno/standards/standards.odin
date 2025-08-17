@@ -26,10 +26,9 @@ make_world_component :: proc(position: glm.vec3 = {0.0, 0.0, 0.0}, scale: glm.ve
     return { position, scale, rotation }
 }
 
-model_from_world_component :: proc(world_comp: WorldComponent) -> (model: glm.mat4) {
-    model = glm.mat4Scale(world_comp.scale)
-    model *= glm.mat4Translate(world_comp.position)
-    model *= glm.mat4FromQuat(world_comp.rotation)
+model_from_world_component :: proc(world_comp: WorldComponent, transpose := false) -> (model: glm.mat4) {
+    model = glm.mat4Translate(world_comp.position) * glm.mat4FromQuat(world_comp.rotation) * glm.mat4Scale(world_comp.scale)
+    if transpose do model = glm.transpose(model)
     return
 }
 
