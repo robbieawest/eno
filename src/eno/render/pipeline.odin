@@ -222,9 +222,9 @@ RenderPass :: struct {
 // Populate this when needed
 make_render_pass :: proc(
     pipeline: RenderPipeline,
-    frame_buffer: Maybe(FrameBufferID),
-    mesh_gather: RenderPassMeshGather,
     shader_gather: RenderPassShaderGather,
+    frame_buffer: Maybe(FrameBufferID) = nil,
+    mesh_gather: RenderPassMeshGather = nil,
     properties: RenderPassProperties = {}
 ) -> (pass: RenderPass, ok: bool) {
     if frame_buffer != nil && int(frame_buffer.?) >= len(pipeline.frame_buffers) {
@@ -236,14 +236,13 @@ make_render_pass :: proc(
     pass.shader_gather = shader_gather
     pass.properties = properties
 
-
-    if !check_render_pass_gather(&pass, 0, len(pipeline.frame_buffers)) {
-        dbg.log(.ERROR, "Render pass mesh gather must end in an ecs.SceneQuery")
+    if pass.mesh_gather != nil && !check_render_pass_mesh_gather(&pass, 0, len(pipeline.passes)) {
+        dbg.log(.ERROR, "Render pass mesh gather must end in a RenderPassQuery")
         return
     }
 
-    if !check_shader_pass_gather(&pass, 0, len(pipeline.frame_buffers)) {
-        dbg.log(.ERROR, "Render pass mesh gather must end in an ecs.SceneQuery")
+    if !check_render_pass_shader_gather(&pass, 0, len(pipeline.passes)) {
+        dbg.log(.ERROR, "Render pass mesh gather must end in a RenderPassShaderGenerate enum")
         return
     }
 
@@ -252,21 +251,23 @@ make_render_pass :: proc(
 }
 
 @(private)
-check_render_pass_gather :: proc(pass: ^RenderPass, iteration_curr: int, iteration_limit: int) -> (ok: bool) {
+check_render_pass_mesh_gather :: proc(pass: ^RenderPass, iteration_curr: int, iteration_limit: int) -> (ok: bool) {
+    dbg.log(.INFO, "Checking: %#v", pass.mesh_gather)
     if iteration_curr == iteration_limit do return false
     switch v in pass.mesh_gather {
         case RenderPassQuery: return true
-        case ^RenderPass: return check_render_pass_gather(v, iteration_curr + 1, iteration_limit)
+        case ^RenderPass: return check_render_pass_mesh_gather(v, iteration_curr + 1, iteration_limit)
+        case nil: dbg.log(.ERROR, "Render pass mesh gather is nil")
     }
-    return // Impossible to reach but whatever
+    return
 }
 
 @(private)
-check_shader_pass_gather :: proc(pass: ^RenderPass, iteration_curr: int, iteration_limit: int) -> (ok: bool) {
+check_render_pass_shader_gather :: proc(pass: ^RenderPass, iteration_curr: int, iteration_limit: int) -> (ok: bool) {
     if iteration_curr == iteration_limit do return false
     switch v in pass.shader_gather{
         case RenderPassShaderGenerate: return true
-        case ^RenderPass: return check_shader_pass_gather(v, iteration_curr + 1, iteration_limit)
+        case ^RenderPass: return check_render_pass_shader_gather(v, iteration_curr + 1, iteration_limit)
     }
     return // Impossible to reach but whatever
 }

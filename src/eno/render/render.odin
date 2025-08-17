@@ -180,8 +180,8 @@ render_skybox :: proc(manager: ^resource.ResourceManager, scene: ^ecs.Scene, all
     irr := env.irradiance_map.?
     spec := env.prefilter_map.?
     // bind_texture(0, irr.gpu_texture.?, .CUBEMAP)
-    bind_texture(0, spec.gpu_texture.?, .CUBEMAP)
-    // bind_texture(0, env_map.gpu_texture.?, .CUBEMAP)
+    // bind_texture(0, spec.gpu_texture.?, .CUBEMAP)
+    bind_texture(0, env_map.gpu_texture.?, .CUBEMAP)
     resource.set_uniform(RENDER_CONTEXT.skybox_shader, ENV_MAP_UNIFORM, i32(0))
 
     set_face_culling(false)
@@ -333,9 +333,13 @@ handle_pass_properties :: proc(pipeline: RenderPipeline, pass: RenderPass) -> (o
     enable_stencil_wrties(.ENABLE_STENCIL in masks)
 
     if properties.blend_func != nil {
+        set_blend(true)
         set_blend_func(properties.blend_func.?)
     }
-    else do set_default_blend_func()
+    else {
+        set_blend(false)
+        set_default_blend_func()
+    }
 
     if properties.face_culling != nil {
         cull_geometry_faces(properties.face_culling.?)
@@ -521,6 +525,9 @@ PBRSamplerBindingLocation :: enum u32 {
 
 @(private)
 bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material, lighting_shader: ^resource.ShaderProgram) -> (ok: bool) {
+    type := resource.get_material(manager, material.type) or_return
+    resource.set_uniform(lighting_shader, resource.ALPHA_CUTOFF, type.alpha_cutoff)
+    resource.set_uniform(lighting_shader, resource.ENABLE_ALPHA_CUTOFF, i32(type.alpha_mode == .MASK))
 
     usages: bit_set[MaterialUsage; MAX_MATERIAL_USAGE]
     for info, property in material.properties {
@@ -1013,7 +1020,7 @@ populate_shaders :: proc(
 ) -> (ok: bool) {
 
     shader_generate_type, do_generate := render_pass.shader_gather.(RenderPassShaderGenerate)
-    if !do_generate do return  // If shader_gather points to a RenderPass then do nothing here
+    if !do_generate do return true  // If shader_gather points to a RenderPass then do nothing here
 
     dbg.log(.INFO, "Populating shaders for render pass")
 

@@ -24,11 +24,9 @@ unwrap_maybe:: proc(maybe: Maybe($T), loc := #caller_location) -> (val: T, ok: b
 }
 
 combine_world_components :: proc(a: standards.WorldComponent, b: standards.WorldComponent) -> (comp: standards.WorldComponent) {
-    log.infof("combining %#v and %#v", a, b)
     comp.position = a.position + b.position
     comp.rotation = a.rotation * b.rotation
     comp.scale = a.scale * b.scale
-    log.infof("out: %#v", comp)
     return
 }
 

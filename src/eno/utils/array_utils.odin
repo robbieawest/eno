@@ -114,12 +114,10 @@ slice_to_dynamic :: proc(a: $T/[]$E) -> [dynamic]E {
 
 arr_to_matrix :: proc($T: typeid/matrix[$R, $C]$E, arr: [$N]E) -> (mat: T)
     where N == R * C {
-    log.infof("arr inp: %v", arr)
     for i in 0..<R {
         for j in 0..<C {
             mat[j, i] = arr[i * C + j]
         }
     }
-    log.infof("mat out: %#v", mat)
     return
 }

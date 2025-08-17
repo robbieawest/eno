@@ -252,11 +252,15 @@ ANISTROPY:: "anistropy"
 DISPERSION :: "dispersion"
 NORMAL_TEXTURE :: "normalTexture"
 OCCLUSION_TEXTURE :: "occlusionTexture"
+
 EMISSIVE_TEXTURE:: "emissiveTexture"
 EMISSIVE_FACTOR :: "emissiveFactor"
+
 ALPHA_MODE :: "alphaMode"
 ALPHA_CUTOFF :: "alphaCutoff"
-DOUBLE_SIDED:: "doubleSided"
+ENABLE_ALPHA_CUTOFF :: "enableAlphaCutoff"
+
+DOUBLE_SIDED :: "doubleSided"
 UNLIT :: "unlit"
 
 MaterialPropertyInfo :: enum {
@@ -275,6 +279,8 @@ MaterialPropertyInfo :: enum {
     NORMAL_TEXTURE,
     OCCLUSION_TEXTURE,
     EMISSIVE_TEXTURE,
+
+    // Todo remove?
     EMISSIVE_FACTOR,
     ALPHA_MODE0,
     ALPHA_CUTOFF
@@ -287,9 +293,12 @@ Material :: struct {
     properties: map[MaterialPropertyInfo]MaterialProperty
 }
 
+
 MaterialType :: struct {
     properties: MaterialPropertyInfos,
     double_sided: bool,
+    alpha_mode: AlphaMode,
+    alpha_cutoff: f32,
     unlit: bool,
     // unique field specifies that it should not be grouped with duplicate MaterialType's in the manager
     // Use when the lighting shader is special and must differ from these duplicate permutations
@@ -326,6 +335,11 @@ destroy_material_type :: proc(manager: ^ResourceManager, type: MaterialType) -> 
     return true
 }
 
+AlphaMode :: enum {
+    OPAQUE,
+    MASK,
+    BLEND
+}
 
 PBRMetallicRoughness :: struct {
     base_colour: ResourceID,
@@ -338,7 +352,7 @@ PBRMetallicRoughness :: struct {
 NormalTexture :: distinct ResourceIdent
 OcclusionTexture :: distinct ResourceIdent
 EmissiveTexture :: distinct ResourceIdent
-EmissiveFactor :: distinct [3]f32
+EmissiveFactor :: distinct [3]f32 // Todo maybe include in MaterialType instead of being a property
 
 Clearcoat :: struct {
     clearcoat_texture: ResourceID,
@@ -463,6 +477,11 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
 
     material_type.double_sided = bool(cmat.double_sided)
     material_type.unlit = bool(cmat.unlit)
+    material_type.alpha_mode = cast(AlphaMode)cmat.alpha_mode
+    material_type.alpha_cutoff = cmat.alpha_cutoff
+
+    log.infof("mat type %#v", material_type)
+    log.infof("mat: %#v", material)
 
     type_id := add_material(manager, material_type) or_return
     material.type = type_id
@@ -579,7 +598,6 @@ texture_id_from_cgltf_texture :: proc(
 
 properties_from_texture_sampler :: proc(sampler: ^cgltf.sampler, allocator := context.allocator) -> (properties: TextureProperties) {
     properties = default_texture_properties(allocator)
-    defer dbg.log(.INFO, "Created properties: %#v", properties)
     if sampler == nil do return
 
     #partial switch sampler.mag_filter {

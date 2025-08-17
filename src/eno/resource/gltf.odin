@@ -248,7 +248,6 @@ extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh, gltf_fil
             }
             layout.infos[i] = attribute_info
         }
-        dbg.log(.INFO, "Read vertex layout: %#v", layout)
         layout_id := add_vertex_layout(manager, layout) or_return
         mesh_ret.layout = layout_id
 

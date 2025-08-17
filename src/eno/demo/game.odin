@@ -96,7 +96,7 @@ load_dhelmet :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
 before_frame :: proc() -> (ok: bool) {
 
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
-    load_supra(arch) or_return
+    load_dhelmet(arch) or_return
 
     game_data := new(GameData)
 
@@ -104,22 +104,73 @@ before_frame :: proc() -> (ok: bool) {
         render.make_ibl_framebuffer()
     }
 
-    game_data.render_pipeline = render.init_render_pipeline(1, 1, frame_buffers)
+    game_data.render_pipeline = render.init_render_pipeline(4, 1, frame_buffers)
+
 
     window_res := win.get_window_resolution(game.Game.window)
+
     game_data.render_pipeline.passes[0] = render.make_render_pass(
-        game_data.render_pipeline,
-        nil,
-        render.RenderPassQuery{},
-        render.RenderPassShaderGenerate.LIGHTING,
-        render.RenderPassProperties{
+        pipeline=game_data.render_pipeline,
+        shader_gather=render.RenderPassShaderGenerate.LIGHTING,
+        mesh_gather=render.RenderPassQuery{ material_query =
+            proc(material: resource.Material, type: resource.MaterialType) -> bool {
+                return type.alpha_mode != .BLEND && !type.double_sided
+            }
+        },
+        properties=render.RenderPassProperties{
             geometry_z_sorting = .ASC,
             face_culling = render.Face.BACK,
             viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
             render_skybox = true,
             clear = { .COLOUR_BIT, .DEPTH_BIT },
-            multisample = true
+            multisample = true // Todo move out of here
         }
+    ) or_return
+    game_data.render_pipeline.passes[1] = render.make_render_pass(
+        pipeline=game_data.render_pipeline,
+        shader_gather=&game_data.render_pipeline.passes[0],
+        mesh_gather=render.RenderPassQuery{ material_query =
+            proc(material: resource.Material, type: resource.MaterialType) -> bool {
+                go := type.alpha_mode != .BLEND && type.double_sided
+                return go
+            }
+        },
+        properties=render.RenderPassProperties{
+        geometry_z_sorting = .ASC,
+        viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
+            multisample = true // Todo move out of here
+        },
+    ) or_return
+    game_data.render_pipeline.passes[2] = render.make_render_pass(
+        pipeline=game_data.render_pipeline,
+        shader_gather=&game_data.render_pipeline.passes[0],
+        mesh_gather=render.RenderPassQuery{ material_query =
+            proc(material: resource.Material, type: resource.MaterialType) -> bool {
+                return type.alpha_mode == .BLEND && type.double_sided
+            }
+        },
+        properties=render.RenderPassProperties{
+            geometry_z_sorting = .DESC,
+            face_culling = render.Face.BACK,
+            viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
+            multisample = true, // Todo move out of here
+            blend_func = render.BlendFunc{ .SOURCE_ALPHA, .ONE_MINUS_SOURCE_ALPHA }
+        },
+    ) or_return
+    game_data.render_pipeline.passes[3] = render.make_render_pass(
+        pipeline=game_data.render_pipeline,
+        shader_gather=&game_data.render_pipeline.passes[0],
+        mesh_gather=render.RenderPassQuery{ material_query =
+            proc(material: resource.Material, type: resource.MaterialType) -> bool {
+                return type.alpha_mode == .BLEND && type.double_sided
+            }
+        },
+        properties=render.RenderPassProperties{
+            geometry_z_sorting = .DESC,
+            viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
+            multisample = true, // Todo move out of here
+            blend_func = render.BlendFunc{ .SOURCE_ALPHA, .ONE_MINUS_SOURCE_ALPHA }
+        },
     ) or_return
 
     game_data.render_pipeline.pre_passes[0] = render.make_pre_render_pass(

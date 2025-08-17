@@ -537,6 +537,11 @@ conv_blend_parameter :: proc(param: BlendParameter) -> u32 {
     return 0
 }
 
+set_blend :: proc(enable: bool) {
+    if enable do gl.Enable(gl.BLEND)
+    else do gl.Disable(gl.BLEND)
+}
+
 set_blend_func :: proc(func: BlendFunc) {
     gl.BlendFunc(conv_blend_parameter(func.source), conv_blend_parameter(func.dest))
 }
@@ -751,7 +756,7 @@ clear_mask :: proc(mask: ClearMask) {
         }
         gl_mask |= gl_prop
     }
-    gl.Clear(gl_mask)
+    if gl_mask != 0 do gl.Clear(gl_mask)
 }
 
 set_multisampling :: proc(on: bool) {

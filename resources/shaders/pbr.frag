@@ -97,6 +97,8 @@ uniform float roughnessFactor;
 uniform vec3 emissiveFactor;
 uniform float clearcoatFactor;
 uniform float clearcoatRoughnessFactor;
+uniform bool enableAlphaCutoff;
+uniform float alphaCutoff;
 
 uniform uint materialUsages;
 
@@ -265,11 +267,14 @@ bool checkBitMask(int bitPosition) {
 }
 
 void main() {
-    vec3 albedo = baseColourFactor.rgb;
-
+    vec4 baseColour = baseColourFactor.rgba;
     if (checkBitMask(1)) {
-        albedo *= texture(baseColourTexture, texCoords).rgb;
+        baseColour *= texture(baseColourTexture, texCoords).rgba;
     }
+    if (enableAlphaCutoff && baseColour.a < alphaCutoff) discard;
+
+    vec3 albedo = baseColour.rgb;
+
 
     float roughness = roughnessFactor;
     float metallic = metallicFactor;
@@ -285,6 +290,10 @@ void main() {
     }
     else normal = geomNormal;
     normal = normalize(normal);
+
+    if (!gl_FrontFacing) {
+        normal = -normal;
+    }
 
     float occlusion = 1.0;
     if (checkBitMask(3)) {
@@ -381,6 +390,5 @@ void main() {
     if (srgb) colour = pow(colour, vec3(gamma));
     else colour = pow(colour, vec3(1.0 / gamma));
 
-    Colour = vec4(colour, 1.0);
-    // Colour = vec4(vec3(metallic), 1.0);
+    Colour = vec4(colour, baseColour.a);
 }
