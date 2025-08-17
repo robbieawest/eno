@@ -244,7 +244,13 @@ PBR_SPECULAR_GLOSSINESS :: "pbrSpecularGlossiness"
 TRANSMISSION :: "transmission"
 VOLUME :: "volume"
 INDEX_OF_REFRACTION :: "ior"
+
 SPECULAR :: "specular"
+SPECULAR_TEXTURE :: "specularTexture"
+SPECULAR_COLOUR_TEXTURE :: "specularColourTexture"
+SPECULAR_FACTOR :: "specularFactor"
+SPECULAR_COLOUR_FACTOR :: "specularColourFactor"
+
 SHEEN :: "sheen"
 EMISSIVE_STRENGTH :: "emissiveStrength"
 IRIDESCENCE :: "iridescence"
@@ -279,17 +285,14 @@ MaterialPropertyInfo :: enum {
     NORMAL_TEXTURE,
     OCCLUSION_TEXTURE,
     EMISSIVE_TEXTURE,
-
-    // Todo remove?
-    EMISSIVE_FACTOR,
-    ALPHA_MODE0,
-    ALPHA_CUTOFF
 }
 
 MaterialPropertyInfos :: bit_set[MaterialPropertyInfo]
 Material :: struct {
     name: string,
     type: ResourceIdent,
+    alpha_cutoff: f32,
+    emissive_factor: [3]f32,
     properties: map[MaterialPropertyInfo]MaterialProperty
 }
 
@@ -298,7 +301,6 @@ MaterialType :: struct {
     properties: MaterialPropertyInfos,
     double_sided: bool,
     alpha_mode: AlphaMode,
-    alpha_cutoff: f32,
     unlit: bool,
     // unique field specifies that it should not be grouped with duplicate MaterialType's in the manager
     // Use when the lighting shader is special and must differ from these duplicate permutations
@@ -352,7 +354,6 @@ PBRMetallicRoughness :: struct {
 NormalTexture :: distinct ResourceIdent
 OcclusionTexture :: distinct ResourceIdent
 EmissiveTexture :: distinct ResourceIdent
-EmissiveFactor :: distinct [3]f32 // Todo maybe include in MaterialType instead of being a property
 
 Clearcoat :: struct {
     clearcoat_texture: ResourceID,
@@ -360,6 +361,13 @@ Clearcoat :: struct {
     clearcoat_normal_texture: ResourceID,
     clearcoat_factor: f32,
     clearcoat_roughness_factor: f32
+}
+
+Specular :: struct {
+    specular_texture: ResourceID,
+    specular_colour_texture: ResourceID,
+    specular_factor: f32,
+    specular_colour_factor: [3]f32
 }
 
 
@@ -390,8 +398,8 @@ MaterialProperty :: struct {
         NormalTexture,
         OcclusionTexture,
         EmissiveTexture,
-        EmissiveFactor,
-        Clearcoat
+        Clearcoat,
+        Specular
     }
 }
 
@@ -438,11 +446,10 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
         material.properties[.OCCLUSION_TEXTURE] = { OCCLUSION_TEXTURE, OcclusionTexture(tex_id) }
     }
     if cmat.emissive_texture.texture != nil {
-        material_type.properties |= { .EMISSIVE_TEXTURE, .EMISSIVE_FACTOR }
+        material_type.properties |= { .EMISSIVE_TEXTURE }
 
         tex_id := texture_id_from_cgltf_texture(manager, cmat.emissive_texture.texture, gltf_file_location) or_return
         material.properties[.EMISSIVE_TEXTURE] = { EMISSIVE_TEXTURE, EmissiveTexture(tex_id) }
-        material.properties[.EMISSIVE_FACTOR] = { EMISSIVE_FACTOR, EmissiveFactor(cmat.emissive_factor) }
     }
     if cmat.has_clearcoat {
         material_type.properties |= { .CLEARCOAT }
@@ -472,13 +479,34 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
         }
         material.properties[.CLEARCOAT] = MaterialProperty{ CLEARCOAT, clearcoat }
     }
+    if cmat.has_specular {
+        material_type.properties |= { .SPECULAR }
+        spec := cmat.specular
 
-    // todo clearcoat
+        spec_tex_id: ResourceID
+        if spec.specular_texture.texture != nil {
+            spec_tex_id = texture_id_from_cgltf_texture(manager, spec.specular_texture.texture, gltf_file_location) or_return
+        }
 
+        spec_colour_tex_id: ResourceID
+        if spec.specular_color_texture.texture != nil {
+            spec_colour_tex_id = texture_id_from_cgltf_texture(manager, spec.specular_color_texture.texture, gltf_file_location) or_return
+        }
+
+        specular := Specular{
+            spec_tex_id,
+            spec_colour_tex_id,
+            spec.specular_factor,
+            spec.specular_color_factor
+        }
+        material.properties[.SPECULAR] = MaterialProperty{ SPECULAR, specular }
+    }
+
+    material.emissive_factor = cmat.emissive_factor
+    material.alpha_cutoff = cmat.alpha_cutoff
     material_type.double_sided = bool(cmat.double_sided)
     material_type.unlit = bool(cmat.unlit)
     material_type.alpha_mode = cast(AlphaMode)cmat.alpha_mode
-    material_type.alpha_cutoff = cmat.alpha_cutoff
 
     log.infof("mat type %#v", material_type)
     log.infof("mat: %#v", material)

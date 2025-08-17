@@ -96,7 +96,7 @@ load_dhelmet :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
 before_frame :: proc() -> (ok: bool) {
 
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
-    load_dhelmet(arch) or_return
+    load_supra(arch) or_return
 
     game_data := new(GameData)
 

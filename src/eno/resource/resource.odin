@@ -68,8 +68,8 @@ hash_resource :: proc(resource: $T, allocator: mem.Allocator) -> ResourceHash {
     else when T == MaterialType {
         if resource.unique do return rand.uint64()  // If theres a collision out of all 2^64 - 1 possibilities then all I can do is apologize
 
-        hashable: struct{ properties: MaterialPropertyInfos,  double_sided: bool, unlit: bool, alpha_mode: AlphaMode, alpha_cutoff: f32 }
-        hashable = { properties=resource.properties, double_sided=resource.double_sided, unlit=resource.unlit, alpha_mode=resource.alpha_mode, alpha_cutoff=resource.alpha_cutoff }
+        hashable: struct{ properties: MaterialPropertyInfos,  double_sided: bool, unlit: bool, alpha_mode: AlphaMode }
+        hashable = { properties=resource.properties, double_sided=resource.double_sided, unlit=resource.unlit, alpha_mode=resource.alpha_mode }
         return hash_ptr(&hashable)
     }
     else when T == VertexLayout {

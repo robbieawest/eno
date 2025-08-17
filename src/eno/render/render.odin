@@ -505,7 +505,9 @@ MaterialUsage :: enum {
     NormalTexture,
     ClearcoatTexture,
     ClearcoatRoughnessTexture,
-    ClearcoatNormalTexture
+    ClearcoatNormalTexture,
+    SpecularTexture,
+    SpecularColourTexture
 }
 
 // Arbitrary, PBR shaders defining materials must match these sampler binding locations
@@ -520,14 +522,20 @@ PBRSamplerBindingLocation :: enum u32 {
     CLEARCOAT_NORMAL,
     BRDF_LUT,
     IRRADIANCE_MAP,
-    PREFILTER_MAP
+    PREFILTER_MAP,
+    SPECULAR,
+    SPECULAR_COLOUR
 }
 
 @(private)
 bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material, lighting_shader: ^resource.ShaderProgram) -> (ok: bool) {
     type := resource.get_material(manager, material.type) or_return
-    resource.set_uniform(lighting_shader, resource.ALPHA_CUTOFF, type.alpha_cutoff)
+    resource.set_uniform(lighting_shader, resource.ALPHA_CUTOFF, material.alpha_cutoff)
     resource.set_uniform(lighting_shader, resource.ENABLE_ALPHA_CUTOFF, i32(type.alpha_mode == .MASK))
+    resource.set_uniform(lighting_shader, resource.EMISSIVE_FACTOR, material.emissive_factor[0], material.emissive_factor[1], material.emissive_factor[2])
+
+    specular_factor: f32 = 1.0
+    specular_colour_factor := [3]f32{ 1.0, 1.0, 1.0 }
 
     usages: bit_set[MaterialUsage; MAX_MATERIAL_USAGE]
     for info, property in material.properties {
@@ -556,10 +564,6 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 resource.set_uniform(lighting_shader, resource.BASE_COLOUR_FACTOR, v.base_colour_factor[0], v.base_colour_factor[1], v.base_colour_factor[2], v.base_colour_factor[3])
                 resource.set_uniform(lighting_shader, resource.METALLIC_FACTOR, v.metallic_factor)
                 resource.set_uniform(lighting_shader, resource.ROUGHNESS_FACTOR, v.roughness_factor)
-
-            case resource.EmissiveFactor:
-                // No usage, bundled within EmissiveTexture..
-                resource.set_uniform(lighting_shader, resource.EMISSIVE_FACTOR, v[0], v[1], v[2])
 
             case resource.EmissiveTexture:
                 usages += { .EmissiveTexture }
@@ -620,8 +624,34 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
 
                 resource.set_uniform(lighting_shader, resource.CLEARCOAT_FACTOR, v.clearcoat_factor)
                 resource.set_uniform(lighting_shader, resource.CLEARCOAT_ROUGHNESS_FACTOR, v.clearcoat_roughness_factor)
+            case resource.Specular:
+
+                if v.specular_texture != nil {
+                    usages += { .SpecularTexture }
+                    specular := resource.get_texture(manager, v.specular_texture) or_return
+                    texture_unit := i32(PBRSamplerBindingLocation.SPECULAR)
+
+                    transfer_texture(specular)
+                    bind_texture(texture_unit, specular.gpu_texture) or_return
+                    resource.set_uniform(lighting_shader, resource.SPECULAR_TEXTURE, texture_unit)
+                }
+
+                if v.specular_colour_texture != nil {
+                    usages += { .SpecularColourTexture }
+                    specular_colour := resource.get_texture(manager, v.specular_colour_texture) or_return
+                    texture_unit := i32(PBRSamplerBindingLocation.SPECULAR_COLOUR)
+
+                    transfer_texture(specular_colour)
+                    bind_texture(texture_unit, specular_colour.gpu_texture) or_return
+                    resource.set_uniform(lighting_shader, resource.SPECULAR_COLOUR_TEXTURE, texture_unit)
+                }
+
+                specular_factor = v.specular_factor
+                specular_colour_factor = v.specular_colour_factor
         }
     }
+    resource.set_uniform(lighting_shader, resource.SPECULAR_FACTOR, specular_factor)
+    resource.set_uniform(lighting_shader, resource.SPECULAR_COLOUR_FACTOR, specular_colour_factor[0], specular_colour_factor[1], specular_colour_factor[2])
 
     resource.set_uniform(lighting_shader, resource.MATERIAL_USAGES, transmute(MAX_MATERIAL_USAGE)usages)
     return true
