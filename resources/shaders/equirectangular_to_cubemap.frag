@@ -13,5 +13,9 @@ vec2 UVFromSpherical(vec3 v) {
 
 void main() {
     vec2 uv = UVFromSpherical(normalize(position));
-    Colour = vec4(textureLod(environmentTex, uv, 0.0).rgb, 1.0);
+    vec3 env = textureLod(environmentTex, uv, 0.0).rgb;
+
+    const float MAXIMUM_RADIANCE = 500.0;
+    env = clamp(env, vec3(0.0), vec3(MAXIMUM_RADIANCE));
+    Colour = vec4(env, 1.0);
 }
