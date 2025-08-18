@@ -10,7 +10,8 @@ main :: proc() {
     context.logger = log.create_console_logger()
     log.info("Starting Demo")
 
-    window_target := win.initialize_window(900, 900, "eno engine demo")
+    window_target, win_ok := win.initialize_window(900, 900, "eno engine demo")
+    if !win_ok do return
     // win.set_fullscreen(window_target)
     win.set_mouse_relative_mode(true)
     win.set_mouse_raw_input(true)

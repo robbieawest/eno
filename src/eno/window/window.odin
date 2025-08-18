@@ -7,7 +7,6 @@ import glutils "../utils/gl_utils"
 import dbg "../debug"
 
 import "core:log"
-import "core:c"
 import "core:strings"
 
 WINDOW_WIDTH: i32 = 1280
@@ -15,13 +14,13 @@ WINDOW_HEIGHT: i32 = 720
 
 WindowTarget :: ^SDL.Window
 
-initialize_window :: proc(width, height: i32, window_tag: string, extra_params: ..i32) -> (win_ret: WindowTarget) {
+initialize_window :: proc(width, height: i32, window_tag: string, extra_params: ..i32) -> (win_ret: WindowTarget, ok: bool) {
     window: ^SDL.Window
     c_window_tag := strings.clone_to_cstring(window_tag)
 
     if len(extra_params) != 0 {
         if len(extra_params) != 2 {
-            dbg.log(.ERROR, "Not enough params given to initialize SDL window")
+            log.errorf("Not enough params given to initialize SDL window")
             return
         }
 
@@ -30,10 +29,8 @@ initialize_window :: proc(width, height: i32, window_tag: string, extra_params: 
         window = SDL.CreateWindow(c_window_tag, SDL.WINDOWPOS_UNDEFINED, SDL.WINDOWPOS_UNDEFINED, width, height, SDL.WINDOW_OPENGL)
     }
 
-    // SDL.CreateRenderer(window, -1, SDL.RENDERER_ACCELERATED)
-
 	if window == nil {
-        dbg.log(.ERROR, "Could not initialize SDL window")
+        log.errorf("Could not initialize SDL window")
         return
 	}
 
@@ -41,40 +38,52 @@ initialize_window :: proc(width, height: i32, window_tag: string, extra_params: 
     WINDOW_HEIGHT = height
 
     sdl_setup_gl_versioning()
+    sdl_setup_gl_multisamples()
+
     gl_context := SDL.GL_CreateContext(window)
-    SDL.GL_MakeCurrent(window, gl_context)
+    if gl_context == nil {
+        log.errorf("Failed to create gl context")
+        log.errorf("SDL Err: '%v'", SDL.GetErrorString())
+        return
+    }
+    if SDL.GL_MakeCurrent(window, gl_context) != 0 {
+        log.errorf("Failed to make gl context current")
+        log.errorf("SDL Err: '%v'", SDL.GetErrorString())
+        return
+    }
+
     gl.load_up_to(4, 3, SDL.gl_set_proc_address)
+    glutils.opengl_debug_setup()
+
+    dbg.init_debug()
 
     if (SDL.GL_SetSwapInterval(1) < 0) {
         dbg.log(.ERROR, "Could not set VSYNC to on")
         return
     }
 
-    sdl_setup_gl_multisamples()
-    glutils.opengl_debug_setup()
-
-    dbg.init_debug()
     dbg.log(.INFO, "Initialized SDL window")
 
     win_ret = window
+    ok = true
     return
 }
 
 sdl_setup_gl_versioning :: proc() {
-    dbg.log(.INFO, "Setting SDL GL versioning")
+    log.infof("Setting SDL GL versioning")
     _attr_ret: i32
     _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_MAJOR_VERSION, 4)
     _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_MINOR_VERSION, 3)
     _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_PROFILE_MASK, i32(SDL.GLprofile.CORE))
-    // _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_FLAGS, i32(SDL.GLcontextFlag.DEBUG_FLAG))
-    if _attr_ret != 0 do dbg.log(.ERROR, "Could not set certain SDL parameters for OpenGL")
+    _attr_ret |= SDL.GL_SetAttribute(.CONTEXT_FLAGS, i32(SDL.GLcontextFlag.DEBUG_FLAG))
+    if _attr_ret != 0 do log.errorf("Could not set certain SDL parameters for OpenGL")
 }
 
 sdl_setup_gl_multisamples :: proc() {
     _attr_ret: i32
     _attr_ret |= SDL.GL_SetAttribute(.MULTISAMPLEBUFFERS, 1)
     _attr_ret |= SDL.GL_SetAttribute(.MULTISAMPLESAMPLES, 8)
-    if _attr_ret != 0 do dbg.log(.ERROR, "Could not set multisample SDL parameters for OpenGL")
+    if _attr_ret != 0 do  log.errorf("Could not set multisample SDL parameters for OpenGL")
 }
 
 

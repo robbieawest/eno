@@ -180,8 +180,8 @@ render_skybox :: proc(manager: ^resource.ResourceManager, scene: ^ecs.Scene, all
     irr := env.irradiance_map.?
     spec := env.prefilter_map.?
     // bind_texture(0, irr.gpu_texture.?, .CUBEMAP)
-    // bind_texture(0, spec.gpu_texture.?, .CUBEMAP)
-    bind_texture(0, env_map.gpu_texture.?, .CUBEMAP)
+    bind_texture(0, spec.gpu_texture.?, .CUBEMAP)
+    // bind_texture(0, env_map.gpu_texture.?, .CUBEMAP)
     resource.set_uniform(RENDER_CONTEXT.skybox_shader, ENV_MAP_UNIFORM, i32(0))
 
     set_face_culling(false)
