@@ -191,7 +191,7 @@ GPUTexture :: Maybe(u32)
 
 transfer_texture :: proc(
     tex: ^resource.Texture,
-    internal_format: i32 = gl.RGB8,
+    internal_format: i32 = gl.RGBA8,
     lod: i32 = 0,
     format: u32 = gl.RGBA,
     type: u32 = gl.UNSIGNED_BYTE,
@@ -762,4 +762,8 @@ clear_mask :: proc(mask: ClearMask) {
 set_multisampling :: proc(on: bool) {
     if on do gl.Enable(gl.MULTISAMPLE)
     else do gl.Disable(gl.MULTISAMPLE)
+}
+
+set_clear_colour :: proc(colour: [4]f32 = {}) {
+    gl.ClearColor(colour.x, colour.y, colour.z, colour.a)
 }

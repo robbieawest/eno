@@ -27,7 +27,6 @@ void main() {
     position = vec3(m_Model * vec4(aPosition, 1.0));
     gl_Position = Camera.m_Project * Camera.m_View * vec4(position, 1.0);
 
-    // Tangent space
     geomNormal = normalize(m_Normal * aNormal);
 
     float bitangentSign = aTangent.w;
@@ -42,6 +41,7 @@ void main() {
     // Apply TBN to outgoing values
     position = TBN * position;
     cameraPosition = TBN * Camera.position;
+    geomNormal = TBN * geomNormal;
 
     // TBN will be used to translate light positions to tangent space in fragment shader
     // - this is biting the bullet, sending a fixed buffer of tangent light positions from vertex -> fragment is more complex and the performance benefit is

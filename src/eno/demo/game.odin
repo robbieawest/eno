@@ -21,7 +21,7 @@ import "core:math"
 // set a pointer to Game.game_Data
 
 GameData :: struct {
-    render_pipeline: render.RenderPipeline
+    render_pipeline: render.RenderPipeline,
 }
 
 
@@ -106,8 +106,10 @@ before_frame :: proc() -> (ok: bool) {
 
     game_data.render_pipeline = render.init_render_pipeline(4, 1, frame_buffers)
 
-
     window_res := win.get_window_resolution(game.Game.window)
+
+    background_colour := [4]f32{ 1.0, 1.0, 1.0, 1.0 }
+    background_colour_factor: f32 = 0.85
 
     game_data.render_pipeline.passes[0] = render.make_render_pass(
         pipeline=game_data.render_pipeline,
@@ -123,7 +125,8 @@ before_frame :: proc() -> (ok: bool) {
             viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
             render_skybox = true,
             clear = { .COLOUR_BIT, .DEPTH_BIT },
-            multisample = true // Todo move out of here
+            clear_colour = background_colour * background_colour_factor,
+            multisample = true
         }
     ) or_return
     game_data.render_pipeline.passes[1] = render.make_render_pass(
@@ -138,7 +141,7 @@ before_frame :: proc() -> (ok: bool) {
         properties=render.RenderPassProperties{
         geometry_z_sorting = .ASC,
         viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
-            multisample = true // Todo move out of here
+            multisample = true
         },
     ) or_return
     game_data.render_pipeline.passes[2] = render.make_render_pass(
@@ -153,7 +156,7 @@ before_frame :: proc() -> (ok: bool) {
             geometry_z_sorting = .DESC,
             face_culling = render.Face.BACK,
             viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
-            multisample = true, // Todo move out of here
+            multisample = true,
             blend_func = render.BlendFunc{ .SOURCE_ALPHA, .ONE_MINUS_SOURCE_ALPHA }
         },
     ) or_return
@@ -168,7 +171,7 @@ before_frame :: proc() -> (ok: bool) {
         properties=render.RenderPassProperties{
             geometry_z_sorting = .DESC,
             viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
-            multisample = true, // Todo move out of here
+            multisample = true,
             blend_func = render.BlendFunc{ .SOURCE_ALPHA, .ONE_MINUS_SOURCE_ALPHA }
         },
     ) or_return
@@ -194,21 +197,25 @@ before_frame :: proc() -> (ok: bool) {
     lights := make([dynamic]resource.PointLight)
     defer delete(lights)
 
+    light_height: f32 = 5.0
+    light_dist: f32 = 5.0
+    intensity: f32 = 3.0
     append_elems(&lights,
-        resource.PointLight{ "demo_light", false, 10.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 10.0, 5.0, 10.0 } },
-        resource.PointLight{ "demo_light2", false, 10.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 10.0, 5.0, -10.0 } },
-        resource.PointLight{ "demo_light3", false, 10.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -10.0, 5.0, 10.0 } },
-        resource.PointLight{ "demo_light4", false, 10.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -10.0, 5.0, -10.0 } },
-        resource.PointLight{ "demo_light5", false, 10.0, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -10.0, 0.0, 0.0 } },
+        resource.PointLight{ "demo_light", true, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ light_dist, light_height, light_dist } },
+        resource.PointLight{ "demo_light2", true, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ light_dist, light_height, -light_dist } },
+        resource.PointLight{ "demo_light3", true, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -light_dist, light_height, light_dist } },
+        resource.PointLight{ "demo_light4", true, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -light_dist, light_height, -light_dist } },
+        resource.PointLight{ "demo_light5", true, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ light_dist, light_height, 0.0 } },
+        resource.PointLight{ "demo_light6", true, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -light_dist, light_height, 0.0 } },
     )
 
     for light in lights {
         light_comp := standards.make_world_component(position=light.position)
         ecs.archetype_add_entity(game.Game.scene, light_arch, light.name,
             ecs.make_ecs_component_data(resource.LIGHT_COMPONENT.label, resource.LIGHT_COMPONENT.type, resource.Light(light)),
-            ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, resource.make_light_billboard(&game.Game.resource_manager) or_return),
+            ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, resource.make_light_billboard_model(&game.Game.resource_manager, colour_override = light.colour) or_return),
             ecs.make_ecs_component_data(standards.WORLD_COMPONENT.label, standards.WORLD_COMPONENT.type, light_comp),
-            ecs.make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, false),
+            ecs.make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, true),
         )
     }
 
@@ -223,16 +230,16 @@ before_frame :: proc() -> (ok: bool) {
     render.populate_all_shaders(&game_data.render_pipeline, manager, game.Game.scene) or_return
 
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "newport_loft.hdr") or_return
-    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "park_music_stage_4k.hdr") or_return
+    game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "park_music_stage_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "rogland_clear_night_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "twilight_sunset_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "voortrekker_interior_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "metro_noord_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "drackenstein_quarry_4k.hdr") or_return
-    //game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "fireplace_4k.hdr") or_return
-    game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "freight_station_4k.hdr") or_return
+    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "fireplace_4k.hdr") or_return
+    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "freight_station_4k.hdr") or_return
     // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "golden_bay_4k.hdr") or_return
-    render.pre_render(manager, game_data.render_pipeline, game.Game.scene) or_return
+    // render.pre_render(manager, game_data.render_pipeline, game.Game.scene) or_return
 
     return true
 }

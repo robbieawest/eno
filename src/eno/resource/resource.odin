@@ -4,6 +4,7 @@ import dbg "../debug"
 import "../utils"
 import "../standards"
 
+import "core:strings"
 import "core:slice"
 import "core:hash"
 import "core:mem"
@@ -48,9 +49,10 @@ hash_resource :: proc(resource: $T, allocator: mem.Allocator) -> ResourceHash {
 
         append_elems(&bytes, ..utils.to_bytes(&resource.image.w))
         append_elems(&bytes, ..utils.to_bytes(&resource.image.h))
+        append_elems(&bytes, ..utils.to_bytes(&resource.image.channels))
         append_elems(&bytes, ..(transmute([]u8)resource.image.uri))
 
-        return hash_ptr(&resource)
+        return hash_raw(bytes[:])
     }
     else when T == ShaderProgram {
         bytes := make([dynamic]byte, allocator=allocator)
@@ -61,8 +63,11 @@ hash_resource :: proc(resource: $T, allocator: mem.Allocator) -> ResourceHash {
         return hash_raw(bytes[:])
     }
     else when T == Shader {
-        hashable: struct{ type: ShaderType, source: ShaderSource }
-        hashable = { resource.type, resource.source }
+        source_hashable :: struct{ available: bool, info: ShaderInfo, str_hash: u64 }
+        hashable: struct{ type: ShaderType, source: source_hashable }
+        source_hashable_i := source_hashable{ resource.source.is_available_as_string, resource.source.shader_info, hash_str(resource.source.string_source) }
+        hashable = { resource.type, source_hashable_i }
+
         return hash_ptr(&hashable)
     }
     else when T == MaterialType {
@@ -75,7 +80,19 @@ hash_resource :: proc(resource: $T, allocator: mem.Allocator) -> ResourceHash {
     else when T == VertexLayout {
         if resource.unique do return rand.uint64()
 
-        return hash_slice(resource.infos)
+        bytes := make([dynamic]byte, allocator=allocator)
+        defer delete(bytes)
+
+        for info in resource.infos {
+            info: MeshAttributeInfo = info  // For IDE type hint
+            append_elems(&bytes, ..utils.to_bytes(&info.type))
+            append_elems(&bytes, ..utils.to_bytes(&info.float_stride))
+            append_elems(&bytes, ..utils.to_bytes(&info.byte_stride))
+            append_elems(&bytes, ..utils.to_bytes(&info.element_type))
+            append_elems(&bytes, ..utils.to_bytes(&info.data_type))
+        }
+
+        return hash_raw(bytes[:])
     }
     else {
         #panic("Type is invalid in hash")
@@ -83,14 +100,19 @@ hash_resource :: proc(resource: $T, allocator: mem.Allocator) -> ResourceHash {
 }
 
 @(private)
+hash_str :: proc(str: string) -> ResourceHash {
+    return hash_raw(transmute([]u8)str)
+}
+
+@(private)
 hash_ptr :: proc(ptr: ^$T) -> ResourceHash {
-    return hash.fnv64a(utils.to_bytes(ptr))
+    return hash_raw(utils.to_bytes(ptr))
 }
 
 @(private)
 hash_slice :: proc(slice: $T/[]$E) -> ResourceHash {
     raw_slice := transmute(runtime.Raw_Slice)slice
-    return hash.fnv64a(transmute([]byte)runtime.Raw_Slice{raw_slice.data, type_info_of(E).size * len(slice)})
+    return hash_raw(transmute([]byte)runtime.Raw_Slice{raw_slice.data, type_info_of(E).size * len(slice)})
 }
 
 @(private)
@@ -127,10 +149,23 @@ init_resource_manager :: proc(allocator := context.allocator) -> ResourceManager
 
 
 @(private)
-compare_resources :: proc(a: $T, b: T) -> bool {
+compare_resources :: proc(a: $T, b: T, allocator: mem.Allocator) -> bool {
 
     when T == Texture {
-        return utils.equals(a, b)
+        equals := true
+        equals &= a.type == b.type
+        equals &= a.image.w == b.image.w
+        equals &= a.image.h == b.image.h
+        equals &= a.image.channels == b.image.channels
+        equals &= strings.compare(a.image.uri, b.image.uri) == 0
+
+        ap_bytes := make([dynamic]byte, allocator=allocator); defer delete(ap_bytes)
+        bp_bytes := make([dynamic]byte, allocator=allocator); defer delete(bp_bytes)
+        utils.map_to_bytes(a.properties, &ap_bytes)
+        utils.map_to_bytes(b.properties, &bp_bytes)
+
+        equals &= slice.equal(ap_bytes[:], bp_bytes[:])
+        return equals
     }
     else when T == ShaderProgram {
         if len(a.shaders) != len(b.shaders) do return false
@@ -142,19 +177,37 @@ compare_resources :: proc(a: $T, b: T) -> bool {
     }
     else when T == Shader {
         // Not a faithful deep compare
-        comparable :: struct{ type: ShaderType, source: ShaderSource }
-        a_comp := comparable{ a.type, a.source }
-        b_comp := comparable{ b.type, b.source }
+        comparable :: struct{ type: ShaderType, available: bool, infos: ShaderInfo, str_hash: u64}
+        a_comp := comparable{ a.type, a.source.is_available_as_string, a.source.shader_info, hash_str(a.source.string_source) }
+        b_comp := comparable{ b.type, b.source.is_available_as_string, b.source.shader_info, hash_str(b.source.string_source) }
         return utils.equals(a_comp, b_comp)
     }
     else when T == MaterialType {
+        if a.unique || b.unique do return false
         comparable :: struct{ properties: MaterialPropertyInfos, double_sided: bool, unlit: bool, unique: bool }
         a_comp := comparable{ a.properties, a.double_sided, a.unlit, a.unique }
         b_comp := comparable{ b.properties, b.double_sided, b.unlit, b.unique }
         return utils.equals(a_comp, b_comp)
     }
     else when T == VertexLayout {
-        return slice.equal(a.infos, b.infos)
+        if a.unique || b.unique do return false
+        if len(a.infos) != len(b.infos) do return false
+
+        for i in 0..<len(a.infos) {
+            a_info: MeshAttributeInfo = a.infos[i]
+            b_info: MeshAttributeInfo = b.infos[i]
+
+            equal := true
+            equal &= a_info.type == b_info.type
+            equal &= a_info.data_type == b_info.data_type
+            equal &= a_info.element_type == b_info.element_type
+            equal &= a_info.byte_stride == b_info.byte_stride
+            equal &= a_info.float_stride == b_info.float_stride
+            equal &= strings.compare(a_info.name, b_info.name) == 0
+
+            if !equal do return false
+        }
+        return true
     }
     else {
         #panic("Type is invalid in hash")
@@ -167,11 +220,11 @@ compare_resources :: proc(a: $T, b: T) -> bool {
 // O(N * M) linear + mem compare, M = bytes in T, N = length of bucket
 // Linear memory compare as opposed to pointer compare
 @(private)
-traverse_bucket :: proc(bucket: list.List, resource: $T) -> (node: ^ResourceNode(T), ok: bool) {
+traverse_bucket :: proc(bucket: list.List, resource: $T, allocator: mem.Allocator) -> (node: ^ResourceNode(T), ok: bool) {
     iterator := list.iterator_head(bucket, ResourceNode(T), "node")
 
     for resource_node in list.iterate_next(&iterator) {
-        if compare_resources(resource, resource_node.resource) do return resource_node, true
+        if compare_resources(resource, resource_node.resource, allocator) do return resource_node, true
     }
 
     return
@@ -202,7 +255,7 @@ add_resource :: proc(
     // Reused code, could be improved but kiss
     if hash in mapping {
         bucket: ^list.List = &mapping[hash]
-        resource_node, node_exists := traverse_bucket(bucket^, resource)
+        resource_node, node_exists := traverse_bucket(bucket^, resource, allocator)
 
         if node_exists {
             dbg.log(.INFO, "Increasing reference of resource, hash: %d", hash)
@@ -395,22 +448,6 @@ remove_shader :: proc(manager: ^ResourceManager, id: ResourceID) -> (ok: bool) {
 
 remove_layout :: proc(manager: ^ResourceManager, id: ResourceID) -> (ok: bool) {
     return remove_resource(&manager.vertex_layouts, VertexLayout, utils.unwrap_maybe(id) or_return, manager.allocator)
-}
-
-
-// estupido
-get_billboard_lighting_shader :: proc(manager: ^ResourceManager) -> (result: ResourceIdent, ok: bool) {
-
-    ident, shader_ok := manager.billboard_shader.?
-    billboard_shader: ^ShaderProgram
-    if shader_ok do billboard_shader, ok = get_resource(&manager.passes, ShaderProgram, ident, is_shared_reference=true)
-
-    if !shader_ok {
-        program := read_shader_source(manager, standards.SHADER_RESOURCE_PATH + "billboard.vert", standards.SHADER_RESOURCE_PATH + "billboard.frag") or_return
-        manager.billboard_shader = result
-        return result, true
-    }
-    return ident, true
 }
 
 

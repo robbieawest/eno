@@ -102,6 +102,9 @@ uniform bool enableAlphaCutoff;
 uniform float alphaCutoff;
 uniform float specularFactor;
 uniform vec3 specularColourFactor;
+uniform bool enableBaseColourOverride;
+uniform vec3 baseColourOverride;
+uniform bool unlit;
 
 uniform uint materialUsages;
 
@@ -188,7 +191,7 @@ vec3 FresnelSchlickRoughness(vec3 N, vec3 V, vec3 F0, float perceptualRoughness)
     return F0 + (max(vec3(1.0 - perceptualRoughness), F0) - F0) * pow(clamp(1.0 - max(dot(V, N), 0.0), 0.0, 1.0), 5.0);
 }
 
-vec3 calculateBRDF(vec3 N, vec3 V, vec3 L, vec3 H, vec3 albedo, float roughness, float metallic, vec3 F0) {
+vec3 calculateBRDF(vec3 N, vec3 V, vec3 L, vec3 H, vec3 albedo, float roughness, float metallic, vec3 F0, float specular) {
     float NDF = DistributionGGX(N, H, roughness);
     float G = GeomSmith(N, V, L, roughness);
     vec3 fresnel = FresnelSchlick(H, V, F0);
@@ -196,11 +199,11 @@ vec3 calculateBRDF(vec3 N, vec3 V, vec3 L, vec3 H, vec3 albedo, float roughness,
     // Cook-torrence
     vec3 num = NDF * G * fresnel;
     float denom = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
-    vec3 specular = num / denom;
+    vec3 specularContrib = specular * (num / denom);
 
     vec3 diffuseShare = (vec3(1.0) - fresnel) * (1 - metallic);
     vec3 lambertian = albedo / PI;
-    return diffuseShare * lambertian + specular;
+    return diffuseShare * lambertian + specularContrib;
 }
 
 vec3 calculateClearcoatBRDF(vec3 N, vec3 L, vec3 H, float roughness, vec3 Fc) {
@@ -280,7 +283,13 @@ void main() {
     if (checkBitMask(1)) {
         baseColour *= texture(baseColourTexture, texCoords).rgba;
     }
+    if (enableBaseColourOverride) baseColour = vec4(baseColourOverride, baseColour.a);
+
     if (enableAlphaCutoff && baseColour.a < alphaCutoff) discard;
+    if (unlit) {
+        Colour = baseColour;
+        return;
+    }
 
     vec3 albedo = baseColour.rgb;
 
@@ -348,6 +357,7 @@ void main() {
     vec3 viewDir = normalize(cameraPosition - position);
 
     vec3 baseFresnelIncidence;
+    baseFresnelIncidence = mix(min(vec3(0.04) * specularColour * specular, vec3(1.0)), albedo, metallic);
     baseFresnelIncidence = mix(vec3(0.04), albedo, metallic);
     if (clearcoatActive) {
         // Assumes clearcoat layer IOR of 1.5
@@ -373,7 +383,7 @@ void main() {
 
         vec3 radiance = light.lightInformation.intensity * light.lightInformation.colour / (lightDist * lightDist);
 
-        vec3 BRDF = calculateBRDF(normal, viewDir, lightDir, halfVec, albedo, roughness * roughnessFactor, metallic * metallicFactor, baseFresnelIncidence);
+        vec3 BRDF = calculateBRDF(normal, viewDir, lightDir, halfVec, albedo, roughness * roughnessFactor, metallic * metallicFactor, baseFresnelIncidence, specular);
         if (clearcoatActive) {
             vec3 clearcoatFresnel = FresnelSchlick(viewDir, halfVec, vec3(0.04)) * clearcoat;
             BRDF *= (1.0 - clearcoatFresnel);
@@ -397,6 +407,7 @@ void main() {
         ambient += IBLAmbientTerm(clearcoatNormal, viewDir, Fc, vec3(0.0), clearcoatRoughness, 0.0, true, specular, specularColour);
     }
 
+    ambient = vec3(0.0);
     vec3 colour = ambient * occlusion + lightOutputted;
     colour += emissive * (1.0 - clearcoat * Fc);
 

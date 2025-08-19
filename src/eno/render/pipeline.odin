@@ -3,21 +3,19 @@ package render
 import gl "vendor:OpenGL"
 
 import dbg "../debug"
-import "../ecs"
 import "../resource"
 
 import "core:slice"
-import "core:reflect"
-import "core:strings"
 import "base:intrinsics"
-import utils "../utils"
+
+
 
 FrameBufferID :: u32  // Index into RenderPipeline.frame_buffers - checked
 RenderPipeline :: struct {
     frame_buffers: []FrameBuffer,
     passes: []RenderPass,
     shader_store: RenderShaderStore,
-    pre_passes: []PreRenderPass
+    pre_passes: []PreRenderPass,
 }
 
 // Default render pipeline has no passes
@@ -159,6 +157,7 @@ RenderPassProperties :: struct {
     render_skybox: bool,
     viewport: Maybe([4]i32),
     clear: ClearMask,
+    clear_colour: Maybe([4]f32),
     multisample: bool
 }
 

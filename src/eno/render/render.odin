@@ -112,7 +112,7 @@ render :: proc(
             shader_pass := resource.get_shader_pass(manager, shader_pass_id) or_return
 
             attach_program(shader_pass^)
-            bind_ibl_uniforms(scene, shader_pass) or_return
+            // bind_ibl_uniforms(scene, shader_pass) or_return
             update_camera_ubo(scene) or_return
             update_lights_ssbo(scene) or_return
 
@@ -129,7 +129,7 @@ render :: proc(
             }
         }
 
-        if pass.properties.render_skybox do render_skybox(manager, scene, allocator) or_return
+        // if pass.properties.render_skybox do render_skybox(manager, scene, allocator) or_return
     }
 
 
@@ -353,6 +353,9 @@ handle_pass_properties :: proc(pipeline: RenderPipeline, pass: RenderPass) -> (o
 
     set_multisampling(properties.multisample)
 
+    if properties.clear_colour != nil {
+        set_clear_colour(properties.clear_colour.?)
+    } else do set_clear_colour()
 
     clear_mask(properties.clear)
 
@@ -452,7 +455,7 @@ query_scene :: proc(
     return
 }
 
-
+/*
 apply_billboard_rotation :: proc(cam_position: glm.vec3, world: standards.WorldComponent, cylindrical := true) -> standards.WorldComponent {
      start := glm.vec3{ 0.0, 0.0, -1.0 }
     // start := glm.normalize(world.position)
@@ -485,9 +488,11 @@ apply_billboard_rotation :: proc(cam_position: glm.vec3, world: standards.WorldC
     return world
     */
 }
+*/
 
 model_and_normal :: proc(mesh: ^resource.Mesh, world: ^standards.WorldComponent, cam: ^cam.Camera) -> (model: glm.mat4, normal: glm.mat3) {
-    world_comp := mesh.is_billboard ? apply_billboard_rotation(cam.position, world^) : world^
+    // world_comp := mesh.is_billboard ? apply_billboard_rotation(cam.position, world^) : world^
+    world_comp := world^
     model = standards.model_from_world_component(world_comp, mesh.transpose_transformation)
     normal = lutils.normal_mat(model)
     return
@@ -532,6 +537,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
     type := resource.get_material(manager, material.type) or_return
     resource.set_uniform(lighting_shader, resource.ALPHA_CUTOFF, material.alpha_cutoff)
     resource.set_uniform(lighting_shader, resource.ENABLE_ALPHA_CUTOFF, i32(type.alpha_mode == .MASK))
+    resource.set_uniform(lighting_shader, resource.UNLIT, i32(type.unlit))
     resource.set_uniform(lighting_shader, resource.EMISSIVE_FACTOR, material.emissive_factor[0], material.emissive_factor[1], material.emissive_factor[2])
 
     specular_factor: f32 = 1.0
@@ -564,6 +570,11 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 resource.set_uniform(lighting_shader, resource.BASE_COLOUR_FACTOR, v.base_colour_factor[0], v.base_colour_factor[1], v.base_colour_factor[2], v.base_colour_factor[3])
                 resource.set_uniform(lighting_shader, resource.METALLIC_FACTOR, v.metallic_factor)
                 resource.set_uniform(lighting_shader, resource.ROUGHNESS_FACTOR, v.roughness_factor)
+                resource.set_uniform(lighting_shader, resource.ENABLE_BASE_COLOUR_OVERRIDE, i32(v.enable_base_colour_override))
+
+                if v.enable_base_colour_override {
+                    resource.set_uniform(lighting_shader, resource.BASE_COLOUR_OVERRIDE, v.base_colour_override[0], v.base_colour_override[1], v.base_colour_override[2])
+                }
 
             case resource.EmissiveTexture:
                 usages += { .EmissiveTexture }
@@ -652,7 +663,6 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
     }
     resource.set_uniform(lighting_shader, resource.SPECULAR_FACTOR, specular_factor)
     resource.set_uniform(lighting_shader, resource.SPECULAR_COLOUR_FACTOR, specular_colour_factor[0], specular_colour_factor[1], specular_colour_factor[2])
-
     resource.set_uniform(lighting_shader, resource.MATERIAL_USAGES, transmute(MAX_MATERIAL_USAGE)usages)
     return true
 }

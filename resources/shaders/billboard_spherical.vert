@@ -12,38 +12,41 @@ layout (std140, binding = 0) uniform CameraInfo {
 layout(location = 0) in vec3 aPosition;
 
 uniform mat4 m_Model;
-uniform mat4 m_Normal;
 out vec2 texCoords;
 out mat3 TBN;
 out vec3 position;
 out vec3 cameraPosition;
 out vec3 geomNormal;
 
-mat4 billboardModel(mat4 model) {
-    vec3 scale = vec3(length(vec3(model[0])), length(vec3(model[1])), length(vec3(model[2])));
-    model[0] = vec3(scale.x, 0.0, 0.0);
-    model[1] = vec3(0.0, scale.y, 0.0);
-    model[2] = vec3(0.0, 0.0, scale.z);
-    return model;
+mat4 billboardModelView(mat4 modelView) {
+    vec3 scale = vec3(length(vec3(modelView[0])), length(vec3(modelView[1])), length(vec3(modelView[2])));
+    modelView[0] = vec4(scale.x, 0.0, 0.0, 0.0);
+    modelView[1] = vec4(0.0, scale.y, 0.0, 0.0);
+    modelView[2] = vec4(0.0, 0.0, scale.z, 0.0);
+    return modelView;
 }
 
 void main() {
-    texCoords = (aPosition + 1.0) * 0.5;
-    vec3 normal = vec3(0.0, -1.0, 0.0);
+    texCoords = vec2 (aPosition + 1.0) * 0.5;
+
+    geomNormal = vec3(0.0, -1.0, 0.0);
     vec3 tangent = vec3(1.0, 0.0, 0.0);
-
     // /\ Tangent space
-    // \/ World space
 
-    normal = normalize(m_Normal * normal);
-    tangent = normalize(m_Normal * tangent);
+    mat4 modelView = billboardModelView(Camera.m_View * m_Model);
+    position = vec3(modelView * vec4(aPosition, 1.0));  // Model View space
+    gl_Position = Camera.m_Project * vec4(position, 1.0);
+
+    mat3 modelView3 = mat3(modelView);
+    mat3 invView3 = mat3(inverse(Camera.m_View));
+
+    // \/ World space
+    vec3 normal = normalize(invView3 * modelView3 * geomNormal);
+    tangent = normalize(invView3 * modelView3 * tangent);
 
     TBN = mat3(tangent, cross(normal, tangent), normal);
-    position = m_Model * vec4(aPosition, 1.0);
-    gl_Position = Camera.m_Project * Camera.m_View * position;
 
     // \/ Tangent space
     position = TBN * position;
     cameraPosition = TBN * Camera.position;
-    geomNormal = TBN * normal;
 }

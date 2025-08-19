@@ -114,7 +114,6 @@ Mesh :: struct {
     material: Material,
     mesh_id: MeshID,  // Used in render.RenderPassStore to find the shaders for each render pass
     gl_component: GLComponent,
-    is_billboard: bool,  // todo remove
     instance_to: Maybe(InstanceTo),  // Todo support EXT_mesh_gpu_instancing gltf extension for this
     centroid: [3]f32,  // Local centroid, used in occlusion/frustum culling (if I do them) and in z-sorting. Applied hierarchically via model world component
     transpose_transformation: bool
@@ -140,59 +139,32 @@ destroy_mesh :: proc(manager: ^ResourceManager, mesh: ^Mesh) -> (ok: bool) {
 }
 
 // Does not transfer
-texture_from_path :: proc(manager: ^ResourceManager, name: string, path: string, path_base: string = "", flip_image := false) -> (id: ResourceIdent, ok: bool) {
+texture_from_path :: proc(
+    manager: ^ResourceManager,
+    name: string,
+    path: string,
+    path_base: string = "",
+    flip_image := false,
+    type: TextureType = .TWO_DIM,
+    properties: TextureProperties = {},
+    allocator := context.allocator
+) -> (id: ResourceIdent, ok: bool) {
     texture: Texture
-    texture.image = load_image_from_uri(path, path_base, flip_image) or_return
-    texture.name = strings.clone(name)
+    texture.image = load_image_from_uri(path, path_base, flip_image, allocator=allocator) or_return
+    texture.name = strings.clone(name, allocator=allocator)
+
+    if len(properties) == 0 do texture.properties = default_texture_properties(allocator)
+    else do texture.properties = properties
+    texture.type = type
     return add_texture(manager, texture)
 }
 
-// Does not transfer
-create_billboard_model_from_path :: proc(manager: ^ResourceManager, texture_name: string, texture_path: string, texture_path_base: string = "") -> (model: Model, ok: bool) {
-    texture_id := texture_from_path(manager, texture_name, texture_path, texture_path_base, flip_image = true) or_return
-    return create_billboard_model_from_id(manager, texture_id)
-}
 
-// Does not transfer
-// Todo use unlit property
-// todo use special vertex shader
-create_billboard_model_from_id :: proc(manager: ^ResourceManager, id: ResourceIdent, allocator := context.allocator) -> (model: Model, ok: bool) {
-    texture, tex_ok := get_texture(manager, id); if !tex_ok {
-        dbg.log(.ERROR, "Texture does not map to an existing texture in the manager")
-        return
-    }
-
-    model.meshes = make([dynamic]Mesh, 1)
-
-    billboard_mesh := primitive_square_mesh_data(manager, true, allocator)
-    billboard_mesh.is_billboard = true
-
-    /*
-    material: Material
-    material.properties = make(map[MaterialPropertyInfo]MaterialProperty)
-    material.properties[.BASE_COLOUR_TEXTURE] = { BASE_COLOUR_TEXTURE, BaseColourTexture(id) }
-
-    material_type: MaterialType
-    material_type.unlit = true
-    material_type.double_sided = true
-    material_type.properties = { .BASE_COLOUR_TEXTURE }
-    // material_type.lighting_shader = get_billboard_lighting_shader(manager) or_return
-    // ^ needs to change with new shader management
-
-    id := add_material(manager, material_type) or_return
-    material.type = id
-    billboard_mesh.material = material
-    model.meshes[0] = billboard_mesh
-    */
-
-    ok = true
-    return
-}
 
 // Primitive meshes
 
 // Does not give a material
-primitive_square_mesh_data :: proc(manager: ^ResourceManager, unique_layout: bool, allocator := context.allocator) -> (mesh: Mesh) {
+primitive_square_mesh_data :: proc(allocator := context.allocator) -> (mesh: Mesh) {
     mesh.vertex_data = make(VertexData, allocator=allocator)
     mesh.index_data = make(IndexData, allocator=allocator)
     append_elems(&mesh.vertex_data,
@@ -208,13 +180,14 @@ primitive_square_mesh_data :: proc(manager: ^ResourceManager, unique_layout: boo
     mesh.vertices_count = len(mesh.vertex_data)
     mesh.indices_count = len(mesh.index_data)
 
-    layout: VertexLayout
+    return
+}
+
+primitive_square_mesh_layout :: proc(unique_layout: bool, allocator := context.allocator) -> (layout: VertexLayout) {
     layout.infos = make([]MeshAttributeInfo, 2, allocator=allocator)
     layout.infos[0] = { .position, .vec3, .f32, 12, 3, strings.clone("aPosition")}
     layout.infos[1] = { .texcoord, .vec2, .f32, 8, 2, strings.clone("aTexCoords")}
     layout.unique = unique_layout
-    add_vertex_layout(manager, layout)
-
     return
 }
 
@@ -231,6 +204,8 @@ METALLIC_FACTOR :: "metallicFactor"
 ROUGHNESS_FACTOR :: "roughnessFactor"
 BASE_COLOUR_TEXTURE :: "baseColourTexture"
 BASE_COLOUR_FACTOR :: "baseColourFactor"
+BASE_COLOUR_OVERRIDE :: "baseColourOverride"
+ENABLE_BASE_COLOUR_OVERRIDE :: "enableBaseColourOverride"
 
 CLEARCOAT :: "clearcoat"
 // For specifying shader uniforms:
@@ -347,8 +322,10 @@ PBRMetallicRoughness :: struct {
     base_colour: ResourceID,
     metallic_roughness: ResourceID,
     base_colour_factor: [4]f32,
+    enable_base_colour_override: bool,
+    base_colour_override: [3]f32,
     metallic_factor: f32,
-    roughness_factor: f32
+    roughness_factor: f32,
 }
 
 NormalTexture :: distinct ResourceIdent
@@ -425,11 +402,11 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
         }
 
         metallic_roughness := PBRMetallicRoughness {
-            base_tex_id,
-            met_rough_id,
-            cmat.pbr_metallic_roughness.base_color_factor,
-            cmat.pbr_metallic_roughness.metallic_factor,
-            cmat.pbr_metallic_roughness.roughness_factor
+            base_colour = base_tex_id,
+            metallic_roughness = met_rough_id,
+            base_colour_factor = cmat.pbr_metallic_roughness.base_color_factor,
+            metallic_factor = cmat.pbr_metallic_roughness.metallic_factor,
+            roughness_factor = cmat.pbr_metallic_roughness.roughness_factor
         }
         material.properties[.PBR_METALLIC_ROUGHNESS] = { PBR_METALLIC_ROUGHNESS, metallic_roughness }
     }
@@ -507,9 +484,6 @@ eno_material_from_cgltf_material :: proc(manager: ^ResourceManager, cmat: cgltf.
     material_type.double_sided = bool(cmat.double_sided)
     material_type.unlit = bool(cmat.unlit)
     material_type.alpha_mode = cast(AlphaMode)cmat.alpha_mode
-
-    log.infof("mat type %#v", material_type)
-    log.infof("mat: %#v", material)
 
     type_id := add_material(manager, material_type) or_return
     material.type = type_id
@@ -687,21 +661,23 @@ load_image_from_cgltf_image :: proc(image: ^cgltf.image, gltf_file_location: str
 }
 
 
-load_image_from_uri :: proc(uri: string, uri_base: string = "", flip_image := false, desired_channels := 4, as_float := false, allocator := context.allocator, loc := #caller_location) -> (result: Image, ok: bool) {
+load_image_from_uri :: proc(uri: string, uri_base: string = "", flip_image := false, desired_channels: i32 = 4, as_float := false, allocator := context.allocator, loc := #caller_location) -> (result: Image, ok: bool) {
 
-    path := len(uri_base) == 0 ? strings.clone(uri, allocator=allocator) : utils.concat(uri_base, uri, allocator=allocator); defer delete(path)
+    path := len(uri_base) == 0 ? strings.clone(uri, allocator=allocator) : utils.concat(uri_base, uri, allocator=allocator);
     file_utils.check_path(path, loc=loc) or_return
     path_cstr := strings.clone_to_cstring(path, allocator=allocator); defer delete(path_cstr)
 
     if flip_image do stbi.set_flip_vertically_on_load(1)
     defer if flip_image do stbi.set_flip_vertically_on_load(0)
 
-    if as_float do result.pixel_data = stbi.loadf(path_cstr, &result.w, &result.h, &result.channels, 4)
-    else do result.pixel_data = stbi.load(path_cstr, &result.w, &result.h, &result.channels, 4)
+    if as_float do result.pixel_data = stbi.loadf(path_cstr, &result.w, &result.h, &result.channels, desired_channels)
+    else do result.pixel_data = stbi.load(path_cstr, &result.w, &result.h, &result.channels, desired_channels)
     if result.pixel_data == nil {
         dbg.log(.ERROR, "Could not read pixel data from file: %s", uri)
         return
     }
+
+    result.uri = path
 
     ok = true
     return
@@ -736,15 +712,55 @@ Light :: union {
     PointLight
 }
 
-make_light_billboard :: proc(manager: ^ResourceManager) -> (model: Model, ok: bool) {
-    if manager.billboard_id == nil {
-        manager.billboard_id = texture_from_path(manager, "light_billboard", "light.png", standards.TEXTURE_RESOURCE_PATH, flip_image = true) or_return
-        if manager.billboard_id == nil {
-            dbg.log(.ERROR, "texture_from_path returned nil id")
-            return
+// Provide material to use a specific material, if nothing is provided an unlit + base colour with light.png from resources will be used
+make_light_billboard_model :: proc(
+    manager: ^ResourceManager,
+    material: Maybe(Material) = nil,
+    colour_override: Maybe([3]f32) = nil,
+    cylindrical := false,
+    allocator := context.allocator
+) -> (model: Model, ok: bool) {
+    // Does not transfer
+
+    model.meshes = make([dynamic]Mesh, 1, allocator=allocator)
+
+    billboard_mesh := primitive_square_mesh_data(allocator)
+    layout := primitive_square_mesh_layout(true, allocator)
+    layout.shader = add_shader(manager, get_billboard_vertex_shader(cylindrical, allocator) or_return) or_return
+    billboard_mesh.layout = add_vertex_layout(manager, layout) or_return
+    billboard_mesh.centroid = calculate_centroid(billboard_mesh.vertex_data, layout.infos) or_return
+
+    if material != nil do billboard_mesh.material = material.?
+    else {
+        base_texture_id := texture_from_path(manager, "billboard_texture", "light.png", standards.TEXTURE_RESOURCE_PATH, flip_image = true, allocator=allocator) or_return
+
+        billboard_mesh.material.properties = make(map[MaterialPropertyInfo]MaterialProperty, allocator=allocator)
+        base_colour_override := colour_override == nil ? [3]f32{ 0.0, 1.0, 0.0 } : colour_override.?
+        met_rough := PBRMetallicRoughness{
+            base_colour = base_texture_id,
+            enable_base_colour_override = true,
+            base_colour_factor = [4]f32{ 1.0, 1.0, 1.0, 1.0 },
+            base_colour_override = base_colour_override,
         }
+        billboard_mesh.material.properties[.PBR_METALLIC_ROUGHNESS] = MaterialProperty{ PBR_METALLIC_ROUGHNESS, met_rough }
+
+        material_type: MaterialType
+        material_type.unlit = true
+        material_type.double_sided = true
+        material_type.alpha_mode = .BLEND
+        material_type.properties = { .PBR_METALLIC_ROUGHNESS }
+        billboard_mesh.material.type = add_material(manager, material_type) or_return
     }
-    return create_billboard_model_from_id(manager, manager.billboard_id.?)
+
+    model.meshes[0] = billboard_mesh
+
+    ok = true
+    return
+}
+
+get_billboard_vertex_shader :: proc(cylindrical: bool, allocator := context.allocator) -> (shader: Shader, ok: bool) {
+    if cylindrical do return read_single_shader_source(standards.SHADER_RESOURCE_PATH + "billboard_cylindrical.vert", .VERTEX, allocator)
+    else do return read_single_shader_source(standards.SHADER_RESOURCE_PATH + "billboard_spherical.vert", .VERTEX, allocator)
 }
 
 
