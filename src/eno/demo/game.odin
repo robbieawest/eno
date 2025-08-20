@@ -123,7 +123,7 @@ before_frame :: proc() -> (ok: bool) {
             geometry_z_sorting = .ASC,
             face_culling = render.Face.BACK,
             viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
-            render_skybox = true,
+            // render_skybox = true,
             clear = { .COLOUR_BIT, .DEPTH_BIT },
             clear_colour = background_colour * background_colour_factor,
             multisample = true
@@ -134,8 +134,7 @@ before_frame :: proc() -> (ok: bool) {
         shader_gather=&game_data.render_pipeline.passes[0],
         mesh_gather=render.RenderPassQuery{ material_query =
             proc(material: resource.Material, type: resource.MaterialType) -> bool {
-                go := type.alpha_mode != .BLEND && type.double_sided
-                return go
+                return type.alpha_mode != .BLEND && type.double_sided
             }
         },
         properties=render.RenderPassProperties{
@@ -149,7 +148,7 @@ before_frame :: proc() -> (ok: bool) {
         shader_gather=&game_data.render_pipeline.passes[0],
         mesh_gather=render.RenderPassQuery{ material_query =
             proc(material: resource.Material, type: resource.MaterialType) -> bool {
-                return type.alpha_mode == .BLEND && type.double_sided
+                return type.alpha_mode == .BLEND && !type.double_sided
             }
         },
         properties=render.RenderPassProperties{

@@ -184,9 +184,9 @@ compare_resources :: proc(a: $T, b: T, allocator: mem.Allocator) -> bool {
     }
     else when T == MaterialType {
         if a.unique || b.unique do return false
-        comparable :: struct{ properties: MaterialPropertyInfos, double_sided: bool, unlit: bool, unique: bool }
-        a_comp := comparable{ a.properties, a.double_sided, a.unlit, a.unique }
-        b_comp := comparable{ b.properties, b.double_sided, b.unlit, b.unique }
+        comparable :: struct{ properties: MaterialPropertyInfos, double_sided: bool, unlit: bool, unique: bool, alpha_mode: AlphaMode }
+        a_comp := comparable{ a.properties, a.double_sided, a.unlit, a.unique, a.alpha_mode }
+        b_comp := comparable{ b.properties, b.double_sided, b.unlit, b.unique, b.alpha_mode }
         return utils.equals(a_comp, b_comp)
     }
     else when T == VertexLayout {

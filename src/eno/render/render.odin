@@ -10,6 +10,7 @@ import "../standards"
 import lutils "../utils/linalg_utils"
 import cam "../camera"
 
+import "core:math/linalg"
 import "core:math"
 import "core:slice"
 import "core:strings"
@@ -85,7 +86,6 @@ render :: proc(
                 else do mesh_data = &mesh_data_map[v]
                 mesh_data_references[&pass] = mesh_data
             case RenderPassQuery:
-                // log.info("pass query")
                 mesh_data_map[&pass] = query_scene(manager, scene, v, temp_allocator) or_return
                 mesh_data = &mesh_data_map[&pass]
             case nil:
@@ -97,27 +97,29 @@ render :: proc(
             dbg.log(.ERROR, "Mesh data nil")
             return
         }
-        if pass.properties.geometry_z_sorting != .NO_SORT do sort_geometry_by_depth(mesh_data[:], pass.properties.geometry_z_sorting == .ASC)
 
-        // Group geometry by shaders
-        shader_map := group_meshes_by_shader(pipeline.shader_store, &pass, mesh_data^, temp_allocator) or_return
-
+        // Handle properties BEFORE 0 mesh check
         handle_pass_properties(pipeline, pass) or_return
         check_framebuffer_status_raw() or_return
 
+        if len(mesh_data) == 0 do continue;
+
+        sort_geom := pass.properties.geometry_z_sorting != .NO_SORT
+        if sort_geom do sort_geometry_by_depth(scene.viewpoint.position, mesh_data[:], pass.properties.geometry_z_sorting == .ASC)
+
+        // Group geometry by shaders
+        shader_map := group_meshes_by_shader(pipeline.shader_store, &pass, mesh_data^, sort_geom, temp_allocator) or_return
+
         // render meshes
-        for shader_pass_id, &mesh_datas in shader_map {
-            // dbg.log(.INFO, "Rendering for shader pass")
-
-            shader_pass := resource.get_shader_pass(manager, shader_pass_id) or_return
-
+        for mapping in shader_map {
+            shader_pass := resource.get_shader_pass(manager, mapping.shader) or_return
             attach_program(shader_pass^)
+
             // bind_ibl_uniforms(scene, shader_pass) or_return
             update_camera_ubo(scene) or_return
             update_lights_ssbo(scene) or_return
 
-            for &mesh_data in mesh_datas {
-                // dbg.log(.INFO, "Rendering mesh data")
+            for mesh_data in mapping.meshes {
                 model_mat, normal_mat := model_and_normal(mesh_data.mesh, mesh_data.world, scene.viewpoint)
                 transfer_mesh(manager, mesh_data.mesh) or_return
 
@@ -129,7 +131,7 @@ render :: proc(
             }
         }
 
-        // if pass.properties.render_skybox do render_skybox(manager, scene, allocator) or_return
+        if pass.properties.render_skybox do render_skybox(manager, scene, allocator) or_return
     }
 
 
@@ -237,16 +239,26 @@ bind_ibl_uniforms :: proc(scene: ^ecs.Scene, shader: ^resource.ShaderProgram) ->
     return
 }
 
+ShaderMeshRenderMapping :: struct {
+    shader: resource.ResourceIdent,
+    meshes: [dynamic]MeshData
+}
+
 @(private)
 group_meshes_by_shader :: proc(
     shader_store: RenderShaderStore,
     render_pass: ^RenderPass,
     meshes: [dynamic]MeshData,
+    preserve_ordering: bool,
     temp_allocator := context.temp_allocator
-) -> (shader_map: map[resource.ResourceIdent][dynamic]MeshData, ok: bool) {
+) -> (result: []ShaderMeshRenderMapping, ok: bool) {
+    if len(meshes) == 0 {
+        dbg.log(.ERROR, "Cannot group 0 meshes")
+        return
+    }
 
     // Get shader mapping from RenderShaderStore
-    shader_mapping: ^RenderShaderMapping
+    render_shader_mapping: ^RenderShaderMapping
     switch gather in render_pass.shader_gather {
         case ^RenderPass:
             switch inner_gather in gather.shader_gather {
@@ -258,38 +270,70 @@ group_meshes_by_shader :: proc(
                         dbg.log(.ERROR, "Inner render pass not gathered data yet, please sort render passes by gathers")
                         return
                     }
-                    shader_mapping = &shader_store.render_pass_mappings[gather]
+                    render_shader_mapping = &shader_store.render_pass_mappings[gather]
             }
         case RenderPassShaderGenerate:
-            shader_mapping = &shader_store.render_pass_mappings[render_pass]
+            render_shader_mapping = &shader_store.render_pass_mappings[render_pass]
 
     }
 
-    shader_map = make(map[resource.ResourceIdent][dynamic]MeshData, allocator=temp_allocator)
+    shader_mappings := make([dynamic]ShaderMeshRenderMapping, allocator=temp_allocator)
 
-    for &mesh_data in meshes {
-        if mesh_data.mesh.mesh_id == nil {
-            dbg.log(.ERROR, "Shader pass not generated for mesh: %#v", mesh_data.mesh.material)
-            return
+    if !preserve_ordering {
+        // Maps shader id to index in shader_mappings
+        mapping_reference := make(map[resource.ResourceIdent]int, allocator=temp_allocator)
+
+        for &mesh_data in meshes {
+            mesh := mesh_data.mesh
+            if mesh.mesh_id == nil || mesh.mesh_id.? not_in render_shader_mapping {
+                dbg.log(.ERROR, "Shader pass not generated for mesh: %#v", mesh.material)
+                return
+            }
+
+            shader_id := render_shader_mapping[mesh.mesh_id.?]
+
+            if shader_id in mapping_reference {
+                dyn := &shader_mappings[mapping_reference[shader_id]].meshes
+                append(dyn, mesh_data)
+            }
+            else {
+                dyn := make([dynamic]MeshData, 1, allocator=temp_allocator)
+                dyn[0] = mesh_data
+                append(&shader_mappings, ShaderMeshRenderMapping{ shader_id, dyn })
+                mapping_reference[shader_id] = len(shader_mappings) - 1
+            }
+
         }
+    }
+    else {
+        current_shader: resource.ResourceIdent
+        for &mesh_data in meshes {
+            mesh := mesh_data.mesh
+            if mesh.mesh_id == nil || mesh.mesh_id.? not_in render_shader_mapping {
+                dbg.log(.ERROR, "Shader pass not generated for mesh: %#v", mesh.material)
+                return
+            }
 
-        shader_id := shader_mapping[mesh_data.mesh.mesh_id.?]
+            shader_id := render_shader_mapping[mesh.mesh_id.?]
+            if shader_id == current_shader {
+                if len(shader_mappings) == 0 {
+                    dbg.log(.ERROR, "Error in shader mappings")
+                    return
+                }
 
-        pair := MeshData{ mesh_data.mesh, mesh_data.world, mesh_data.instance_to}
-        if shader_id in shader_map {
-            dyn := &shader_map[shader_id]
-            append(dyn, pair)
-        }
-        else {
-            dyn := make([dynamic]MeshData, 1, temp_allocator)
-            dyn[0] = pair
-            shader_map[shader_id] = dyn
+                append(&shader_mappings[len(shader_mappings) - 1].meshes, mesh_data)
+            }
+            else {
+                dyn := make([dynamic]MeshData, 1, allocator=temp_allocator)
+                dyn[0] = mesh_data
+                append(&shader_mappings, ShaderMeshRenderMapping{ shader_id, dyn })
+                current_shader = shader_id
+            }
         }
 
     }
 
-    ok = true
-    return
+    return shader_mappings[:], true
 }
 
 
@@ -364,16 +408,22 @@ handle_pass_properties :: proc(pipeline: RenderPipeline, pass: RenderPass) -> (o
 
 
 @(private)
-sort_geometry_by_depth :: proc(meshes_data: []MeshData, z_asc: bool) {
-    mesh_pos :: proc(mesh_data: MeshData) -> [3]f32 {
-        return mesh_data.world.position + mesh_data.world.scale * mesh_data.mesh.centroid;
+sort_geometry_by_depth :: proc(camera_pos: [3]f32, meshes_data: []MeshData, depth_asc: bool) {
+    distances := make([]f32, len(meshes_data))
+    for i in 0..<len(meshes_data) {
+        mesh_data := meshes_data[i]
+        centroid_adj := mesh_data.world.position + mesh_data.world.scale * mesh_data.mesh.centroid;
+        distances[i] = linalg.length(camera_pos - centroid_adj)
     }
-    sort_proc := z_asc ? proc(a: MeshData, b: MeshData) -> bool {
-        return mesh_pos(a).z < mesh_pos(b).z
-    } : proc(a: MeshData, b: MeshData) -> bool {
-        return mesh_pos(a).z > mesh_pos(b).z
+
+    sort_proc := depth_asc ? proc(a: f32, b: f32) -> bool {
+        return a < b
+    } : proc(a: f32, b: f32) -> bool {
+        return a > b
     }
-    slice.sort_by(meshes_data, sort_proc)
+
+    indices := slice.sort_by_with_indices(distances, sort_proc); defer delete(indices)
+    utils.rearrange_via_indices(meshes_data, indices)
 }
 
 

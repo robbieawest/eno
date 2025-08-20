@@ -121,3 +121,35 @@ arr_to_matrix :: proc($T: typeid/matrix[$R, $C]$E, arr: [$N]E) -> (mat: T)
     }
     return
 }
+
+/*
+    Temporarily allocates aux space
+    Assigns values back in-place
+    Uses an assert
+    Assumes indices in indices are valid in range of a
+*/
+rearrange_via_indices :: proc(a: $T/[]$E, indices: []int, allocator := context.allocator) {
+    assert(len(a) == len(indices))
+    swap := make([]E, len(a), allocator=allocator)
+    defer delete(swap)
+
+    for v, i in indices {
+        swap[i] = a[v]
+    }
+
+    for i in 0..<len(a) {
+        a[i] = swap[i]
+    }
+}
+
+@(test)
+rearrange_test :: proc(t: ^testing.T) {
+    a := []f32{ 0.5, -0.2, 0.9, 0.0, 0.1, 0.2, -983.244 }
+    indices := []int{ 0, 6, 4, 5, 2, 1, 3 }
+    log.infof("before: %v", a)
+    log.infof("indices: %v", indices)
+
+    rearrange_via_indices(a, indices)
+
+    log.infof("rearrange: %v", a)
+}

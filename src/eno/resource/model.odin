@@ -174,8 +174,8 @@ primitive_square_mesh_data :: proc(allocator := context.allocator) -> (mesh: Mes
         1, -1, 0,  1.0, 0.0
     )
     append_elems(&mesh.index_data,
-        0, 1, 2,
-        2, 1, 3
+        2, 1, 0,
+        3, 1, 2
     )
     mesh.vertices_count = len(mesh.vertex_data)
     mesh.indices_count = len(mesh.index_data)
@@ -746,7 +746,7 @@ make_light_billboard_model :: proc(
 
         material_type: MaterialType
         material_type.unlit = true
-        material_type.double_sided = true
+        material_type.double_sided = false
         material_type.alpha_mode = .BLEND
         material_type.properties = { .PBR_METALLIC_ROUGHNESS }
         billboard_mesh.material.type = add_material(manager, material_type) or_return
