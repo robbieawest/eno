@@ -555,14 +555,27 @@ conv_face :: proc(face: Face) -> u32 {
     switch face {
         case .FRONT: return gl.FRONT
         case .BACK: return gl.BACK
-        case .FRONT_AND_BACk: return gl.FRONT_AND_BACK
+        case .FRONT_AND_BACK: return gl.FRONT_AND_BACK
     }
     return 0
 }
 
-cull_geometry_faces :: proc(face: Face) {
-    gl.Enable(gl.CULL_FACE)
-    gl.CullFace(conv_face(face))
+@(private)
+conv_face_culling  :: proc(face: FaceCulling) -> u32 {
+    switch face {
+        case .FRONT: return gl.FRONT
+        case .BACK: return gl.BACK
+        case .FRONT_AND_BACK: return gl.FRONT_AND_BACK
+        case .ADAPTIVE: return 0
+    }
+    return 0
+}
+
+cull_geometry_faces :: proc(face: FaceCulling) {
+    if face != .ADAPTIVE {
+        gl.Enable(gl.CULL_FACE)
+        gl.CullFace(conv_face_culling(face))
+    }
 }
 
 set_face_culling :: proc(cull: bool) {

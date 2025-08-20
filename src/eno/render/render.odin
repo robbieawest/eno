@@ -123,7 +123,14 @@ render :: proc(
                 model_mat, normal_mat := model_and_normal(mesh_data.mesh, mesh_data.world, scene.viewpoint)
                 transfer_mesh(manager, mesh_data.mesh) or_return
 
-                bind_material_uniforms(manager, mesh_data.mesh.material, shader_pass) or_return
+                material_type := resource.get_material(manager, mesh_data.mesh.material.type) or_return
+                bind_material_uniforms(manager, mesh_data.mesh.material, material_type^, shader_pass) or_return
+
+                if pass.properties.face_culling == FaceCulling.ADAPTIVE {
+                    if material_type.double_sided do set_face_culling(false)
+                    else do cull_geometry_faces(.BACK)
+                }
+
                 resource.set_uniform(shader_pass, standards.MODEL_MAT, model_mat)
                 resource.set_uniform(shader_pass, standards.NORMAL_MAT, normal_mat)
 
@@ -583,8 +590,7 @@ PBRSamplerBindingLocation :: enum u32 {
 }
 
 @(private)
-bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material, lighting_shader: ^resource.ShaderProgram) -> (ok: bool) {
-    type := resource.get_material(manager, material.type) or_return
+bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material, type: resource.MaterialType, lighting_shader: ^resource.ShaderProgram) -> (ok: bool) {
     resource.set_uniform(lighting_shader, resource.ALPHA_CUTOFF, material.alpha_cutoff)
     resource.set_uniform(lighting_shader, resource.ENABLE_ALPHA_CUTOFF, i32(type.alpha_mode == .MASK))
     resource.set_uniform(lighting_shader, resource.UNLIT, i32(type.unlit))

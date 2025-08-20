@@ -104,7 +104,7 @@ before_frame :: proc() -> (ok: bool) {
         render.make_ibl_framebuffer()
     }
 
-    game_data.render_pipeline = render.init_render_pipeline(4, 1, frame_buffers)
+    game_data.render_pipeline = render.init_render_pipeline(3, 1, frame_buffers)
 
     window_res := win.get_window_resolution(game.Game.window)
 
@@ -121,7 +121,7 @@ before_frame :: proc() -> (ok: bool) {
         },
         properties=render.RenderPassProperties{
             geometry_z_sorting = .ASC,
-            face_culling = render.Face.BACK,
+            face_culling = render.FaceCulling.BACK,
             viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
             // render_skybox = true,
             clear = { .COLOUR_BIT, .DEPTH_BIT },
@@ -148,32 +148,18 @@ before_frame :: proc() -> (ok: bool) {
         shader_gather=&game_data.render_pipeline.passes[0],
         mesh_gather=render.RenderPassQuery{ material_query =
             proc(material: resource.Material, type: resource.MaterialType) -> bool {
-                return type.alpha_mode == .BLEND && !type.double_sided
+                return type.alpha_mode == .BLEND
             }
         },
         properties=render.RenderPassProperties{
             geometry_z_sorting = .DESC,
-            face_culling = render.Face.BACK,
+            face_culling = render.FaceCulling.ADAPTIVE,
             viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
             multisample = true,
             blend_func = render.BlendFunc{ .SOURCE_ALPHA, .ONE_MINUS_SOURCE_ALPHA }
         },
     ) or_return
-    game_data.render_pipeline.passes[3] = render.make_render_pass(
-        pipeline=game_data.render_pipeline,
-        shader_gather=&game_data.render_pipeline.passes[0],
-        mesh_gather=render.RenderPassQuery{ material_query =
-            proc(material: resource.Material, type: resource.MaterialType) -> bool {
-                return type.alpha_mode == .BLEND && type.double_sided
-            }
-        },
-        properties=render.RenderPassProperties{
-            geometry_z_sorting = .DESC,
-            viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
-            multisample = true,
-            blend_func = render.BlendFunc{ .SOURCE_ALPHA, .ONE_MINUS_SOURCE_ALPHA }
-        },
-    ) or_return
+
 
     game_data.render_pipeline.pre_passes[0] = render.make_pre_render_pass(
         game_data.render_pipeline,

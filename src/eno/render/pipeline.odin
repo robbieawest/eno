@@ -103,7 +103,14 @@ WriteFunc :: enum u8 {
 Face :: enum u8 {
     FRONT,
     BACK,
-    FRONT_AND_BACk
+    FRONT_AND_BACK
+}
+
+FaceCulling :: enum u8 {
+    FRONT,
+    BACK,
+    FRONT_AND_BACK,
+    ADAPTIVE  // Adaptive culls faces for the current draw based on if the material is double sided or not
 }
 
 PolygonDisplayMode :: enum u8 {
@@ -151,7 +158,7 @@ RenderPassProperties :: struct {
     blend_func: Maybe(BlendFunc),
     polygon_mode: Maybe(PolygonMode),
     front_face: FrontFaceMode,
-    face_culling: Maybe(Face),
+    face_culling: Maybe(FaceCulling),
     disable_depth_test: bool,
     stencil_test: bool,
     render_skybox: bool,
