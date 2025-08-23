@@ -13,7 +13,6 @@ main :: proc() {
     window_target, win_ok := win.initialize_window(900, 900, "eno engine demo")
     if !win_ok do return
     // win.set_fullscreen(window_target)
-    win.set_mouse_relative_mode(true)
     win.set_mouse_raw_input(true)
 
     game.init_game(window_target, every_frame, before_frame); defer game.destroy_game()

@@ -70,6 +70,7 @@ run_game :: proc() {
 
         Game.meta_data.last_delta = time.now()._nsec - t_before_frame
         update_metadata_elapsed(&Game.meta_data)
+        // dbg.log(.INFO, "Frame time: %.2f", f32(Game.meta_data.last_delta) / 1_000_000)
 
         resource.clear_unused_resources(&Game.resource_manager) // todo handle bool ret
     }
@@ -193,8 +194,11 @@ HOOK_MOUSE_MOTION :: proc() -> (hooks: control.Hooks) {
         control.make_hook(
             control.make_hook_identifier(event_types = []SDL.EventType{ .MOUSEMOTION }),
             proc(event: ^SDL.Event, cam_data: rawptr) {
-                xrel, yrel := scale_mouse_relative(f32(event.motion.xrel), f32(event.motion.yrel))
-                control.direct_camera(cast(^camera.Camera)cam_data, xrel, yrel)
+                if Game.controller.mouse_settings.mouse_enabled {
+                    xrel, yrel := scale_mouse_relative(f32(event.motion.xrel), f32(event.motion.yrel))
+                    // dbg.log(.INFO, "Mouse motion x: %f, y: %f", xrel, yrel)
+                    control.direct_camera(cast(^camera.Camera)cam_data, xrel, yrel)
+                }
             },
             scene_viewpoint()
         ),
@@ -222,6 +226,7 @@ HOOK_TOGGLE_UI_MOUSE :: proc() -> (hooks: control.Hooks) {
             proc(event: ^SDL.Event, _: rawptr) {
                 if event.key.keysym.scancode == .M {
                     win.toggle_mouse_relative_mode(); ui.toggle_mouse_usage()
+                    control.toggle_mouse_enabled(&Game.controller)
                 }
             },
             nil

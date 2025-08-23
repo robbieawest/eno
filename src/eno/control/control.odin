@@ -81,26 +81,29 @@ set_number_of_past_events :: proc(controller: ^Controller, cap: int) {
 // Mouse
 
 MouseSettings :: struct {
-    mouse_speed: f32
+    mouse_speed: f32,
+    mouse_enabled: bool
 }
 DEFAULT_MOUSE_SPEED : f32 : 1.0
 MOUSE_SPEED_SCALING : f32 : 0.1
 
 
 init_mouse_settings :: proc(mouse_speed := DEFAULT_MOUSE_SPEED) -> MouseSettings {
-    return { mouse_speed = mouse_speed }
+    return { mouse_speed = mouse_speed, mouse_enabled = true }
 }
 
 set_mouse_speed :: proc(controller: ^Controller, mouse_speed := DEFAULT_MOUSE_SPEED) {
     controller.mouse_settings.mouse_speed = mouse_speed
 }
 
+toggle_mouse_enabled :: proc(controller: ^Controller) {
+    controller.mouse_settings.mouse_enabled = !controller.mouse_settings.mouse_enabled
+}
+
 /*
     Right handed
     yaw axis (0, -1, 0)
     pitch axis (-1, 0, 0)
-
-    if only the bloody engineers found a standard for this I wouldn't have to create arbitrary axis'
 */
 direct_camera :: proc(camera: ^cam.Camera, xrel: f32, yrel: f32) {
     camera.yaw += xrel
@@ -212,7 +215,7 @@ add_event_type :: proc(ident: ^HookIdentifier, type: SDL.EventType) {
 */
 poll :: proc(controller: ^Controller) {
 
-    activated := make([dynamic]^Hook, 0); defer delete(activated)  // make into a hashset
+    activated := make([dynamic]^Hook, 0); defer delete(activated)
 
     current_event: SDL.Event
     copy_event: SDL.Event
@@ -221,15 +224,12 @@ poll :: proc(controller: ^Controller) {
 
         for &hook in controller.hooks {
             if slice.contains(hook.identifier.event_types[:], current_event.type) ||
-                slice.contains(hook.identifier.event_keys[:], current_event.key.keysym.scancode)
-            {
-                append(&activated, &hook)
-                copy_event = current_event
+                slice.contains(hook.identifier.event_keys[:], current_event.key.keysym.scancode) {
+                hook.action(&current_event, hook.data)
                 break
             }
         }
     }
-    mouse_state := SDL.GetMouseState(nil, nil)
     keyboard_state := SDL.GetKeyboardStateAsSlice()
 
     for &hook in controller.hooks {
@@ -237,15 +237,10 @@ poll :: proc(controller: ^Controller) {
 
         for state in hook.identifier.key_state {
             if keyboard_state[state] == 1 {
-                append(&activated, &hook)
+                hook.action(nil, hook.data)  // No event
                 break
             }
         }
-    }
-
-
-    for actived_hook in activated {
-        actived_hook.action(&copy_event, actived_hook.data)
     }
 }
 

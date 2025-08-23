@@ -56,7 +56,7 @@ render_ui :: proc(#any_int display_w, #any_int display_y: i32) -> (running: bool
     imgui_impl_sdl2.NewFrame()
     im.NewFrame()
 
-    // im.ShowDemoWindow(nil)
+    im.ShowDemoWindow(nil)
 
     if im.Begin("Window containing a quit button") {
         if im.Button("The quit button in question") {
@@ -73,9 +73,9 @@ render_ui :: proc(#any_int display_w, #any_int display_y: i32) -> (running: bool
     backup_current_window := SDL.GL_GetCurrentWindow()
     im.UpdatePlatformWindows()
 
-    //backup_current_context := SDL.GL_GetCurrentContext()
-    //im.RenderPlatformWindowsDefault()
-    //SDL.GL_MakeCurrent(backup_current_window, backup_current_context);
+    backup_current_context := SDL.GL_GetCurrentContext()
+    im.RenderPlatformWindowsDefault()
+    SDL.GL_MakeCurrent(backup_current_window, backup_current_context);
 
     return true
 }
