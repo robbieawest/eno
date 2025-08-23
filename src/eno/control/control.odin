@@ -1,6 +1,7 @@
 package control
 
 import SDL "vendor:sdl2"
+import "../../../libs/dear-imgui/imgui_impl_sdl2"
 
 import cam "../camera"
 import qutils "../utils/queue_utils"
@@ -216,6 +217,7 @@ poll :: proc(controller: ^Controller) {
     current_event: SDL.Event
     copy_event: SDL.Event
     for SDL.PollEvent(&current_event) {
+        imgui_impl_sdl2.ProcessEvent(&current_event)
 
         for &hook in controller.hooks {
             if slice.contains(hook.identifier.event_types[:], current_event.type) ||
@@ -225,7 +227,6 @@ poll :: proc(controller: ^Controller) {
                 copy_event = current_event
                 break
             }
-
         }
     }
     mouse_state := SDL.GetMouseState(nil, nil)

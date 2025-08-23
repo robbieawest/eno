@@ -208,7 +208,8 @@ before_frame :: proc() -> (ok: bool) {
     game.add_event_hooks(
         game.HOOK_MOUSE_MOTION(),
         game.HOOK_CLOSE_WINDOW(),
-        game.HOOKS_CAMERA_MOVEMENT()  // Only can be used after camera added to scene
+        game.HOOKS_CAMERA_MOVEMENT(),  // Only can be used after camera added to scene
+        game.HOOK_TOGGLE_UI_MOUSE()
     )
 
     manager := &game.Game.resource_manager

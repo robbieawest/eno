@@ -5,12 +5,13 @@ import gl "vendor:OpenGL"
 
 import glutils "../utils/gl_utils"
 import dbg "../debug"
+import "../ui"
 
 import "core:log"
 import "core:strings"
 
-WINDOW_WIDTH: i32 = 1280
-WINDOW_HEIGHT: i32 = 720 
+WINDOW_WIDTH: i32 = 900
+WINDOW_HEIGHT: i32 = 900
 
 WindowTarget :: ^SDL.Window
 
@@ -64,6 +65,8 @@ initialize_window :: proc(width, height: i32, window_tag: string, extra_params: 
 
     dbg.log(.INFO, "Initialized SDL window")
 
+    ui.setup_dear_imgui(window, gl_context)
+
     win_ret = window
     ok = true
     return
@@ -90,6 +93,7 @@ sdl_setup_gl_multisamples :: proc() {
 destroy_window :: proc(window_target: WindowTarget) {
     dbg.log(.INFO, "Destroying SDL window")
     SDL.DestroyWindow(window_target)
+    ui.destroy_ui_context()
 }
 
 
@@ -104,7 +108,21 @@ WindowResolution :: struct {
 }
 
 get_window_resolution :: proc(window_target: WindowTarget) -> (res: WindowResolution) {
-    SDL.GetWindowSize(window_target, &res.w, &res.h)
+
+    window_flags := transmute(SDL.WindowFlags)SDL.GetWindowFlags(window_target)
+    if .FULLSCREEN in window_flags {
+        fullscreen_display_mode: SDL.DisplayMode
+        if SDL.GetDesktopDisplayMode(0, &fullscreen_display_mode) != 0 {
+            dbg.log(.ERROR, "Could not get desktop display mode")
+            return
+        }
+        res.w = fullscreen_display_mode.w
+        res.h = fullscreen_display_mode.h
+    }
+    else do SDL.GetWindowSize(window_target, &res.w, &res.h)
+
+    WINDOW_WIDTH = res.w
+    WINDOW_HEIGHT = res.h
     return
 }
 
@@ -125,6 +143,11 @@ get_aspect_ratio_from_resolution :: proc(res: WindowResolution) -> (ratio: f32) 
 
 set_mouse_relative_mode :: proc(flag: bool) {
     SDL.SetRelativeMouseMode(SDL.bool(flag))
+}
+
+toggle_mouse_relative_mode :: proc() {
+    dbg.log(.INFO, "Toggling mouse mode from %v", SDL.GetRelativeMouseMode())
+    SDL.SetRelativeMouseMode(!SDL.GetRelativeMouseMode())
 }
 
 set_mouse_raw_input :: proc(flag: bool) {
@@ -148,6 +171,8 @@ set_fullscreen :: proc(window_target: WindowTarget) -> (ok: bool) {
         dbg.log(.ERROR, "Error while enabling fullscreen, sdl error: %s", last_sdl_err)
         return
     }
+
+    get_window_resolution(window_target)
 
     ok = true
     return

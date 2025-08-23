@@ -8,11 +8,10 @@ import win "../window"
 import dbg "../debug"
 import "../control"
 import "../camera"
-import glutils "../utils/gl_utils"
+import "../ui"
 
 import glm "core:math/linalg/glsl"
 import "core:time"
-import "core:log"
 
 // Game structure is defined here, e.g. defining the game loop, polling events, etc.
 
@@ -109,9 +108,9 @@ init_game_default_scene :: proc(window: win.WindowTarget, every_frame: frame_loo
 
 destroy_game :: proc(allocator := context.allocator) {
     resource.destroy_manager(&Game.resource_manager)
-    win.destroy_window(Game.window)
     ecs.destroy_scene(Game.scene, allocator)
     control.destroy_controller(&Game.controller)
+    win.destroy_window(Game.window)
 
     dbg.log_debug_stack()
     dbg.destroy_debug_stack()
@@ -209,6 +208,22 @@ HOOK_CLOSE_WINDOW :: proc() -> (hooks: control.Hooks) {
         control.make_hook(
             control.make_hook_identifier(event_types = []SDL.EventType{ .QUIT }, event_keys = []SDL.Scancode{ .ESCAPE }),
             proc(_: ^SDL.Event, _: rawptr) { quit_game() },
+            nil
+        )
+    )
+    return
+}
+
+HOOK_TOGGLE_UI_MOUSE :: proc() -> (hooks: control.Hooks) {
+    hooks = make(control.Hooks)
+    append(&hooks,
+        control.make_hook(
+            control.make_hook_identifier(event_types = []SDL.EventType{ .KEYDOWN } ),
+            proc(event: ^SDL.Event, _: rawptr) {
+                if event.key.keysym.scancode == .M {
+                    win.toggle_mouse_relative_mode(); ui.toggle_mouse_usage()
+                }
+            },
             nil
         )
     )

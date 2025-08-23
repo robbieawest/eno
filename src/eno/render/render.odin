@@ -9,6 +9,8 @@ import dbg "../debug"
 import "../standards"
 import lutils "../utils/linalg_utils"
 import cam "../camera"
+import "../ui"
+import "../window"
 
 import "core:math/linalg"
 import "core:math"
@@ -141,6 +143,8 @@ render :: proc(
         if pass.properties.render_skybox do render_skybox(manager, scene, allocator) or_return
     }
 
+
+    ui.render_ui(window.WINDOW_WIDTH, window.WINDOW_HEIGHT) or_return
 
     return true
 }
