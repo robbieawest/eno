@@ -1250,6 +1250,7 @@ generate_lighting_shader :: proc(
 // Generic interface to handle pre-render passes explicitly
 // The pre-render pass procedures used inside this don't necessarily need to be only called by this,
 //  for example when changing IBL settings, ibl_pre_render_pass is called independent of this procedure
+// todo deprecate?
 pre_render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, scene: ^ecs.Scene, temp_allocator := context.temp_allocator) -> (ok: bool) {
 
     for pass in pipeline.pre_passes {
@@ -1260,9 +1261,7 @@ pre_render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline,
 
         switch input in pass.input {
         case IBLInput:
-
-            buffer := utils.safe_index(pass.frame_buffers, 0) or_return
-            ok = ibl_render_setup(manager, buffer^^)
+            ok = ibl_render_setup(manager)
             if !ok {
                 dbg.log(.ERROR, "Failed to pre render IBL maps")
                 return
@@ -1315,11 +1314,13 @@ destroy_image_environment :: proc(environment: Maybe(ImageEnvironment)) {
 
 ibl_render_setup :: proc(
     manager: ^resource.ResourceManager,
-    buffer: FrameBuffer,
     allocator := context.allocator,
     loc := #caller_location
 ) -> (ok: bool) {
     dbg.log(.INFO, "IBL Pre render pass")
+
+    ibl_framebuffer := make_ibl_framebuffer(allocator) or_return
+    defer destroy_framebuffer(&ibl_framebuffer, release_attachments=false)
 
     env_settings, env_settings_ok := GlobalRenderSettings.environment_settings.?
     if !env_settings_ok {
@@ -1350,13 +1351,13 @@ ibl_render_setup :: proc(
     defer release_gl_component(cube_comp)
     cube_vao := cube_comp.vao.?
 
-    fbo := utils.unwrap_maybe(buffer.id) or_return
+    fbo := utils.unwrap_maybe(ibl_framebuffer.id) or_return
 
     depth_rbo := make_renderbuffer(env_settings.environment_face_size, env_settings.environment_face_size, gl.DEPTH_COMPONENT24)
     rbo := utils.unwrap_maybe(depth_rbo.id) or_return
 
     bind_renderbuffer_to_frame_buffer(fbo, depth_rbo, .DEPTH)
-    check_framebuffer_status(buffer, loc=loc) or_return
+    check_framebuffer_status(ibl_framebuffer, loc=loc) or_return
     dbg.log(.INFO, "Bound renderbuffer to frame buffer")
 
     project := glm.mat4Perspective(glm.radians_f32(90), 1, 0.1, 10)
@@ -1374,7 +1375,7 @@ ibl_render_setup :: proc(
         cube_vao,
         allocator=allocator
     ) or_return
-    check_framebuffer_status(buffer, loc=loc) or_return
+    check_framebuffer_status(ibl_framebuffer, loc=loc) or_return
     dbg.log(.INFO, "Successfully created ibl environment map")
 
     env_map := environment.environment_map.?
@@ -1392,7 +1393,7 @@ ibl_render_setup :: proc(
         cube_vao,
         allocator
     ) or_return
-    check_framebuffer_status(buffer, loc=loc) or_return
+    check_framebuffer_status(ibl_framebuffer, loc=loc) or_return
     dbg.log(.INFO, "Successfully created ibl irradiance map")
 
 
@@ -1408,7 +1409,7 @@ ibl_render_setup :: proc(
         cube_vao,
         allocator
     ) or_return
-    check_framebuffer_status(buffer, loc=loc) or_return
+    check_framebuffer_status(ibl_framebuffer, loc=loc) or_return
     dbg.log(.INFO, "Successfully created ibl prefilter map")
 
     if environment.brdf_lookup == nil do environment.brdf_lookup = create_ibl_brdf_lookup(
@@ -1419,7 +1420,7 @@ ibl_render_setup :: proc(
         rbo,
         allocator
     ) or_return
-    check_framebuffer_status(buffer, loc=loc) or_return
+    check_framebuffer_status(ibl_framebuffer, loc=loc) or_return
     dbg.log(.INFO, "Successfully created ibl brdf lookup table")
 
     bind_default_framebuffer()

@@ -336,8 +336,8 @@ make_framebuffer :: proc(w, h: i32, allocator := context.allocator) -> (frame_bu
     return
 }
 
-destroy_framebuffer :: proc(frame_buffer: ^FrameBuffer) {
-    for _, &attachment in frame_buffer.attachments do destroy_attachment(&attachment)
+destroy_framebuffer :: proc(frame_buffer: ^FrameBuffer, release_attachments := true) {
+    if release_attachments do for _, &attachment in frame_buffer.attachments do destroy_attachment(&attachment)
     delete(frame_buffer.attachments)
     if id, id_ok := frame_buffer.id.?; id_ok do release_framebuffer(frame_buffer^)
 }

@@ -25,7 +25,6 @@ make_environment_settings :: proc(#any_int env_face_size: i32 = 2048, env_tex_ur
 
 set_environment_settings :: proc(
     manager: ^resource.ResourceManager,
-    frame_buffer: FrameBuffer,
     settings: EnvironmentSettings,
     allocator := context.allocator,
     loc := #caller_location
@@ -35,7 +34,7 @@ set_environment_settings :: proc(
     // Reset environment
     destroy_image_environment(Context.image_environment)
     make_image_environment(settings.environment_texture_uri, allocator=allocator) or_return
-    if settings.ibl_settings != nil do ibl_render_setup(manager, frame_buffer, allocator, loc)
+    if settings.ibl_settings != nil do ibl_render_setup(manager, allocator, loc)
     return true
 }
 
