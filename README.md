@@ -67,7 +67,7 @@ Things I'd like to implement if I have the time:
 - Order independent transparency
 
 Far reaching:
-- Some proper indirect lighting - potentially GI
+- Some proper global illumination
 - Vulkan backend
 - MoltenVK for Mac
 
