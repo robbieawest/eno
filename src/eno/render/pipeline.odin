@@ -9,47 +9,43 @@ import "core:slice"
 import "base:intrinsics"
 
 
-
-FrameBufferID :: u32  // Index into RenderPipeline.frame_buffers - checked
 RenderPipeline :: struct {
-    frame_buffers: []FrameBuffer,
-    passes: []RenderPass,
+    frame_buffers: [dynamic]^FrameBuffer,
+    passes: [dynamic]^RenderPass,
+    pre_passes: [dynamic]^PreRenderPass,
     shader_store: RenderShaderStore,
-    pre_passes: []PreRenderPass,
 }
 
 // Default render pipeline has no passes
-init_render_pipeline :: proc{ init_render_pipeline_no_bufs, init_render_pipeline_bufs }
-
-// Default render pipeline has no passes
-init_render_pipeline_no_bufs :: proc(#any_int n_render_passes: int, #any_int n_pre_passes: int, allocator := context.allocator) -> (ret: RenderPipeline) {
-    ret.passes = make([]RenderPass, n_render_passes, allocator=allocator)
-    ret.pre_passes = make([]PreRenderPass, n_pre_passes, allocator=allocator)
-    ret.shader_store = init_shader_store(allocator)
-    return
-}
-
-// Default render pipeline has no passes
-init_render_pipeline_bufs :: proc(#any_int n_render_passes: int, #any_int n_pre_passes: int, buffers: []FrameBuffer, allocator := context.allocator) -> (ret: RenderPipeline) {
-    ret.frame_buffers = slice.clone(buffers, allocator=allocator)
-    ret.passes = make([]RenderPass, n_render_passes, allocator=allocator)
-    ret.pre_passes = make([]PreRenderPass, n_pre_passes, allocator=allocator)
-    ret.shader_store = init_shader_store(allocator)
-    return
-}
-
-add_render_passes :: proc(pipeline: ^RenderPipeline, passes: ..RenderPass, allocator := context.allocator) -> (ok: bool) {
-    if len(passes) != len(pipeline.passes) {
-        dbg.log(.ERROR, "Did not give enough render passes")
-        return
+init_render_pipeline :: proc(buffers: ..FrameBuffer, allocator := context.allocator) {
+    Context.pipeline.frame_buffers = make([dynamic]^FrameBuffer, allocator=allocator)
+    for buffer in buffers {
+        new_buf := new(FrameBuffer, allocator=allocator)
+        new_buf^ = buffer
+        append_elems(&Context.pipeline.frame_buffers, new_buf)
     }
 
+    Context.pipeline.passes = make([dynamic]^RenderPass, allocator=allocator)
+    Context.pipeline.pre_passes = make([dynamic]^PreRenderPass, allocator=allocator)
+    Context.pipeline.shader_store = init_shader_store(allocator)
+    return
+}
+
+add_render_passes :: proc(passes: ..RenderPass, allocator := context.allocator) -> (ok: bool) {
     for pass, i in passes {
-        if pass.frame_buffer != nil && int(pass.frame_buffer.?) >= len(pipeline.frame_buffers) {
-            dbg.log(.ERROR, "Render pass framebuffer id '%d' does not correspond to a framebuffer in the pipeline", pass.frame_buffer)
-            return
-        }
-        pipeline.passes[i] = pass
+        new_pass := new(RenderPass, allocator=allocator)
+        new_pass^ = pass
+        append(&Context.pipeline.passes, new_pass)
+    }
+
+    return true
+}
+
+add_pre_render_passes :: proc(passes: ..PreRenderPass, allocator := context.allocator) -> (ok: bool) {
+    for pass, i in passes {
+        new_pass := new(PreRenderPass, allocator=allocator)
+        new_pass^ = pass
+        append(&Context.pipeline.pre_passes, new_pass)
     }
 
     return true
@@ -57,14 +53,15 @@ add_render_passes :: proc(pipeline: ^RenderPipeline, passes: ..RenderPass, alloc
 
 
 // Releases GPU memory
-destroy_pipeline :: proc(pipeline: ^RenderPipeline, manager: ^resource.ResourceManager, allocator := context.allocator) {
-    for &fbo in pipeline.frame_buffers do destroy_framebuffer(&fbo)
-    delete(pipeline.frame_buffers, allocator=allocator)
+destroy_pipeline :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) {
+    pipeline := Context.pipeline
+    for &fbo in pipeline.frame_buffers do destroy_framebuffer(fbo)
+    delete(pipeline.frame_buffers)
 
-    for pre_pass in pipeline.pre_passes do destroy_pre_render_pass(pre_pass, allocator)
-    delete(pipeline.pre_passes, allocator=allocator)
+    for pre_pass in pipeline.pre_passes do destroy_pre_render_pass(pre_pass^, allocator)
+    delete(pipeline.pre_passes)
 
-    delete(pipeline.passes, allocator=allocator)
+    delete(pipeline.passes)
     destroy_shader_store(manager, pipeline.shader_store)
 }
 
@@ -216,7 +213,7 @@ RenderPassShaderGather :: union #no_nil {
 
 // Structure may be too simple
 RenderPass :: struct {
-    frame_buffer: Maybe(FrameBufferID),
+    frame_buffer: ^FrameBuffer,
     // If ^RenderPass, use the mesh data queried in that render pass
     // When constructing a render pass, if mesh_gather : ^RenderPass then it will follow back through the references to find a RenderPassQuery
     mesh_gather: RenderPassMeshGather,
@@ -227,28 +224,23 @@ RenderPass :: struct {
 
 // Populate this when needed
 make_render_pass :: proc(
-    pipeline: RenderPipeline,
     shader_gather: RenderPassShaderGather,
-    frame_buffer: Maybe(FrameBufferID) = nil,
-    mesh_gather: RenderPassMeshGather = nil,
+    frame_buffer: ^FrameBuffer = nil,  // Nil corresponds to default sdl framebuffer
+    mesh_gather: RenderPassMeshGather = nil,  // Nil corresponds to default return all mesh query
     properties: RenderPassProperties = {}
 ) -> (pass: RenderPass, ok: bool) {
-    if frame_buffer != nil && int(frame_buffer.?) >= len(pipeline.frame_buffers) {
-        dbg.log(.ERROR, "Frame buffer points outside of the number of frame buffers")
-        return
-    }
     pass.frame_buffer = frame_buffer
     pass.mesh_gather = mesh_gather
     pass.shader_gather = shader_gather
     pass.properties = properties
 
-    if pass.mesh_gather != nil && !check_render_pass_mesh_gather(&pass, 0, len(pipeline.passes)) {
+    if pass.mesh_gather != nil && !check_render_pass_mesh_gather(&pass, 0, len(Context.pipeline.passes)) {
         dbg.log(.ERROR, "Render pass mesh gather must end in a RenderPassQuery")
         return
     }
 
-    if !check_render_pass_shader_gather(&pass, 0, len(pipeline.passes)) {
-        dbg.log(.ERROR, "Render pass mesh gather must end in a RenderPassShaderGenerate enum")
+    if !check_render_pass_shader_gather(&pass, 0, len(Context.pipeline.passes)) {
+        dbg.log(.ERROR, "Render pass shader gather must end in a RenderPassShaderGenerate enum")
         return
     }
 
@@ -258,11 +250,11 @@ make_render_pass :: proc(
 
 @(private)
 check_render_pass_mesh_gather :: proc(pass: ^RenderPass, iteration_curr: int, iteration_limit: int) -> (ok: bool) {
-    dbg.log(.INFO, "Checking: %#v", pass.mesh_gather)
-    if iteration_curr == iteration_limit do return false
     switch v in pass.mesh_gather {
         case RenderPassQuery: return true
-        case ^RenderPass: return check_render_pass_mesh_gather(v, iteration_curr + 1, iteration_limit)
+        case ^RenderPass:
+            if iteration_curr == iteration_limit do return false
+            return check_render_pass_mesh_gather(v, iteration_curr + 1, iteration_limit)
         case nil: dbg.log(.ERROR, "Render pass mesh gather is nil")
     }
     return
@@ -270,10 +262,11 @@ check_render_pass_mesh_gather :: proc(pass: ^RenderPass, iteration_curr: int, it
 
 @(private)
 check_render_pass_shader_gather :: proc(pass: ^RenderPass, iteration_curr: int, iteration_limit: int) -> (ok: bool) {
-    if iteration_curr == iteration_limit do return false
-    switch v in pass.shader_gather{
+    switch v in pass.shader_gather {
         case RenderPassShaderGenerate: return true
-        case ^RenderPass: return check_render_pass_shader_gather(v, iteration_curr + 1, iteration_limit)
+        case ^RenderPass:
+            if iteration_curr == iteration_limit do return false
+            return check_render_pass_shader_gather(v, iteration_curr + 1, iteration_limit)
     }
     return // Impossible to reach but whatever
 }
@@ -369,7 +362,7 @@ IBLInput :: struct {
 
 PreRenderPass :: struct {
     input: PreRenderPassInput,
-    frame_buffers: []FrameBufferID
+    frame_buffers: []^FrameBuffer
 }
 
 destroy_pre_render_pass :: proc(pre_pass: PreRenderPass, allocator := context.allocator) {
@@ -379,19 +372,12 @@ destroy_pre_render_pass :: proc(pre_pass: PreRenderPass, allocator := context.al
 make_pre_render_pass :: proc(
     pipeline: RenderPipeline,
     input: PreRenderPassInput,
-    frame_buffers: ..FrameBufferID,
+    frame_buffers: ..^FrameBuffer,
     allocator := context.allocator
 ) -> (pass: PreRenderPass, ok: bool) {
-    buffers := make([dynamic]FrameBufferID, allocator=allocator)
-    for frame_buffer in frame_buffers {
-        if int(frame_buffer) >= len(pipeline.frame_buffers) {
-            dbg.log(.ERROR, "Frame buffer points outside of the pipeline framebuffers")
-            return
-        }
-        append(&buffers, frame_buffer)
-    }
+    buffers := make([dynamic]^FrameBuffer, allocator=allocator)
 
-    pass.frame_buffers = buffers[:]
+    pass.frame_buffers = slice.clone(frame_buffers)
     pass.input = input
 
     ok = true

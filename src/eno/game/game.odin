@@ -12,6 +12,7 @@ import "../ui"
 
 import glm "core:math/linalg/glsl"
 import "core:time"
+import render "../render"
 
 // Game structure is defined here, e.g. defining the game loop, polling events, etc.
 
@@ -91,7 +92,7 @@ quit_game :: proc() {
 init_game :: proc { init_game_with_scene, init_game_default_scene }
 
 
-init_game_with_scene :: proc(scene: ^ecs.Scene, window: win.WindowTarget, every_frame: frame_loop_proc_, before_frame: before_loop_proc_, allocator := context.allocator) {
+init_game_with_scene :: proc(scene: ^ecs.Scene, window: win.WindowTarget, every_frame: frame_loop_proc_, before_frame: before_loop_proc_, allocator := context.allocator) -> (ok: bool) {
     Game = new(EnoGame, allocator)
     Game.scene = scene
     Game.window = window
@@ -100,11 +101,14 @@ init_game_with_scene :: proc(scene: ^ecs.Scene, window: win.WindowTarget, every_
     Game.controller = control.init_controller(allocator)
     Game.resource_manager = resource.init_resource_manager(allocator)
     Game.meta_data.time_started = time.now()._nsec
+
+    ui.add_ui_elements(render.render_settings_ui_element) or_return
+    return true
 }
 
 
-init_game_default_scene :: proc(window: win.WindowTarget, every_frame: frame_loop_proc_, before_frame: before_loop_proc_, allocator := context.allocator) {
-    init_game_with_scene(ecs.init_scene(), window, every_frame, before_frame, allocator)
+init_game_default_scene :: proc(window: win.WindowTarget, every_frame: frame_loop_proc_, before_frame: before_loop_proc_, allocator := context.allocator) -> (ok: bool) {
+    return init_game_with_scene(ecs.init_scene(), window, every_frame, before_frame, allocator)
 }
 
 destroy_game :: proc(allocator := context.allocator) {

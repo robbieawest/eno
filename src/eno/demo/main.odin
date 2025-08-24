@@ -15,7 +15,11 @@ main :: proc() {
     // win.set_fullscreen(window_target)
     win.set_mouse_raw_input(true)
 
-    game.init_game(window_target, every_frame, before_frame); defer game.destroy_game()
+    if(!game.init_game(window_target, every_frame, before_frame)) {
+        log.error("Could not start game")
+        return
+    }
+    defer game.destroy_game()
 
     game.run_game()
 }

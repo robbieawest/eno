@@ -17,17 +17,9 @@ import "core:math"
 // Implement your before_frame and every_frame procedures in a file like this
 // Certain operations are done around this every frame, look inside game package
 
-// programmer-defined to be able to store any data
-// set a pointer to Game.game_Data
-
-GameData :: struct {
-    render_pipeline: render.RenderPipeline,
-}
-
-
 every_frame :: proc() -> (ok: bool) {
     // set_light_position() or_return
-    render.render(&game.Game.resource_manager, (cast(^GameData)game.Game.game_data).render_pipeline, game.Game.scene) or_return
+    render.render(&game.Game.resource_manager, game.Game.scene) or_return
 
     // Swap
     ok = win.swap_window_bufs(game.Game.window); if !ok do log.errorf("could not swap bufs")
@@ -98,76 +90,72 @@ before_frame :: proc() -> (ok: bool) {
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
     load_supra(arch) or_return
 
-    game_data := new(GameData)
+    render.make_environment_settings()
+    render.make_ibl_settings() or_return
 
-    frame_buffers := []render.FrameBuffer {
-        render.make_ibl_framebuffer()
-    }
-
-    game_data.render_pipeline = render.init_render_pipeline(3, 1, frame_buffers)
+    render.init_render_pipeline()
 
     window_res := win.get_window_resolution(game.Game.window)
 
     background_colour := [4]f32{ 1.0, 1.0, 1.0, 1.0 }
     background_colour_factor: f32 = 0.85
-
-    game_data.render_pipeline.passes[0] = render.make_render_pass(
-        pipeline=game_data.render_pipeline,
-        shader_gather=render.RenderPassShaderGenerate.LIGHTING,
-        mesh_gather=render.RenderPassQuery{ material_query =
-            proc(material: resource.Material, type: resource.MaterialType) -> bool {
-                return type.alpha_mode != .BLEND && !type.double_sided
+    render.add_render_passes(
+         render.make_render_pass(
+            shader_gather=render.RenderPassShaderGenerate.LIGHTING,
+            mesh_gather=render.RenderPassQuery{ material_query =
+                proc(material: resource.Material, type: resource.MaterialType) -> bool {
+                    return type.alpha_mode != .BLEND && !type.double_sided
+                }
+            },
+            properties=render.RenderPassProperties{
+                geometry_z_sorting = .ASC,
+                face_culling = render.FaceCulling.BACK,
+                viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
+                // render_skybox = true,
+                clear = { .COLOUR_BIT, .DEPTH_BIT },
+                clear_colour = background_colour * background_colour_factor,
+                multisample = true
             }
-        },
-        properties=render.RenderPassProperties{
+        ) or_return,
+    )
+    render.add_render_passes(
+        render.make_render_pass(
+            shader_gather=render.Context.pipeline.passes[0],
+            mesh_gather=render.RenderPassQuery{ material_query =
+                proc(material: resource.Material, type: resource.MaterialType) -> bool {
+                    return type.alpha_mode != .BLEND && type.double_sided
+                }
+            },
+            properties=render.RenderPassProperties{
             geometry_z_sorting = .ASC,
-            face_culling = render.FaceCulling.BACK,
             viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
-            // render_skybox = true,
-            clear = { .COLOUR_BIT, .DEPTH_BIT },
-            clear_colour = background_colour * background_colour_factor,
-            multisample = true
-        }
-    ) or_return
-    game_data.render_pipeline.passes[1] = render.make_render_pass(
-        pipeline=game_data.render_pipeline,
-        shader_gather=&game_data.render_pipeline.passes[0],
-        mesh_gather=render.RenderPassQuery{ material_query =
-            proc(material: resource.Material, type: resource.MaterialType) -> bool {
-                return type.alpha_mode != .BLEND && type.double_sided
-            }
-        },
-        properties=render.RenderPassProperties{
-        geometry_z_sorting = .ASC,
-        viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
-            multisample = true
-        },
-    ) or_return
-    game_data.render_pipeline.passes[2] = render.make_render_pass(
-        pipeline=game_data.render_pipeline,
-        shader_gather=&game_data.render_pipeline.passes[0],
-        mesh_gather=render.RenderPassQuery{ material_query =
-            proc(material: resource.Material, type: resource.MaterialType) -> bool {
-                return type.alpha_mode == .BLEND
-            }
-        },
-        properties=render.RenderPassProperties{
-            geometry_z_sorting = .DESC,
-            face_culling = render.FaceCulling.ADAPTIVE,
-            viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
-            multisample = true,
-            blend_func = render.BlendFunc{ .SOURCE_ALPHA, .ONE_MINUS_SOURCE_ALPHA }
-        },
+                multisample = true
+            },
+        ) or_return,
+        render.make_render_pass(
+            shader_gather=render.Context.pipeline.passes[0],
+            mesh_gather=render.RenderPassQuery{ material_query =
+                proc(material: resource.Material, type: resource.MaterialType) -> bool {
+                    return type.alpha_mode == .BLEND
+                }
+            },
+            properties=render.RenderPassProperties{
+                geometry_z_sorting = .DESC,
+                face_culling = render.FaceCulling.ADAPTIVE,
+                viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
+                multisample = true,
+                blend_func = render.BlendFunc{ .SOURCE_ALPHA, .ONE_MINUS_SOURCE_ALPHA }
+            },
+        ) or_return
     ) or_return
 
-
+    /* Setup for pre passes
     game_data.render_pipeline.pre_passes[0] = render.make_pre_render_pass(
         game_data.render_pipeline,
         render.IBLInput{},
         0
     ) or_return
-
-    game.Game.game_data = game_data
+    */
 
     // Camera
     ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
@@ -208,23 +196,16 @@ before_frame :: proc() -> (ok: bool) {
     game.add_event_hooks(
         game.HOOK_MOUSE_MOTION(),
         game.HOOK_CLOSE_WINDOW(),
-        game.HOOKS_CAMERA_MOVEMENT(),  // Only can be used after camera added to scene
+        game.HOOKS_CAMERA_MOVEMENT(),
         game.HOOK_TOGGLE_UI_MOUSE()
     )
 
     manager := &game.Game.resource_manager
-    render.populate_all_shaders(&game_data.render_pipeline, manager, game.Game.scene) or_return
+    render.populate_all_shaders(manager, game.Game.scene) or_return
 
-    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "newport_loft.hdr") or_return
-    game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "park_music_stage_4k.hdr") or_return
-    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "rogland_clear_night_4k.hdr") or_return
-    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "twilight_sunset_4k.hdr") or_return
-    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "voortrekker_interior_4k.hdr") or_return
-    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "metro_noord_4k.hdr") or_return
-    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "drackenstein_quarry_4k.hdr") or_return
-    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "fireplace_4k.hdr") or_return
-    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "freight_station_4k.hdr") or_return
-    // game.Game.scene.image_environment = ecs.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "golden_bay_4k.hdr") or_return
+    render.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "park_music_stage_4k.hdr") or_return
+
+    // Use if you have pre render passes
     // render.pre_render(manager, game_data.render_pipeline, game.Game.scene) or_return
 
     return true

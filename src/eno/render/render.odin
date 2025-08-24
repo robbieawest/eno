@@ -26,11 +26,12 @@ RenderContext :: struct {
     camera_ubo: ^ShaderBuffer,
     lights_ssbo: ^ShaderBuffer,
     skybox_comp: ^resource.GLComponent,
-    skybox_shader: ^resource.ShaderProgram
+    skybox_shader: ^resource.ShaderProgram,
+    image_environment: Maybe(ImageEnvironment),
+    pipeline: RenderPipeline
 }
 
-RENDER_CONTEXT: RenderContext  // Global render context, this is fine really, only stores small amount of persistent external pointing data
-// Don't know if I care enough to destroy the render context
+Context: RenderContext
 
 @(private)
 ModelData :: struct {
@@ -48,12 +49,11 @@ MeshData :: struct {
 
 render :: proc(
     manager: ^resource.ResourceManager,
-    pipeline: RenderPipeline,
     scene: ^ecs.Scene,
     allocator := context.allocator,
     temp_allocator := context.temp_allocator
 ) -> (ok: bool) {
-    pipeline := pipeline
+    pipeline := Context.pipeline
 
     /*
         for later:
@@ -86,13 +86,13 @@ render :: proc(
                     mesh_data = mesh_data_references[v]
                 }
                 else do mesh_data = &mesh_data_map[v]
-                mesh_data_references[&pass] = mesh_data
+                mesh_data_references[pass] = mesh_data
             case RenderPassQuery:
-                mesh_data_map[&pass] = query_scene(manager, scene, v, temp_allocator) or_return
-                mesh_data = &mesh_data_map[&pass]
+                mesh_data_map[pass] = query_scene(manager, scene, v, temp_allocator) or_return
+                mesh_data = &mesh_data_map[pass]
             case nil:
-                mesh_data_map[&pass] = query_scene(manager, scene, {}, temp_allocator) or_return
-                mesh_data = &mesh_data_map[&pass]
+                mesh_data_map[pass] = query_scene(manager, scene, {}, temp_allocator) or_return
+                mesh_data = &mesh_data_map[pass]
 
         }
         if mesh_data == nil {
@@ -101,7 +101,7 @@ render :: proc(
         }
 
         // Handle properties BEFORE 0 mesh check
-        handle_pass_properties(pipeline, pass) or_return
+        handle_pass_properties(pass^) or_return
         check_framebuffer_status_raw() or_return
 
         if len(mesh_data) == 0 do continue;
@@ -110,7 +110,7 @@ render :: proc(
         if sort_geom do sort_geometry_by_depth(scene.viewpoint.position, mesh_data[:], pass.properties.geometry_z_sorting == .ASC)
 
         // Group geometry by shaders
-        shader_map := group_meshes_by_shader(pipeline.shader_store, &pass, mesh_data^, sort_geom, temp_allocator) or_return
+        shader_map := group_meshes_by_shader(pipeline.shader_store, pass, mesh_data^, sort_geom, temp_allocator) or_return
 
         // render meshes
         for mapping in shader_map {
@@ -140,7 +140,7 @@ render :: proc(
             }
         }
 
-        if pass.properties.render_skybox do render_skybox(manager, scene, allocator) or_return
+        if pass.properties.render_skybox do render_skybox(manager, scene.viewpoint, allocator) or_return
     }
 
 
@@ -151,15 +151,15 @@ render :: proc(
 
 // Allocator is perm content, not temp
 @(private)
-render_skybox :: proc(manager: ^resource.ResourceManager, scene: ^ecs.Scene, allocator := context.allocator) -> (ok: bool) {
-    if scene.image_environment == nil {
-        dbg.log(.ERROR, "Scene image environment must be available to render skybox")
+render_skybox :: proc(manager: ^resource.ResourceManager, viewpoint: ^cam.Camera, allocator := context.allocator) -> (ok: bool) {
+    if Context.image_environment == nil {
+        dbg.log(.ERROR, "Image environment must be available to render skybox")
         return
     }
 
-    env := scene.image_environment.?
+    env := Context.image_environment.?
     if env.environment_map == nil {
-        dbg.log(.ERROR, "Scene image environment map must be avaiable to render skybox")
+        dbg.log(.ERROR, "Image environment map must be avaiable to render skybox")
         return
     }
     // dbg.log(.INFO, "Rendering skybox")
@@ -169,36 +169,36 @@ render_skybox :: proc(manager: ^resource.ResourceManager, scene: ^ecs.Scene, all
         return
     }
 
-    if RENDER_CONTEXT.skybox_comp == nil {
-        RENDER_CONTEXT.skybox_comp = new(resource.GLComponent)
-        RENDER_CONTEXT.skybox_comp^ = create_primitive_cube()
+    if Context.skybox_comp == nil {
+        Context.skybox_comp = new(resource.GLComponent)
+        Context.skybox_comp^ = create_primitive_cube()
     }
 
-    if RENDER_CONTEXT.skybox_comp.vao == nil {
+    if Context.skybox_comp.vao == nil {
         dbg.log(.ERROR, "Vertex array nil is unexpected in skybox render")
         return
     }
 
-    if RENDER_CONTEXT.skybox_shader == nil {
-        RENDER_CONTEXT.skybox_shader = new(resource.ShaderProgram)
-        RENDER_CONTEXT.skybox_shader^ = create_skybox_shader(manager, allocator) or_return
+    if Context.skybox_shader == nil {
+        Context.skybox_shader = new(resource.ShaderProgram)
+        Context.skybox_shader^ = create_skybox_shader(manager, allocator) or_return
     }
 
-    attach_program(RENDER_CONTEXT.skybox_shader^) or_return
+    attach_program(Context.skybox_shader^) or_return
 
-    view := glm.mat4(glm.mat3(scene.viewpoint.look_at))
-    resource.set_uniform(RENDER_CONTEXT.skybox_shader, VIEW_MATRIX_UNIFORM, view)
-    resource.set_uniform(RENDER_CONTEXT.skybox_shader, PROJECTION_MATRIX_UNIFORM, scene.viewpoint.perspective)
+    view := glm.mat4(glm.mat3(viewpoint.look_at))
+    resource.set_uniform(Context.skybox_shader, VIEW_MATRIX_UNIFORM, view)
+    resource.set_uniform(Context.skybox_shader, PROJECTION_MATRIX_UNIFORM, viewpoint.perspective)
 
     irr := env.irradiance_map.?
     spec := env.prefilter_map.?
     // bind_texture(0, irr.gpu_texture.?, .CUBEMAP)
     bind_texture(0, spec.gpu_texture.?, .CUBEMAP)
     // bind_texture(0, env_map.gpu_texture.?, .CUBEMAP)
-    resource.set_uniform(RENDER_CONTEXT.skybox_shader, ENV_MAP_UNIFORM, i32(0))
+    resource.set_uniform(Context.skybox_shader, ENV_MAP_UNIFORM, i32(0))
 
     set_face_culling(false)
-    render_primitive_cube(RENDER_CONTEXT.skybox_comp.vao.?)
+    render_primitive_cube(Context.skybox_comp.vao.?)
 
     return true
 }
@@ -214,9 +214,13 @@ create_skybox_shader :: proc(manager: ^resource.ResourceManager, allocator := co
     return
 }
 
+
+BRDF_LUT_UNIFORM :: "brdfLut"
+PREFILTER_MAP_UNIFORM :: "prefilterMap"
+IRRADIANCE_MAP_UNIFORM :: "irradianceMap"
 @(private)
-bind_ibl_uniforms :: proc(scene: ^ecs.Scene, shader: ^resource.ShaderProgram) -> (ok: bool) {
-    m_env := scene.image_environment
+bind_ibl_uniforms :: proc( shader: ^resource.ShaderProgram) -> (ok: bool) {
+    m_env := Context.image_environment
     if m_env == nil {
         dbg.log(.ERROR, "Scene image environment for ibl not yet setup")
         return
@@ -231,20 +235,18 @@ bind_ibl_uniforms :: proc(scene: ^ecs.Scene, shader: ^resource.ShaderProgram) ->
     prefilter_map := env.prefilter_map.?
     brdf_lut := env.brdf_lookup.?
 
-    // log.infof("%#v %#v %#v", irradiance_map, prefilter_map, brdf_lut)
-
     texture_unit: i32
     texture_unit = i32(PBRSamplerBindingLocation.IRRADIANCE_MAP)
     bind_texture(texture_unit, irradiance_map.gpu_texture, irradiance_map.type) or_return
-    resource.set_uniform(shader, "irradianceMap", texture_unit)
+    resource.set_uniform(shader, IRRADIANCE_MAP_UNIFORM, texture_unit)
 
     texture_unit = i32(PBRSamplerBindingLocation.BRDF_LUT)
     bind_texture(texture_unit, brdf_lut.gpu_texture, brdf_lut.type) or_return
-    resource.set_uniform(shader, "brdfLUT", texture_unit)
+    resource.set_uniform(shader, BRDF_LUT_UNIFORM, texture_unit)
 
     texture_unit = i32(PBRSamplerBindingLocation.PREFILTER_MAP)
     bind_texture(texture_unit, prefilter_map.gpu_texture, prefilter_map.type) or_return
-    resource.set_uniform(shader, "prefilterMap", texture_unit)
+    resource.set_uniform(shader, PREFILTER_MAP_UNIFORM, texture_unit)
 
     ok = true
     return
@@ -350,7 +352,7 @@ group_meshes_by_shader :: proc(
 
 // Handles binding of framebuffer along with enabling of certain settings/tests
 @(private)
-handle_pass_properties :: proc(pipeline: RenderPipeline, pass: RenderPass) -> (ok: bool) {
+handle_pass_properties :: proc(pass: RenderPass) -> (ok: bool) {
     if pass.frame_buffer == nil {
         bind_default_framebuffer()
         if pass.properties.viewport == nil {
@@ -361,13 +363,12 @@ handle_pass_properties :: proc(pipeline: RenderPipeline, pass: RenderPass) -> (o
         set_render_viewport(viewport[0], viewport[1], viewport[2], viewport[3])
     }
     else {
-        frame_buffer := utils.safe_index(pipeline.frame_buffers, pass.frame_buffer.?) or_return
-        bind_framebuffer(frame_buffer^) or_return
+        bind_framebuffer(pass.frame_buffer^) or_return
         if pass.properties.viewport != nil {
             viewport := pass.properties.viewport.?
             set_render_viewport(viewport[0], viewport[1], viewport[2], viewport[3])
         }
-        else do set_render_viewport(0, 0, frame_buffer.w, frame_buffer.h)
+        else do set_render_viewport(0, 0, pass.frame_buffer.w, pass.frame_buffer.h)
     }
 
     properties := pass.properties
@@ -751,12 +752,12 @@ update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
         cam.get_perspective(viewpoint)
     }
 
-    if RENDER_CONTEXT.camera_ubo == nil {
-        RENDER_CONTEXT.camera_ubo = new(ShaderBuffer)
-        RENDER_CONTEXT.camera_ubo^ = make_shader_buffer(&camera_buffer_data, size_of(CameraBufferData), .UBO, 0, { .WRITE_MANY_READ_MANY, .DRAW })
+    if Context.camera_ubo == nil {
+        Context.camera_ubo = new(ShaderBuffer)
+        Context.camera_ubo^ = make_shader_buffer(&camera_buffer_data, size_of(CameraBufferData), .UBO, 0, { .WRITE_MANY_READ_MANY, .DRAW })
     }
     else {
-        ubo := RENDER_CONTEXT.camera_ubo
+        ubo := Context.camera_ubo
         transfer_buffer_data(ShaderBufferType.UBO, &camera_buffer_data, size_of(CameraBufferData), update=true, buffer_id=ubo.id.?)
     }
 
@@ -881,12 +882,12 @@ update_lights_ssbo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
         current_offset += POINT_LIGHT_GPU_SIZE
     }
 
-    if RENDER_CONTEXT.lights_ssbo == nil {
-        RENDER_CONTEXT.lights_ssbo = new(ShaderBuffer)
-        RENDER_CONTEXT.lights_ssbo^ = make_shader_buffer(raw_data(light_ssbo_data), len(light_ssbo_data), .SSBO, 1, { .WRITE_MANY_READ_MANY, .DRAW })
+    if Context.lights_ssbo == nil {
+        Context.lights_ssbo = new(ShaderBuffer)
+        Context.lights_ssbo^ = make_shader_buffer(raw_data(light_ssbo_data), len(light_ssbo_data), .SSBO, 1, { .WRITE_MANY_READ_MANY, .DRAW })
     }
     else {
-        ssbo := RENDER_CONTEXT.lights_ssbo
+        ssbo := Context.lights_ssbo
         transfer_buffer_data(ShaderBufferType.UBO, raw_data(light_ssbo_data), len(light_ssbo_data), update=true, buffer_id=ssbo.id.?)
     }
 
@@ -1082,7 +1083,6 @@ destroy_shader_store :: proc(manager: ^resource.ResourceManager, shader_store: R
 RenderShaderMapping :: map[resource.MeshIdent]resource.ResourceIdent
 
 populate_all_shaders :: proc(
-    pipeline: ^RenderPipeline,
     manager: ^resource.ResourceManager,
     scene: ^ecs.Scene,
     allocator := context.allocator,
@@ -1102,7 +1102,7 @@ populate_all_shaders :: proc(
         for &mesh in model_meshes do append(&meshes, &mesh)
     }
 
-    for &pass in pipeline.passes do populate_shaders(&pipeline.shader_store, manager, &pass, meshes[:], allocator) or_return
+    for pass in Context.pipeline.passes do populate_shaders(&Context.pipeline.shader_store, manager, pass, meshes[:], allocator) or_return
 
     ok = true
     return
@@ -1247,7 +1247,9 @@ generate_lighting_shader :: proc(
 }
 
 
-// Handles the pre render passes
+// Generic interface to handle pre-render passes explicitly
+// The pre-render pass procedures used inside this don't necessarily need to be only called by this,
+//  for example when changing IBL settings, ibl_pre_render_pass is called independent of this procedure
 pre_render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline, scene: ^ecs.Scene, temp_allocator := context.temp_allocator) -> (ok: bool) {
 
     for pass in pipeline.pre_passes {
@@ -1259,8 +1261,8 @@ pre_render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline,
         switch input in pass.input {
         case IBLInput:
 
-            buffer := utils.safe_index(pipeline.frame_buffers, pass.frame_buffers[0]) or_return
-            ok = ibl_pre_render_pass(manager, scene, buffer^)
+            buffer := utils.safe_index(pass.frame_buffers, 0) or_return
+            ok = ibl_render_setup(manager, buffer^^)
             if !ok {
                 dbg.log(.ERROR, "Failed to pre render IBL maps")
                 return
@@ -1273,21 +1275,70 @@ pre_render :: proc(manager: ^resource.ResourceManager, pipeline: RenderPipeline,
 }
 
 
-ibl_pre_render_pass :: proc(
+ImageEnvironment :: struct {
+    // All cubemaps, IBL textures: image field is not used
+    environment_tex: resource.Texture,
+    environment_map: Maybe(resource.Texture),
+    //IBL
+    irradiance_map: Maybe(resource.Texture),
+    prefilter_map: Maybe(resource.Texture),
+    brdf_lookup: Maybe(resource.Texture)
+}
+
+// Does not create cubemap
+make_image_environment :: proc(environment_map_uri: string, flip_map := false, allocator := context.allocator) -> (ok: bool) {
+    env: ImageEnvironment
+    using env.environment_tex
+    name = strings.clone("EnvironmentTex", allocator=allocator)
+    type = .TWO_DIM
+    properties = resource.default_texture_properties()
+    properties[.WRAP_S] = .REPEAT
+    properties[.MIN_FILTER] = .LINEAR_MIPMAP_LINEAR
+    image = resource.load_image_from_uri(environment_map_uri, flip_image=flip_map, as_float=true, allocator=allocator) or_return
+
+    Context.image_environment = env
+
+    ok = true
+    return
+}
+
+destroy_image_environment :: proc(environment: Maybe(ImageEnvironment)) {
+    if environment == nil do return
+    env := environment.?
+
+    resource.destroy_texture(&env.environment_tex)
+    if env.environment_map != nil do resource.destroy_texture(&env.environment_map.?)
+    if env.irradiance_map != nil do resource.destroy_texture(&env.irradiance_map.?)
+    if env.prefilter_map != nil do resource.destroy_texture(&env.prefilter_map.?)
+    if env.brdf_lookup != nil do resource.destroy_texture(&env.brdf_lookup.?)
+}
+
+ibl_render_setup :: proc(
     manager: ^resource.ResourceManager,
-    scene: ^ecs.Scene,
     buffer: FrameBuffer,
     allocator := context.allocator,
     loc := #caller_location
 ) -> (ok: bool) {
     dbg.log(.INFO, "IBL Pre render pass")
 
-    environment_m := &scene.image_environment
+    env_settings, env_settings_ok := GlobalRenderSettings.environment_settings.?
+    if !env_settings_ok {
+        dbg.log(.ERROR, "Environment settings must be available in ibl pre render pass")
+        return
+    }
+
+    ibl_settings, ibl_settings_ok := env_settings.ibl_settings.?
+    if !ibl_settings_ok {
+        dbg.log(.ERROR, "IBL settings must be available in ibl pre render pass")
+        return
+    }
+
+    environment_m := &Context.image_environment
     if environment_m^ == nil {
         dbg.log(.ERROR, "No environment found in scene for IBL")
         return
     }
-    environment: ^ecs.ImageEnvironment = &environment_m.?
+    environment: ^ImageEnvironment = &environment_m.?
 
     set_depth_test(true)
     gl.DepthFunc(gl.LEQUAL)
@@ -1301,7 +1352,7 @@ ibl_pre_render_pass :: proc(
 
     fbo := utils.unwrap_maybe(buffer.id) or_return
 
-    depth_rbo := make_renderbuffer(IBL_FRAMEBUFFER_WIDTH, IBL_FRAMEBUFFER_HEIGHT, gl.DEPTH_COMPONENT24)
+    depth_rbo := make_renderbuffer(env_settings.environment_face_size, env_settings.environment_face_size, gl.DEPTH_COMPONENT24)
     rbo := utils.unwrap_maybe(depth_rbo.id) or_return
 
     bind_renderbuffer_to_frame_buffer(fbo, depth_rbo, .DEPTH)
@@ -1310,16 +1361,19 @@ ibl_pre_render_pass :: proc(
 
     project := glm.mat4Perspective(glm.radians_f32(90), 1, 0.1, 10)
 
-    views := [6]matrix[4, 4]f32 {
-        glm.mat4LookAt({0, 0, 0}, {1, 0, 0}, {0, -1, 0}),
-        glm.mat4LookAt({0, 0, 0}, {-1, 0, 0}, {0, -1, 0}),
-        glm.mat4LookAt({0, 0, 0}, {0, 1, 0}, {0, 0, 1}),
-        glm.mat4LookAt({0, 0, 0}, {0, -1, 0}, {0, 0, -1}),
-        glm.mat4LookAt({0, 0, 0}, {0, 0, 1}, {0, -1, 0}),
-        glm.mat4LookAt({0, 0, 0}, {0, 0, -1}, {0, -1, 0}),
-    }
+    views := cubemap_views()
 
-    if environment.environment_map == nil do environment.environment_map = create_environment_map(manager, environment.environment_tex, project, views, fbo, cube_vao, allocator=allocator) or_return
+    if environment.environment_map == nil do environment.environment_map = create_environment_map(
+        manager,
+        env_settings.environment_face_size,
+        env_settings.environment_face_size,
+        environment.environment_tex,
+        project,
+        views,
+        fbo,
+        cube_vao,
+        allocator=allocator
+    ) or_return
     check_framebuffer_status(buffer, loc=loc) or_return
     dbg.log(.INFO, "Successfully created ibl environment map")
 
@@ -1328,6 +1382,8 @@ ibl_pre_render_pass :: proc(
 
     if environment.irradiance_map == nil do environment.irradiance_map = create_ibl_irradiance_map(
         manager,
+        ibl_settings.irradiance_map_face_size,
+        ibl_settings.irradiance_map_face_size,
         env_cubemap,
         project,
         views,
@@ -1342,6 +1398,8 @@ ibl_pre_render_pass :: proc(
 
     if environment.prefilter_map == nil do environment.prefilter_map = create_ibl_prefilter_map(
         manager,
+        ibl_settings.prefilter_map_face_size,
+        ibl_settings.prefilter_map_face_size,
         env_cubemap,
         project,
         views,
@@ -1355,6 +1413,8 @@ ibl_pre_render_pass :: proc(
 
     if environment.brdf_lookup == nil do environment.brdf_lookup = create_ibl_brdf_lookup(
         manager,
+        ibl_settings.brdf_lut_size,
+        ibl_settings.brdf_lut_size,
         fbo,
         rbo,
         allocator
@@ -1368,17 +1428,26 @@ ibl_pre_render_pass :: proc(
     return
 }
 
-ENV_MAP_FACE_WIDTH :: 2048
-ENV_MAP_FACE_HEIGHT :: 2048
+// Follows OpenGL orientation order: +X, -X, +Y, -Y, +Z, -Z
+cubemap_views :: proc() -> [6]matrix[4, 4]f32 {
+    return [6]matrix[4, 4]f32 {
+        glm.mat4LookAt({0, 0, 0}, {1, 0, 0}, {0, -1, 0}),
+        glm.mat4LookAt({0, 0, 0}, {-1, 0, 0}, {0, -1, 0}),
+        glm.mat4LookAt({0, 0, 0}, {0, 1, 0}, {0, 0, 1}),
+        glm.mat4LookAt({0, 0, 0}, {0, -1, 0}, {0, 0, -1}),
+        glm.mat4LookAt({0, 0, 0}, {0, 0, 1}, {0, -1, 0}),
+        glm.mat4LookAt({0, 0, 0}, {0, 0, -1}, {0, -1, 0}),
+    }
+}
+
 create_environment_map :: proc(
     manager: ^resource.ResourceManager,
+    env_map_face_w, env_map_face_h: i32,
     environment_tex: resource.Texture,
     project: matrix[4, 4]f32,
     views: [6]matrix[4, 4]f32,
     fbo: u32,
     cube_vao: u32,
-    w: i32 = ENV_MAP_FACE_WIDTH,
-    h: i32 = ENV_MAP_FACE_HEIGHT,
     allocator := context.allocator
 ) -> (env: resource.Texture, ok: bool) {
     using env
@@ -1387,7 +1456,7 @@ create_environment_map :: proc(
     properties = resource.default_texture_properties()
     properties[.MIN_FILTER] = .LINEAR_MIPMAP_LINEAR
 
-    gpu_texture = make_texture(w, h, nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties, false)
+    gpu_texture = make_texture(env_map_face_w, env_map_face_h, nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties, false)
     type = .CUBEMAP
 
     shader := get_environment_map_shader(manager, allocator) or_return
@@ -1397,7 +1466,7 @@ create_environment_map :: proc(
     resource.set_uniform(&shader, "m_Project", project)
     bind_texture(0, environment_tex.gpu_texture) or_return
 
-    set_render_viewport(0, 0, w, h)
+    set_render_viewport(0, 0, env_map_face_w, env_map_face_h)
 
     bind_framebuffer_raw(fbo)
     for i in 0..<6 {
@@ -1430,10 +1499,9 @@ get_environment_map_shader :: proc(manager: ^resource.ResourceManager, allocator
     return
 }
 
-IRRADIANCE_MAP_FACE_WIDTH :: 32
-IRRADIANCE_MAP_FACE_HEIGHT :: 32
 create_ibl_irradiance_map :: proc(
     manager: ^resource.ResourceManager,
+    irradiance_map_face_w, irradiance_map_face_h: i32,
     env_cubemap: GPUTexture,
     project: matrix[4, 4]f32,
     views: [6]matrix[4, 4]f32,
@@ -1446,12 +1514,12 @@ create_ibl_irradiance_map :: proc(
     name = strings.clone("IrradianceMap", allocator=allocator)
 
     properties = resource.default_texture_properties()
-    gpu_texture = make_texture(IRRADIANCE_MAP_FACE_WIDTH, IRRADIANCE_MAP_FACE_WIDTH, nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties, false)
+    gpu_texture = make_texture(irradiance_map_face_w, irradiance_map_face_w, nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties, false)
     type = .CUBEMAP
 
     bind_framebuffer_raw(fbo)
     bind_renderbuffer_raw(rbo)
-    set_render_buffer_storage(gl.DEPTH_COMPONENT24, IRRADIANCE_MAP_FACE_WIDTH, IRRADIANCE_MAP_FACE_HEIGHT)
+    set_render_buffer_storage(gl.DEPTH_COMPONENT24, irradiance_map_face_w, irradiance_map_face_h)
 
     shader := get_ibl_irradiance_shader(manager, allocator) or_return
     defer resource.destroy_shader_program(manager, shader)
@@ -1460,7 +1528,7 @@ create_ibl_irradiance_map :: proc(
     resource.set_uniform(&shader, "m_Project", project)
     bind_texture(0, env_cubemap, .CUBEMAP) or_return
 
-    set_render_viewport(0, 0, IRRADIANCE_MAP_FACE_WIDTH, IRRADIANCE_MAP_FACE_HEIGHT)
+    set_render_viewport(0, 0, irradiance_map_face_w, irradiance_map_face_h)
     bind_framebuffer_raw(fbo)
     for i in 0..<6 {
         resource.set_uniform(&shader, "m_View", views[i])
@@ -1487,10 +1555,9 @@ get_ibl_irradiance_shader :: proc(manager: ^resource.ResourceManager, allocator 
     return
 }
 
-PREFILTER_MAP_FACE_WIDTH :: 1024
-PREFILTER_MAP_FACE_HEIGHT :: 1024
 create_ibl_prefilter_map :: proc(
     manager: ^resource.ResourceManager,
+    prefilter_map_face_w, prefilter_map_face_h: i32,
     env_cubemap: GPUTexture,
     project: matrix[4, 4]f32,
     views: [6]matrix[4, 4]f32,
@@ -1504,7 +1571,7 @@ create_ibl_prefilter_map :: proc(
 
     properties = resource.default_texture_properties()
     properties[.MIN_FILTER] = .LINEAR_MIPMAP_LINEAR
-    gpu_texture = make_texture(PREFILTER_MAP_FACE_WIDTH, PREFILTER_MAP_FACE_HEIGHT, nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties, true)
+    gpu_texture = make_texture(prefilter_map_face_w, prefilter_map_face_h, nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties, true)
     type = .CUBEMAP
 
     shader := get_ibl_prefilter_shader(manager, allocator) or_return
@@ -1518,8 +1585,8 @@ create_ibl_prefilter_map :: proc(
     MIP_LEVELS :: 5
     for mip in 0..<MIP_LEVELS {
 
-        mip_width := i32(PREFILTER_MAP_FACE_WIDTH * math.pow(0.5, f32(mip)))
-        mip_height := i32(PREFILTER_MAP_FACE_HEIGHT * math.pow(0.5, f32(mip)))
+        mip_width := prefilter_map_face_w * i32(math.pow(0.5, f32(mip)))
+        mip_height := prefilter_map_face_h * i32(math.pow(0.5, f32(mip)))
 
         bind_renderbuffer_raw(rbo)
         set_render_buffer_storage(gl.DEPTH_COMPONENT24, mip_width, mip_height)
@@ -1560,10 +1627,9 @@ get_ibl_prefilter_shader :: proc(manager: ^resource.ResourceManager, allocator :
     return
 }
 
-IBL_BRDF_LUT_WIDTH :: 512
-IBL_BRDF_LUT_HEIGHT :: 512
 create_ibl_brdf_lookup :: proc(
     manager: ^resource.ResourceManager,
+    brdf_lut_w, brdf_lut_h: i32,
     fbo: u32,
     rbo: u32,
     allocator := context.allocator
@@ -1571,7 +1637,7 @@ create_ibl_brdf_lookup :: proc(
     using brdf_lut
     name = strings.clone("BrdfLUT", allocator=allocator)
     properties = resource.default_texture_properties(allocator)
-    gpu_texture = make_texture(IBL_BRDF_LUT_WIDTH, IBL_BRDF_LUT_HEIGHT, nil, gl.RG16, 0, gl.RG, gl.FLOAT, resource.TextureType.TWO_DIM, properties, false)
+    gpu_texture = make_texture(brdf_lut_w, brdf_lut_h, nil, gl.RG16, 0, gl.RG, gl.FLOAT, resource.TextureType.TWO_DIM, properties, false)
     type = .TWO_DIM
 
     shader := get_ibl_brdf_lut_shader(manager, allocator) or_return
@@ -1579,10 +1645,10 @@ create_ibl_brdf_lookup :: proc(
 
     bind_framebuffer_raw(fbo)
     bind_renderbuffer_raw(rbo)
-    set_render_buffer_storage(gl.DEPTH_COMPONENT24, IBL_BRDF_LUT_WIDTH, IBL_BRDF_LUT_HEIGHT)
+    set_render_buffer_storage(gl.DEPTH_COMPONENT24, brdf_lut_w, brdf_lut_h)
     bind_texture_to_frame_buffer(fbo, brdf_lut, .COLOUR)
 
-    set_render_viewport(0, 0, IBL_BRDF_LUT_WIDTH, IBL_BRDF_LUT_HEIGHT)
+    set_render_viewport(0, 0, brdf_lut_w, brdf_lut_h)
     clear_mask({ .COLOUR_BIT, .DEPTH_BIT })
 
     quad_comp := create_primitive_quad()
@@ -1607,12 +1673,14 @@ get_ibl_brdf_lut_shader :: proc(manager: ^resource.ResourceManager, allocator :=
     return
 }
 
+make_ibl_framebuffer :: proc(allocator := context.allocator) -> (buffer: FrameBuffer, ok: bool) {
+    settings, env_ok := GlobalRenderSettings.environment_settings.?
+    if !env_ok {
+        dbg.log(.ERROR, "Environment settings must be available to create IBL framebuffer")
+        return
+    }
 
-IBL_FRAMEBUFFER_WIDTH :: ENV_MAP_FACE_WIDTH
-IBL_FRAMEBUFFER_HEIGHT :: ENV_MAP_FACE_HEIGHT
-
-make_ibl_framebuffer :: proc(allocator := context.allocator) -> (buffer: FrameBuffer) {
-    return make_framebuffer(IBL_FRAMEBUFFER_WIDTH, IBL_FRAMEBUFFER_HEIGHT, allocator=allocator)
+    return make_framebuffer(settings.environment_face_size, settings.environment_face_size, allocator=allocator), true
 }
 
 // Just using learnopengl here, obviously using indexed would be better, but marginally so

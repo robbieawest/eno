@@ -65,7 +65,7 @@ initialize_window :: proc(width, height: i32, window_tag: string, extra_params: 
 
     dbg.log(.INFO, "Initialized SDL window")
 
-    ui.setup_dear_imgui(window, gl_context)
+    ui.setup_ui(window, gl_context)
     set_mouse_relative_mode(true)
 
     win_ret = window

@@ -6,11 +6,9 @@ import "../resource"
 import "../standards"
 
 import "core:mem"
-import "core:log"
 import "core:slice"
 import "core:strings"
 import utils "../utils"
-import glfw "vendor:glfw"
 
 // Todo: look into component/entity deletion and custom allocators
 // Relate it to every type defined in eno
@@ -63,7 +61,6 @@ Scene :: struct {
     allocated: bool,
     cameras: [dynamic]cam.Camera,
     viewpoint: ^cam.Camera,
-    image_environment: Maybe(ImageEnvironment)
 }
 
 // Scene reside on the stack if possible
@@ -245,38 +242,3 @@ archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label:
     return
 }
 
-
-ImageEnvironment :: struct {
-    // All cubemaps, IBL textures: image field is not used
-    environment_tex: resource.Texture,
-    environment_map: Maybe(resource.Texture),
-    //IBL
-    irradiance_map: Maybe(resource.Texture),
-    prefilter_map: Maybe(resource.Texture),
-    brdf_lookup: Maybe(resource.Texture)
-}
-
-// Does not create cubemap
-make_image_environment :: proc(environment_map_uri: string, flip_map := false, allocator := context.allocator) -> (env: ImageEnvironment, ok: bool) {
-    using env.environment_tex
-    name = strings.clone("EnvironmentTex", allocator=allocator)
-    type = .TWO_DIM
-    properties = resource.default_texture_properties()
-    properties[.WRAP_S] = .REPEAT
-    properties[.MIN_FILTER] = .LINEAR_MIPMAP_LINEAR
-    image = resource.load_image_from_uri(environment_map_uri, flip_image=flip_map, as_float=true, allocator=allocator) or_return
-
-    ok = true
-    return
-}
-
-destroy_image_environment :: proc(environment: Maybe(ImageEnvironment)) {
-    if environment == nil do return
-    env := environment.?
-
-    resource.destroy_texture(&env.environment_tex)
-    if env.environment_map != nil do resource.destroy_texture(&env.environment_map.?)
-    if env.irradiance_map != nil do resource.destroy_texture(&env.irradiance_map.?)
-    if env.prefilter_map != nil do resource.destroy_texture(&env.prefilter_map.?)
-    if env.brdf_lookup != nil do resource.destroy_texture(&env.brdf_lookup.?)
-}

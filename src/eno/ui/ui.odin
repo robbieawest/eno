@@ -9,7 +9,7 @@ import "../../../libs/dear-imgui/imgui_impl_opengl3"
 
 import dbg "../debug"
 
-setup_dear_imgui :: proc(window: ^SDL.Window, sdl_gl_context: rawptr) -> (ok: bool) {
+setup_ui :: proc(window: ^SDL.Window, sdl_gl_context: rawptr, allocator := context.allocator) -> (ok: bool) {
     im.CHECKVERSION()
     im.CreateContext()
 
@@ -28,6 +28,8 @@ setup_dear_imgui :: proc(window: ^SDL.Window, sdl_gl_context: rawptr) -> (ok: bo
         dbg.log(.ERROR, "Could not init imgui impl for opengl")
         return
     }
+
+    init_ui_context(allocator)
 
     return true
 }
@@ -50,8 +52,34 @@ destroy_ui_context :: proc() {
     im.Shutdown()
 }
 
+// A UIElement MUST begin with im.Begin() and end with im.End()
+UIElement :: #type proc()
+UIContext :: struct {
+    elements: [dynamic]UIElement
+}
+
+Context: Maybe(UIContext)
+init_ui_context :: proc(allocator := context.allocator) {
+    Context = UIContext{ make([dynamic]UIElement, allocator=allocator)}
+}
+
+check_context :: proc() -> (ctx: ^UIContext, ok: bool) {
+    if Context == nil {
+        dbg.log(.ERROR, "UI Context has not been initialized")
+        return
+    }
+    return &Context.?, true
+}
+
+add_ui_elements :: proc(elements: ..UIElement) -> (ok: bool) {
+    ctx := check_context() or_return
+    append_elems(&ctx.elements, ..elements)
+    return true
+}
 
 render_ui :: proc(#any_int display_w, #any_int display_y: i32) -> (running: bool) {
+    ctx := check_context() or_return
+
     imgui_impl_opengl3.NewFrame()
     imgui_impl_sdl2.NewFrame()
     im.NewFrame()
@@ -65,6 +93,8 @@ render_ui :: proc(#any_int display_w, #any_int display_y: i32) -> (running: bool
         }
     }
     im.End()
+
+    for element in ctx.elements do element()
 
     im.Render()
     gl.Viewport(0, 0, display_w, display_y)
