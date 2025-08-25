@@ -19,8 +19,8 @@ EnvironmentSettings :: struct {
 }
 
 DEFAULT_ENV_MAP :: standards.TEXTURE_RESOURCE_PATH + "drackenstein_quarry_4k.hdr"
-make_environment_settings :: proc(#any_int env_face_size: i32 = 2048, env_tex_uri: string = DEFAULT_ENV_MAP, ibl_settings: Maybe(IBLSettings) = nil) {
-    GlobalRenderSettings.environment_settings = EnvironmentSettings{ env_face_size, env_tex_uri, ibl_settings }
+make_environment_settings :: proc(#any_int env_face_size: i32 = 2048, env_tex_uri: string = DEFAULT_ENV_MAP, ibl_settings: Maybe(IBLSettings) = nil) -> EnvironmentSettings {
+    return { env_face_size, env_tex_uri, ibl_settings }
 }
 
 set_environment_settings :: proc(
@@ -33,9 +33,15 @@ set_environment_settings :: proc(
 
     // Reset environment
     destroy_image_environment(Context.image_environment)
-    make_image_environment(settings.environment_texture_uri, allocator=allocator) or_return
+    make_image_environment(manager, settings.environment_texture_uri, settings.environment_face_size, allocator=allocator) or_return
     if settings.ibl_settings != nil do ibl_render_setup(manager, allocator, loc)
     return true
+}
+
+disable_environment_settings :: proc() {
+    destroy_image_environment(Context.image_environment)
+    Context.image_environment = nil
+    GlobalRenderSettings.environment_settings = nil
 }
 
 IBLSettings :: struct {
@@ -44,12 +50,15 @@ IBLSettings :: struct {
     brdf_lut_size: i32,
 }
 
-make_ibl_settings :: proc(#any_int pref_face_size: i32 = 1024, #any_int irr_face_size: i32 = 32, #any_int brdf_lut_size: i32 = 512) -> (ok: bool) {
-    if GlobalRenderSettings.environment_settings == nil {
-        dbg.log(.ERROR, "Environment settings must be available to set ibl settings")
-        return
-    }
-    env_settings: ^EnvironmentSettings = &GlobalRenderSettings.environment_settings.?
-    env_settings.ibl_settings = IBLSettings{ pref_face_size, irr_face_size, brdf_lut_size }
-    return true
+make_ibl_settings :: proc(#any_int pref_face_size: i32 = 1024, #any_int irr_face_size: i32 = 32, #any_int brdf_lut_size: i32 = 512) -> IBLSettings {
+    return { pref_face_size, irr_face_size, brdf_lut_size }
+}
+
+disable_ibl_settings :: proc() {
+    env_settings, env_settings_ok := GlobalRenderSettings.environment_settings.?
+    if !env_settings_ok do return
+    if env_settings.ibl_settings == nil do return
+
+    destroy_ibl_in_image_environment(Context.image_environment)
+    env_settings.ibl_settings = nil
 }

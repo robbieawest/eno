@@ -86,7 +86,7 @@ disable_colour :: proc() -> bit_set[RenderMask; u8] {
     return { .DISABLE_COL_R, .DISABLE_COL_G, .DISABLE_COL_B, .DISABLE_COL_A }
 }
 
-WriteFunc :: enum u8 {
+DepthFunc :: enum u8 {
     NEVER,
     LESS,
     EQUAL,
@@ -153,6 +153,7 @@ RenderPassProperties :: struct {
     geometry_z_sorting: GeometryZSort,
     masks: bit_set[RenderMask; u8],
     blend_func: Maybe(BlendFunc),
+    depth_func: Maybe(DepthFunc),
     polygon_mode: Maybe(PolygonMode),
     front_face: FrontFaceMode,
     face_culling: Maybe(FaceCulling),
@@ -336,6 +337,7 @@ make_framebuffer :: proc(w, h: i32, allocator := context.allocator) -> (frame_bu
     return
 }
 
+// Note sure why this takes a ptr
 destroy_framebuffer :: proc(frame_buffer: ^FrameBuffer, release_attachments := true) {
     if release_attachments do for _, &attachment in frame_buffer.attachments do destroy_attachment(&attachment)
     delete(frame_buffer.attachments)

@@ -147,7 +147,6 @@ set_mouse_relative_mode :: proc(flag: bool) {
 }
 
 toggle_mouse_relative_mode :: proc() {
-    dbg.log(.INFO, "Toggling mouse mode from %v", SDL.GetRelativeMouseMode())
     SDL.SetRelativeMouseMode(!SDL.GetRelativeMouseMode())
 }
 

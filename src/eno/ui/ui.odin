@@ -53,7 +53,7 @@ destroy_ui_context :: proc() {
 }
 
 // A UIElement MUST begin with im.Begin() and end with im.End()
-UIElement :: #type proc()
+UIElement :: #type proc() -> bool
 UIContext :: struct {
     elements: [dynamic]UIElement
 }
@@ -94,7 +94,7 @@ render_ui :: proc(#any_int display_w, #any_int display_y: i32) -> (running: bool
     }
     im.End()
 
-    for element in ctx.elements do element()
+    for element in ctx.elements do element() or_return
 
     im.Render()
     gl.Viewport(0, 0, display_w, display_y)

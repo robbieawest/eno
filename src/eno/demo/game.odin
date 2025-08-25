@@ -90,9 +90,6 @@ before_frame :: proc() -> (ok: bool) {
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
     load_supra(arch) or_return
 
-    render.make_environment_settings()
-    render.make_ibl_settings() or_return
-
     render.init_render_pipeline()
 
     window_res := win.get_window_resolution(game.Game.window)
@@ -111,7 +108,6 @@ before_frame :: proc() -> (ok: bool) {
                 geometry_z_sorting = .ASC,
                 face_culling = render.FaceCulling.BACK,
                 viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
-                // render_skybox = true,
                 clear = { .COLOUR_BIT, .DEPTH_BIT },
                 clear_colour = background_colour * background_colour_factor,
                 multisample = true
@@ -127,9 +123,10 @@ before_frame :: proc() -> (ok: bool) {
                 }
             },
             properties=render.RenderPassProperties{
-            geometry_z_sorting = .ASC,
-            viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
-                multisample = true
+                geometry_z_sorting = .ASC,
+                viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
+                multisample = true,
+                render_skybox = true,  // Rendering skybox will set certain properties indepdendent of what is set in the pass properties, it will also be done last in the pass
             },
         ) or_return,
         render.make_render_pass(
@@ -144,7 +141,7 @@ before_frame :: proc() -> (ok: bool) {
                 face_culling = render.FaceCulling.ADAPTIVE,
                 viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
                 multisample = true,
-                blend_func = render.BlendFunc{ .SOURCE_ALPHA, .ONE_MINUS_SOURCE_ALPHA }
+                blend_func = render.BlendFunc{ .SOURCE_ALPHA, .ONE_MINUS_SOURCE_ALPHA },
             },
         ) or_return
     ) or_return
@@ -203,7 +200,7 @@ before_frame :: proc() -> (ok: bool) {
     manager := &game.Game.resource_manager
     render.populate_all_shaders(manager, game.Game.scene) or_return
 
-    render.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "park_music_stage_4k.hdr") or_return
+    // render.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "park_music_stage_4k.hdr") or_return
 
     // Use if you have pre render passes
     // render.pre_render(manager, game_data.render_pipeline, game.Game.scene) or_return

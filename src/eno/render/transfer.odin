@@ -780,3 +780,25 @@ set_multisampling :: proc(on: bool) {
 set_clear_colour :: proc(colour: [4]f32 = {}) {
     gl.ClearColor(colour.x, colour.y, colour.z, colour.a)
 }
+
+set_depth_func :: proc(func: DepthFunc) {
+    gl.DepthFunc(conv_depth_func(func))
+}
+
+conv_depth_func :: proc(func: DepthFunc) -> u32 {
+    switch func {
+        case .LESS: return gl.LESS
+        case .NEVER: return gl.NEVER
+        case .EQUAL: return gl.EQUAL
+        case .LEQUAL: return gl.LEQUAL
+        case .GREATER: return gl.GREATER
+        case .GEQUAL: return gl.GEQUAL
+        case .NOTEQUAL: return gl.NOTEQUAL
+        case .ALWAYS: return gl.ALWAYS
+    }
+    return 0
+}
+
+set_default_depth_func :: proc() {
+    gl.DepthFunc(gl.LESS)
+}

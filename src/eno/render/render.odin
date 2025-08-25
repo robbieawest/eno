@@ -28,7 +28,9 @@ RenderContext :: struct {
     skybox_comp: ^resource.GLComponent,
     skybox_shader: ^resource.ShaderProgram,
     image_environment: Maybe(ImageEnvironment),
-    pipeline: RenderPipeline
+    pipeline: RenderPipeline,
+    manager: ^resource.ResourceManager,
+    allocator: mem.Allocator
 }
 
 Context: RenderContext
@@ -54,6 +56,8 @@ render :: proc(
     temp_allocator := context.temp_allocator
 ) -> (ok: bool) {
     pipeline := Context.pipeline
+    Context.manager = manager
+    Context.allocator = allocator
 
     /*
         for later:
@@ -104,41 +108,7 @@ render :: proc(
         handle_pass_properties(pass^) or_return
         check_framebuffer_status_raw() or_return
 
-        if len(mesh_data) == 0 do continue;
-
-        sort_geom := pass.properties.geometry_z_sorting != .NO_SORT
-        if sort_geom do sort_geometry_by_depth(scene.viewpoint.position, mesh_data[:], pass.properties.geometry_z_sorting == .ASC)
-
-        // Group geometry by shaders
-        shader_map := group_meshes_by_shader(pipeline.shader_store, pass, mesh_data^, sort_geom, temp_allocator) or_return
-
-        // render meshes
-        for mapping in shader_map {
-            shader_pass := resource.get_shader_pass(manager, mapping.shader) or_return
-            attach_program(shader_pass^)
-
-            // bind_ibl_uniforms(scene, shader_pass) or_return
-            update_camera_ubo(scene) or_return
-            update_lights_ssbo(scene) or_return
-
-            for mesh_data in mapping.meshes {
-                model_mat, normal_mat := model_and_normal(mesh_data.mesh, mesh_data.world, scene.viewpoint)
-                transfer_mesh(manager, mesh_data.mesh) or_return
-
-                material_type := resource.get_material(manager, mesh_data.mesh.material.type) or_return
-                bind_material_uniforms(manager, mesh_data.mesh.material, material_type^, shader_pass) or_return
-
-                if pass.properties.face_culling == FaceCulling.ADAPTIVE {
-                    if material_type.double_sided do set_face_culling(false)
-                    else do cull_geometry_faces(.BACK)
-                }
-
-                resource.set_uniform(shader_pass, standards.MODEL_MAT, model_mat)
-                resource.set_uniform(shader_pass, standards.NORMAL_MAT, normal_mat)
-
-                issue_single_element_draw_call(mesh_data.mesh.indices_count)
-            }
-        }
+        if len(mesh_data) != 0 do render_geometry(manager, scene, pipeline.shader_store, pass, mesh_data^, temp_allocator) or_return
 
         if pass.properties.render_skybox do render_skybox(manager, scene.viewpoint, allocator) or_return
     }
@@ -149,20 +119,63 @@ render :: proc(
     return true
 }
 
+@(private)
+render_geometry :: proc(
+    manager: ^resource.ResourceManager,
+    scene: ^ecs.Scene,
+    shader_store: RenderShaderStore,
+    pass: ^RenderPass,
+    mesh_data: [dynamic]MeshData,
+    temp_allocator := context.temp_allocator
+) -> (ok: bool) {
+    sort_geom := pass.properties.geometry_z_sorting != .NO_SORT
+    if sort_geom do sort_geometry_by_depth(scene.viewpoint.position, mesh_data[:], pass.properties.geometry_z_sorting == .ASC)
+
+    // Group geometry by shaders
+    shader_map := group_meshes_by_shader(shader_store, pass, mesh_data, sort_geom, temp_allocator) or_return
+
+    // render meshes
+    for mapping in shader_map {
+        shader_pass := resource.get_shader_pass(manager, mapping.shader) or_return
+        attach_program(shader_pass^)
+
+        // bind_ibl_uniforms(scene, shader_pass) or_return
+        update_camera_ubo(scene) or_return
+        update_lights_ssbo(scene) or_return
+
+        for mesh_data in mapping.meshes {
+            model_mat, normal_mat := model_and_normal(mesh_data.mesh, mesh_data.world, scene.viewpoint)
+            transfer_mesh(manager, mesh_data.mesh) or_return
+
+            material_type := resource.get_material(manager, mesh_data.mesh.material.type) or_return
+            bind_material_uniforms(manager, mesh_data.mesh.material, material_type^, shader_pass) or_return
+
+            if pass.properties.face_culling == FaceCulling.ADAPTIVE {
+                if material_type.double_sided do set_face_culling(false)
+                else do cull_geometry_faces(.BACK)
+            }
+
+            resource.set_uniform(shader_pass, standards.MODEL_MAT, model_mat)
+            resource.set_uniform(shader_pass, standards.NORMAL_MAT, normal_mat)
+
+            issue_single_element_draw_call(mesh_data.mesh.indices_count)
+        }
+    }
+
+    return true
+}
+
 // Allocator is perm content, not temp
 @(private)
 render_skybox :: proc(manager: ^resource.ResourceManager, viewpoint: ^cam.Camera, allocator := context.allocator) -> (ok: bool) {
-    if Context.image_environment == nil {
-        dbg.log(.ERROR, "Image environment must be available to render skybox")
-        return
-    }
+    if Context.image_environment == nil do return true
 
     env := Context.image_environment.?
     if env.environment_map == nil {
         dbg.log(.ERROR, "Image environment map must be avaiable to render skybox")
         return
     }
-    // dbg.log(.INFO, "Rendering skybox")
+
     env_map := env.environment_map.?
     if env_map.gpu_texture == nil {
         dbg.log(.ERROR, "Environment cubemap gpu texture is not provided")
@@ -184,20 +197,19 @@ render_skybox :: proc(manager: ^resource.ResourceManager, viewpoint: ^cam.Camera
         Context.skybox_shader^ = create_skybox_shader(manager, allocator) or_return
     }
 
+    dbg.log(.INFO, "Rendering skybox")
+
     attach_program(Context.skybox_shader^) or_return
 
     view := glm.mat4(glm.mat3(viewpoint.look_at))
     resource.set_uniform(Context.skybox_shader, VIEW_MATRIX_UNIFORM, view)
     resource.set_uniform(Context.skybox_shader, PROJECTION_MATRIX_UNIFORM, viewpoint.perspective)
 
-    irr := env.irradiance_map.?
-    spec := env.prefilter_map.?
-    // bind_texture(0, irr.gpu_texture.?, .CUBEMAP)
-    bind_texture(0, spec.gpu_texture.?, .CUBEMAP)
-    // bind_texture(0, env_map.gpu_texture.?, .CUBEMAP)
+    bind_texture(0, env_map.gpu_texture.?, .CUBEMAP)
     resource.set_uniform(Context.skybox_shader, ENV_MAP_UNIFORM, i32(0))
 
-    set_face_culling(false)
+    cull_geometry_faces(.FRONT) // We see the back faces of the cube
+    set_depth_func(.LEQUAL)
     render_primitive_cube(Context.skybox_comp.vao.?)
 
     return true
@@ -396,6 +408,9 @@ handle_pass_properties :: proc(pass: RenderPass) -> (ok: bool) {
         set_blend(false)
         set_default_blend_func()
     }
+
+    if properties.depth_func != nil do set_depth_func(properties.depth_func.?)
+    else do set_default_depth_func()
 
     if properties.face_culling != nil {
         cull_geometry_faces(properties.face_culling.?)
@@ -1285,7 +1300,13 @@ ImageEnvironment :: struct {
 }
 
 // Does not create cubemap
-make_image_environment :: proc(environment_map_uri: string, flip_map := false, allocator := context.allocator) -> (ok: bool) {
+make_image_environment :: proc(
+    manager: ^resource.ResourceManager,
+    environment_map_uri: string,
+    env_face_size: Maybe(i32),
+    flip_map := false,
+    allocator := context.allocator
+) -> (ok: bool) {
     env: ImageEnvironment
     using env.environment_tex
     name = strings.clone("EnvironmentTex", allocator=allocator)
@@ -1294,6 +1315,14 @@ make_image_environment :: proc(environment_map_uri: string, flip_map := false, a
     properties[.WRAP_S] = .REPEAT
     properties[.MIN_FILTER] = .LINEAR_MIPMAP_LINEAR
     image = resource.load_image_from_uri(environment_map_uri, flip_image=flip_map, as_float=true, allocator=allocator) or_return
+
+    transfer_texture(&env.environment_tex, gl.RGB16F, 0, gl.RGBA, gl.FLOAT, true) or_return
+
+    if env_face_size != nil {
+        w := env_face_size.?
+        // Automatically creates temp framebuffer
+        env.environment_map = create_environment_map(manager, w, w, env.environment_tex, environment_project(), cubemap_views(), allocator=allocator) or_return
+    }
 
     Context.image_environment = env
 
@@ -1311,6 +1340,16 @@ destroy_image_environment :: proc(environment: Maybe(ImageEnvironment)) {
     if env.prefilter_map != nil do resource.destroy_texture(&env.prefilter_map.?)
     if env.brdf_lookup != nil do resource.destroy_texture(&env.brdf_lookup.?)
 }
+
+destroy_ibl_in_image_environment :: proc(environment: Maybe(ImageEnvironment)) {
+    if environment == nil do return
+    env := environment.?
+
+    if env.irradiance_map != nil do resource.destroy_texture(&env.irradiance_map.?)
+    if env.prefilter_map != nil do resource.destroy_texture(&env.prefilter_map.?)
+    if env.brdf_lookup != nil do resource.destroy_texture(&env.brdf_lookup.?)
+}
+
 
 ibl_render_setup :: proc(
     manager: ^resource.ResourceManager,
@@ -1342,7 +1381,7 @@ ibl_render_setup :: proc(
     environment: ^ImageEnvironment = &environment_m.?
 
     set_depth_test(true)
-    gl.DepthFunc(gl.LEQUAL)
+    set_depth_func(.LEQUAL)
     gl.Enable(gl.TEXTURE_CUBE_MAP_SEAMLESS)
 
     transfer_texture(&environment.environment_tex, gl.RGB16F, 0, gl.RGBA, gl.FLOAT, true) or_return
@@ -1360,7 +1399,7 @@ ibl_render_setup :: proc(
     check_framebuffer_status(ibl_framebuffer, loc=loc) or_return
     dbg.log(.INFO, "Bound renderbuffer to frame buffer")
 
-    project := glm.mat4Perspective(glm.radians_f32(90), 1, 0.1, 10)
+    project := environment_project()
 
     views := cubemap_views()
 
@@ -1429,6 +1468,10 @@ ibl_render_setup :: proc(
     return
 }
 
+environment_project :: proc() -> matrix[4, 4]f32 {
+    return glm.mat4Perspective(glm.radians_f32(90), 1, 0.1, 10)
+}
+
 // Follows OpenGL orientation order: +X, -X, +Y, -Y, +Z, -Z
 cubemap_views :: proc() -> [6]matrix[4, 4]f32 {
     return [6]matrix[4, 4]f32 {
@@ -1447,12 +1490,41 @@ create_environment_map :: proc(
     environment_tex: resource.Texture,
     project: matrix[4, 4]f32,
     views: [6]matrix[4, 4]f32,
-    fbo: u32,
-    cube_vao: u32,
+    fbo: Maybe(u32) = nil,
+    cube_vao: Maybe(u32) = nil,
     allocator := context.allocator
 ) -> (env: resource.Texture, ok: bool) {
     using env
     name = strings.clone("EnvironmentMap", allocator=allocator)
+
+    fbo_id: u32
+    cube_vao_id: u32
+
+    // Create framebuffer if not given
+    created_framebuffer: ^FrameBuffer
+    if fbo == nil {
+        created_framebuffer = new(FrameBuffer)
+        created_framebuffer^ = make_framebuffer(env_map_face_w, env_map_face_h, allocator)
+        fbo_id = created_framebuffer.id.?
+    }
+    else do fbo_id = fbo.?
+    defer if created_framebuffer != nil {
+        destroy_framebuffer(created_framebuffer)
+        free(created_framebuffer)
+    }
+
+    // Create cube if not given
+    created_cube: ^resource.GLComponent
+    if cube_vao == nil {
+        created_cube = new(resource.GLComponent)
+        created_cube^ = create_primitive_cube()
+        cube_vao_id = created_cube.vao.?
+    }
+    else do cube_vao_id = cube_vao.?
+    defer if created_cube != nil {
+        release_gl_component(created_cube^)
+        free(created_cube)
+    }
 
     properties = resource.default_texture_properties()
     properties[.MIN_FILTER] = .LINEAR_MIPMAP_LINEAR
@@ -1469,13 +1541,13 @@ create_environment_map :: proc(
 
     set_render_viewport(0, 0, env_map_face_w, env_map_face_h)
 
-    bind_framebuffer_raw(fbo)
+    bind_framebuffer_raw(fbo_id)
     for i in 0..<6 {
         resource.set_uniform(&shader, "m_View", views[i])
-        bind_texture_to_frame_buffer(fbo, env, .COLOUR, u32(i), 0, 0) or_return
+        bind_texture_to_frame_buffer(fbo_id, env, .COLOUR, u32(i), 0, 0) or_return
         clear_mask({ .COLOUR_BIT, .DEPTH_BIT })
 
-        render_primitive_cube(cube_vao)
+        render_primitive_cube(cube_vao_id)
     }
 
     bind_default_framebuffer()
