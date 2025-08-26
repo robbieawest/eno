@@ -108,8 +108,10 @@ render :: proc(
         handle_pass_properties(pass^) or_return
         check_framebuffer_status_raw() or_return
 
-        if len(mesh_data) != 0 do render_geometry(manager, scene, pipeline.shader_store, pass, mesh_data^, temp_allocator) or_return
+        update_camera_ubo(scene) or_return
+        update_lights_ssbo(scene) or_return
 
+        if len(mesh_data) != 0 do render_geometry(manager, scene, pipeline.shader_store, pass, mesh_data^, temp_allocator) or_return
         if pass.properties.render_skybox do render_skybox(manager, scene.viewpoint, allocator) or_return
     }
 
@@ -140,8 +142,6 @@ render_geometry :: proc(
         attach_program(shader_pass^)
 
         // bind_ibl_uniforms(scene, shader_pass) or_return
-        update_camera_ubo(scene) or_return
-        update_lights_ssbo(scene) or_return
 
         for mesh_data in mapping.meshes {
             model_mat, normal_mat := model_and_normal(mesh_data.mesh, mesh_data.world, scene.viewpoint)
@@ -196,8 +196,6 @@ render_skybox :: proc(manager: ^resource.ResourceManager, viewpoint: ^cam.Camera
         Context.skybox_shader = new(resource.ShaderProgram)
         Context.skybox_shader^ = create_skybox_shader(manager, allocator) or_return
     }
-
-    dbg.log(.INFO, "Rendering skybox")
 
     attach_program(Context.skybox_shader^) or_return
 
@@ -1330,6 +1328,7 @@ make_image_environment :: proc(
     return
 }
 
+// Todo release GPU memory
 destroy_image_environment :: proc(environment: Maybe(ImageEnvironment)) {
     if environment == nil do return
     env := environment.?
@@ -1494,8 +1493,6 @@ create_environment_map :: proc(
     cube_vao: Maybe(u32) = nil,
     allocator := context.allocator
 ) -> (env: resource.Texture, ok: bool) {
-    using env
-    name = strings.clone("EnvironmentMap", allocator=allocator)
 
     fbo_id: u32
     cube_vao_id: u32
@@ -1509,7 +1506,7 @@ create_environment_map :: proc(
     }
     else do fbo_id = fbo.?
     defer if created_framebuffer != nil {
-        destroy_framebuffer(created_framebuffer)
+        destroy_framebuffer(created_framebuffer, release_attachments=false)
         free(created_framebuffer)
     }
 
@@ -1526,6 +1523,9 @@ create_environment_map :: proc(
         free(created_cube)
     }
 
+    using env
+    name = strings.clone("EnvironmentMap", allocator=allocator)
+
     properties = resource.default_texture_properties()
     properties[.MIN_FILTER] = .LINEAR_MIPMAP_LINEAR
 
@@ -1541,6 +1541,11 @@ create_environment_map :: proc(
 
     set_render_viewport(0, 0, env_map_face_w, env_map_face_h)
 
+    gl.Disable(gl.DEPTH_TEST)
+    gl.Disable(gl.BLEND)
+    gl.Disable(gl.CULL_FACE)
+    gl.Disable(gl.MULTISAMPLE)
+
     bind_framebuffer_raw(fbo_id)
     for i in 0..<6 {
         resource.set_uniform(&shader, "m_View", views[i])
@@ -1548,6 +1553,8 @@ create_environment_map :: proc(
         clear_mask({ .COLOUR_BIT, .DEPTH_BIT })
 
         render_primitive_cube(cube_vao_id)
+
+        detach_from_framebuffer(fbo_id, env.type, .COLOUR, u32(i), 0)
     }
 
     bind_default_framebuffer()

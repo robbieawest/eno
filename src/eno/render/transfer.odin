@@ -585,7 +585,7 @@ set_face_culling :: proc(cull: bool) {
 
 set_depth_test :: proc(test: bool) {
     if test do gl.Enable(gl.DEPTH_TEST)
-     else do gl.Disable(gl.DEPTH_TEST)
+    else do gl.Disable(gl.DEPTH_TEST)
 }
 
 set_stencil_test :: proc(test: bool) {
@@ -721,6 +721,25 @@ bind_texture_to_frame_buffer :: proc(
     }
 
     return true
+}
+
+detach_from_framebuffer :: proc(fbo: u32, texture_type: resource.TextureType, type: AttachmentType, cube_face: u32 = 0, attachment_loc: u32 = 0) {
+    dbg.log()
+
+    gl_attachment_id: u32 = 0
+        switch type {
+        case .COLOUR: gl_attachment_id = gl.COLOR_ATTACHMENT0 + attachment_loc
+        case .DEPTH: gl_attachment_id = gl.DEPTH_ATTACHMENT
+        case .STENCIL: gl_attachment_id = gl.STENCIL_ATTACHMENT
+        case .DEPTH_STENCIL: gl_attachment_id = gl.DEPTH_STENCIL_ATTACHMENT
+    }
+
+    if texture_type == .CUBEMAP {
+        gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl_attachment_id, gl.TEXTURE_CUBE_MAP_POSITIVE_X + cube_face, 0, 0)
+    }
+    else {
+        gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl_attachment_id, conv_texture_type(texture_type), 0, 0)
+    }
 }
 
 bind_renderbuffer_to_frame_buffer :: proc(
