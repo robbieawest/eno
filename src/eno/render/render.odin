@@ -141,7 +141,12 @@ render_geometry :: proc(
         shader_pass := resource.get_shader_pass(manager, mapping.shader) or_return
         attach_program(shader_pass^)
 
-        // bind_ibl_uniforms(scene, shader_pass) or_return
+        env_settings, env_set := GlobalRenderSettings.environment_settings.?
+        if env_set {
+            ibl_set := env_settings.ibl_settings != nil
+            if ibl_set do bind_ibl_uniforms(shader_pass) or_return
+            resource.set_uniform(shader_pass, IBL_ENABLED, i32(ibl_set))
+        }
 
         for mesh_data in mapping.meshes {
             model_mat, normal_mat := model_and_normal(mesh_data.mesh, mesh_data.world, scene.viewpoint)
@@ -1649,6 +1654,7 @@ create_ibl_prefilter_map :: proc(
     using prefilter
     name = strings.clone("PrefilterMap", allocator=allocator)
 
+
     properties = resource.default_texture_properties()
     properties[.MIN_FILTER] = .LINEAR_MIPMAP_LINEAR
     gpu_texture = make_texture(prefilter_map_face_w, prefilter_map_face_h, nil, gl.RGB16F, 0, gl.RGB, gl.FLOAT, resource.TextureType.CUBEMAP, properties, true)
@@ -1661,12 +1667,19 @@ create_ibl_prefilter_map :: proc(
     resource.set_uniform(&shader, "m_Project", project)
     bind_texture(0, env_cubemap, .CUBEMAP) or_return
 
+    gl.Enable(gl.DEPTH_TEST)
+    // gl.CullFace(gl.FRONT)
+    gl.Disable(gl.STENCIL_TEST)
+
     bind_framebuffer_raw(fbo)
+    check_framebuffer_status_raw() or_return
     MIP_LEVELS :: 5
     for mip in 0..<MIP_LEVELS {
 
-        mip_width := prefilter_map_face_w * i32(math.pow(0.5, f32(mip)))
-        mip_height := prefilter_map_face_h * i32(math.pow(0.5, f32(mip)))
+        mip_width := i32(f32(prefilter_map_face_w) * math.pow(0.5, f32(mip)))
+        mip_height := i32(f32(prefilter_map_face_h) * math.pow(0.5, f32(mip)))
+
+        dbg.log(.INFO, "Mip w: %d, h: %d", mip_width, mip_height)
 
         bind_renderbuffer_raw(rbo)
         set_render_buffer_storage(gl.DEPTH_COMPONENT24, mip_width, mip_height)

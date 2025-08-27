@@ -34,7 +34,7 @@ set_environment_settings :: proc(
     // Reset environment
     destroy_image_environment(Context.image_environment)
     make_image_environment(manager, settings.environment_texture_uri, settings.environment_face_size, allocator=allocator) or_return
-    if settings.ibl_settings != nil do ibl_render_setup(manager, allocator, loc)
+    if settings.ibl_settings != nil do ibl_render_setup(manager, allocator, loc) or_return
     return true
 }
 
@@ -44,6 +44,7 @@ disable_environment_settings :: proc() {
     GlobalRenderSettings.environment_settings = nil
 }
 
+IBL_ENABLED :: "enableIBL"
 IBLSettings :: struct {
     prefilter_map_face_size: i32,
     irradiance_map_face_size: i32,
@@ -55,8 +56,8 @@ make_ibl_settings :: proc(#any_int pref_face_size: i32 = 1024, #any_int irr_face
 }
 
 disable_ibl_settings :: proc() {
-    env_settings, env_settings_ok := GlobalRenderSettings.environment_settings.?
-    if !env_settings_ok do return
+    if GlobalRenderSettings.environment_settings == nil do return
+    env_settings: ^EnvironmentSettings = &GlobalRenderSettings.environment_settings.?
     if env_settings.ibl_settings == nil do return
 
     destroy_ibl_in_image_environment(Context.image_environment)

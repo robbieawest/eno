@@ -101,8 +101,6 @@ init_game_with_scene :: proc(scene: ^ecs.Scene, window: win.WindowTarget, every_
     Game.controller = control.init_controller(allocator)
     Game.resource_manager = resource.init_resource_manager(allocator)
     Game.meta_data.time_started = time.now()._nsec
-
-    ui.add_ui_elements(render.render_settings_ui_element) or_return
     return true
 }
 

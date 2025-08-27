@@ -6,6 +6,7 @@ import "../ecs"
 import "../resource"
 import cutils "../camera_utils"
 import "../standards"
+import "../ui"
 
 import "core:strings"
 import "core:log"
@@ -204,6 +205,9 @@ before_frame :: proc() -> (ok: bool) {
 
     // Use if you have pre render passes
     // render.pre_render(manager, game_data.render_pipeline, game.Game.scene) or_return
+
+    ui.add_ui_elements(render.render_settings_ui_element) or_return
+    ui.show_demo_window(true) or_return
 
     return true
 }

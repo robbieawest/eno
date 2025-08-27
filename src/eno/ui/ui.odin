@@ -29,7 +29,7 @@ setup_ui :: proc(window: ^SDL.Window, sdl_gl_context: rawptr, allocator := conte
         return
     }
 
-    init_ui_context(allocator)
+    init_ui_context(allocator=allocator)
 
     return true
 }
@@ -55,12 +55,18 @@ destroy_ui_context :: proc() {
 // A UIElement MUST begin with im.Begin() and end with im.End()
 UIElement :: #type proc() -> bool
 UIContext :: struct {
-    elements: [dynamic]UIElement
+    elements: [dynamic]UIElement,
+    show_demo_window: bool
 }
 
 Context: Maybe(UIContext)
-init_ui_context :: proc(allocator := context.allocator) {
-    Context = UIContext{ make([dynamic]UIElement, allocator=allocator)}
+init_ui_context :: proc(show_demo_win := false, allocator := context.allocator) {
+    Context = UIContext{ make([dynamic]UIElement, allocator=allocator), show_demo_win }
+}
+
+show_demo_window :: proc(show: bool) -> (ok: bool) {
+    (check_context() or_return).show_demo_window = show
+    return true
 }
 
 check_context :: proc() -> (ctx: ^UIContext, ok: bool) {
@@ -84,15 +90,7 @@ render_ui :: proc(#any_int display_w, #any_int display_y: i32) -> (running: bool
     imgui_impl_sdl2.NewFrame()
     im.NewFrame()
 
-    im.ShowDemoWindow(nil)
-
-    if im.Begin("Window containing a quit button") {
-        if im.Button("The quit button in question") {
-            dbg.log(.INFO, "Quit button hit")
-            return
-        }
-    }
-    im.End()
+    if ctx.show_demo_window do im.ShowDemoWindow(nil)
 
     for element in ctx.elements do element() or_return
 
