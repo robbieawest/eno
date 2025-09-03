@@ -29,12 +29,8 @@ every_frame :: proc() -> (ok: bool) {
 }
 
 load_supra :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
-
     scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/Supra/scene.gltf") or_return
     models := scene_res.models
-
-    supra := &models[0]
-    // supra.world_comp.rotation =
 
     defer resource.destroy_model_scene_result(scene_res)
     ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
@@ -89,7 +85,7 @@ load_dhelmet :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
 before_frame :: proc() -> (ok: bool) {
 
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
-    load_supra(arch) or_return
+    load_clearcoat_test(arch) or_return
 
     render.init_render_pipeline()
 
@@ -171,13 +167,14 @@ before_frame :: proc() -> (ok: bool) {
     light_height: f32 = 5.0
     light_dist: f32 = 5.0
     intensity: f32 = 3.0
+    enabled := false
     append_elems(&lights,
-        resource.PointLight{ "demo_light", true, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ light_dist, light_height, light_dist } },
-        resource.PointLight{ "demo_light2", true, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ light_dist, light_height, -light_dist } },
-        resource.PointLight{ "demo_light3", true, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -light_dist, light_height, light_dist } },
-        resource.PointLight{ "demo_light4", true, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -light_dist, light_height, -light_dist } },
-        resource.PointLight{ "demo_light5", true, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ light_dist, light_height, 0.0 } },
-        resource.PointLight{ "demo_light6", true, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -light_dist, light_height, 0.0 } },
+        resource.PointLight{ "demo_light", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ light_dist, light_height, light_dist } },
+        resource.PointLight{ "demo_light2", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ light_dist, light_height, -light_dist } },
+        resource.PointLight{ "demo_light3", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -light_dist, light_height, light_dist } },
+        resource.PointLight{ "demo_light4", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -light_dist, light_height, -light_dist } },
+        resource.PointLight{ "demo_light5", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ light_dist, light_height, 0.0 } },
+        resource.PointLight{ "demo_light6", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -light_dist, light_height, 0.0 } },
     )
 
     for light in lights {

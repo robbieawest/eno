@@ -7,6 +7,9 @@ import im "../../../libs/dear-imgui"
 import "../../../libs/dear-imgui/imgui_impl_sdl2"
 import "../../../libs/dear-imgui/imgui_impl_opengl3"
 
+import "core:slice"
+import "core:strconv"
+import "core:mem"
 import dbg "../debug"
 
 setup_ui :: proc(window: ^SDL.Window, sdl_gl_context: rawptr, allocator := context.allocator) -> (ok: bool) {
@@ -56,12 +59,17 @@ destroy_ui_context :: proc() {
 UIElement :: #type proc() -> bool
 UIContext :: struct {
     elements: [dynamic]UIElement,
-    show_demo_window: bool
+    show_demo_window: bool,
+
+    // Persistent buffers for input fields
+    // Uses cstring bc idgaf
+    buffers: map[cstring][]byte,
+    allocator: mem.Allocator
 }
 
 Context: Maybe(UIContext)
 init_ui_context :: proc(show_demo_win := false, allocator := context.allocator) {
-    Context = UIContext{ make([dynamic]UIElement, allocator=allocator), show_demo_win }
+    Context = UIContext{ make([dynamic]UIElement, allocator=allocator), show_demo_win, make(map[cstring][]byte, allocator=allocator), allocator }
 }
 
 show_demo_window :: proc(show: bool) -> (ok: bool) {
@@ -115,4 +123,58 @@ toggle_mouse_usage :: proc() {
         io.ConfigFlags -= { .NoMouse }
     }
     else do io.ConfigFlags += { .NoMouse }
+}
+
+DEFAULT_CHAR_LIMIT: uint = 10
+text_input :: proc(label: cstring, #any_int char_limit: uint = DEFAULT_CHAR_LIMIT, flags: im.InputTextFlags = {}) -> (result: Maybe(string), ok: bool) {
+    ctx := check_context() or_return
+    buf := get_buffer(label, char_limit) or_return
+
+    im.InputText(label, cstring(raw_data(buf)), char_limit, flags)
+    res := check_buffer(label, buf) or_return
+    ok = true
+    if res == nil do return
+    else do return transmute(string)buf, ok
+}
+
+int_text_input :: proc(label: cstring, #any_int char_limit: uint = DEFAULT_CHAR_LIMIT) -> (result: Maybe(int), ok: bool) {
+    str := text_input(label, char_limit, { .CharsDecimal }) or_return
+    return str == nil ? nil : strconv.atoi(str.?), true
+}
+
+get_buffer :: proc(label: cstring, size: uint) -> (buf: []byte, ok: bool) {
+    ctx := check_context() or_return
+    if label in ctx.buffers {
+        return ctx.buffers[label]
+    }
+    else {
+        buf = make([]byte, size, allocator=ctx.allocator)
+        ctx.buffers[label] = buf
+    }
+
+    ok = true
+    return
+}
+
+// Copies buf if new label
+// Returns new_buf if the buffer has changed, nil if not
+check_buffer :: proc(label: cstring, buf: []byte) -> (new_buf: [^]byte, ok: bool) {
+    ctx := check_context() or_return
+
+    if label not_in ctx.buffers {
+        buf := slice.clone(buf, allocator=ctx.allocator)
+        new_buf = raw_data(buf)
+        ctx.buffers[label] = buf
+    }
+    else {
+        e_buf := ctx.buffers[label]
+        if slice.equal(e_buf, buf) do return nil, true
+        else {
+            ctx.buffers[label] = buf
+            new_buf = raw_data(buf)
+        }
+    }
+
+    ok = true
+    return
 }

@@ -4,37 +4,62 @@ import standards "../standards"
 import "../resource"
 import dbg "../debug"
 
+import "core:strings"
+
 // Defines render settings, that which you would set in the ui
 // Think of each of these settings as a hierarchical menu item in the ui
 
 RenderSettings :: struct {
-    environment_settings: Maybe(EnvironmentSettings)
+    environment_settings: Maybe(EnvironmentSettings),
+    unapplied_environment_settings: Maybe(EnvironmentSettings)
 }
 GlobalRenderSettings: RenderSettings
 
 EnvironmentSettings :: struct {
     environment_face_size: i32,
     environment_texture_uri: string,
-    ibl_settings: Maybe(IBLSettings)
+    ibl_settings: Maybe(IBLSettings),
+    unapplied_ibl_settings: Maybe(IBLSettings)
 }
 
 DEFAULT_ENV_MAP :: standards.TEXTURE_RESOURCE_PATH + "drackenstein_quarry_4k.hdr"
 make_environment_settings :: proc(#any_int env_face_size: i32 = 2048, env_tex_uri: string = DEFAULT_ENV_MAP, ibl_settings: Maybe(IBLSettings) = nil) -> EnvironmentSettings {
-    return { env_face_size, env_tex_uri, ibl_settings }
+    return { env_face_size, env_tex_uri, ibl_settings, nil }
 }
 
-set_environment_settings :: proc(
-    manager: ^resource.ResourceManager,
-    settings: EnvironmentSettings,
-    allocator := context.allocator,
-    loc := #caller_location
-) -> (ok: bool) {
-    GlobalRenderSettings.environment_settings = settings
+// For use in apply procedures, does not check the ibl settings
+compare_environment_settings :: proc(a: EnvironmentSettings, b: EnvironmentSettings) -> bool {
+    return a.environment_face_size == b.environment_face_size && strings.compare(a.environment_texture_uri, b.environment_texture_uri) == 0
+}
 
-    // Reset environment
-    destroy_image_environment(Context.image_environment)
-    make_image_environment(manager, settings.environment_texture_uri, settings.environment_face_size, allocator=allocator) or_return
-    if settings.ibl_settings != nil do ibl_render_setup(manager, allocator, loc) or_return
+set_environment_settings :: proc(settings: EnvironmentSettings) {
+    GlobalRenderSettings.unapplied_environment_settings = settings
+}
+
+apply_environment_settings :: proc(manager: ^resource.ResourceManager, allocator := context.allocator, loc := #caller_location) -> (ok: bool) {
+    if GlobalRenderSettings.unapplied_environment_settings == nil {
+        dbg.log(.ERROR, "Unapplied environment settings cannot be nil in apply")
+        return
+    }
+
+    exist_settings := GlobalRenderSettings.environment_settings
+    settings := GlobalRenderSettings.unapplied_environment_settings.?
+
+    GlobalRenderSettings.environment_settings = GlobalRenderSettings.unapplied_environment_settings
+    changed := exist_settings == nil || compare_environment_settings(exist_settings.?, settings)
+    if changed {
+        destroy_image_environment(Context.image_environment)
+        make_image_environment(manager, settings.environment_texture_uri, settings.environment_face_size, allocator=allocator) or_return
+
+        if settings.ibl_settings != nil {
+            if exist_settings == nil do ibl_render_setup(manager, allocator, loc) or_return
+            else {
+                old_set := exist_settings.?
+                if old_set.ibl_settings != settings.ibl_settings do ibl_render_setup(manager, allocator, loc) or_return
+            }
+        }
+    }
+
     return true
 }
 
