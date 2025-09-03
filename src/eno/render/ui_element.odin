@@ -82,16 +82,10 @@ render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
             env_settings: ^EnvironmentSettings = &GlobalRenderSettings.unapplied_environment_settings.?
 
             im.Text("Environment face size:")
-            new_env_face_size := ui.int_text_input("##env_face_size") or_return
-            if new_env_face_size != nil do env_settings.environment_face_size = i32(new_env_face_size.?)
+            env_settings.environment_face_size = i32(ui.int_text_input("##env_face_size") or_return)
 
             im.Text("Environment texture uri")
-            new_env_tex_uri := ui.text_input("##env_tex_uri") or_return
-            if new_env_tex_uri != nil do env_settings.environment_texture_uri = new_env_tex_uri.?
-
-            if im.Button("Apply image environment settings") {
-                apply_environment_settings(Context.manager, Context.allocator)
-            }
+            env_settings.environment_texture_uri = ui.text_input("##env_tex_uri") or_return
 
             if im.TreeNode("IBL Settings") {
                 defer im.TreePop()
@@ -109,6 +103,10 @@ render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
                         return true
                     }
                 }
+            }
+
+            if im.Button("Apply image environment settings") {
+                apply_environment_settings(Context.manager, Context.allocator)
             }
         }
         else do if im.Button("Enable Image Environment") {

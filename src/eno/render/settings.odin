@@ -19,17 +19,16 @@ EnvironmentSettings :: struct {
     environment_face_size: i32,
     environment_texture_uri: string,
     ibl_settings: Maybe(IBLSettings),
-    unapplied_ibl_settings: Maybe(IBLSettings)
 }
 
 DEFAULT_ENV_MAP :: standards.TEXTURE_RESOURCE_PATH + "drackenstein_quarry_4k.hdr"
 make_environment_settings :: proc(#any_int env_face_size: i32 = 2048, env_tex_uri: string = DEFAULT_ENV_MAP, ibl_settings: Maybe(IBLSettings) = nil) -> EnvironmentSettings {
-    return { env_face_size, env_tex_uri, ibl_settings, nil }
+    return { env_face_size, env_tex_uri, ibl_settings }
 }
 
-// For use in apply procedures, does not check the ibl settings
+// For use in apply procedures
 compare_environment_settings :: proc(a: EnvironmentSettings, b: EnvironmentSettings) -> bool {
-    return a.environment_face_size == b.environment_face_size && strings.compare(a.environment_texture_uri, b.environment_texture_uri) == 0
+    return a.environment_face_size == b.environment_face_size && strings.compare(a.environment_texture_uri, b.environment_texture_uri) == 0 && a.ibl_settings == b.ibl_settings
 }
 
 set_environment_settings :: proc(settings: EnvironmentSettings) {
@@ -46,18 +45,13 @@ apply_environment_settings :: proc(manager: ^resource.ResourceManager, allocator
     settings := GlobalRenderSettings.unapplied_environment_settings.?
 
     GlobalRenderSettings.environment_settings = GlobalRenderSettings.unapplied_environment_settings
-    changed := exist_settings == nil || compare_environment_settings(exist_settings.?, settings)
+    dbg.log(.INFO, "Applied settings: %#v", GlobalRenderSettings.environment_settings)
+    changed := exist_settings == nil || !compare_environment_settings(exist_settings.?, settings)
     if changed {
         destroy_image_environment(Context.image_environment)
         make_image_environment(manager, settings.environment_texture_uri, settings.environment_face_size, allocator=allocator) or_return
 
-        if settings.ibl_settings != nil {
-            if exist_settings == nil do ibl_render_setup(manager, allocator, loc) or_return
-            else {
-                old_set := exist_settings.?
-                if old_set.ibl_settings != settings.ibl_settings do ibl_render_setup(manager, allocator, loc) or_return
-            }
-        }
+        if settings.ibl_settings != nil do ibl_render_setup(manager, allocator, loc) or_return
     }
 
     return true
@@ -87,4 +81,8 @@ disable_ibl_settings :: proc() {
 
     destroy_ibl_in_image_environment(Context.image_environment)
     env_settings.ibl_settings = nil
+
+    if GlobalRenderSettings.unapplied_environment_settings == nil do return
+    env_settings_unapplied: ^EnvironmentSettings = &GlobalRenderSettings.unapplied_environment_settings.?
+    env_settings_unapplied.ibl_settings = nil
 }

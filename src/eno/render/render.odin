@@ -243,7 +243,7 @@ bind_ibl_uniforms :: proc( shader: ^resource.ShaderProgram) -> (ok: bool) {
 
     env := m_env.?
     if env.environment_map == nil || env.brdf_lookup == nil || env.irradiance_map == nil || env.prefilter_map == nil {
-        dbg.log(.ERROR, "Not all IBL textures/cubemaps are available")
+        dbg.log(.ERROR, "Not all IBL textures/cubemaps are available, environment: %#v", env)
         return
     }
     irradiance_map := env.irradiance_map.?
