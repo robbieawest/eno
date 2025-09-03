@@ -2,8 +2,63 @@ package render
 
 import im "../../../libs/dear-imgui/"
 import "../ui"
+import utils "../utils"
 
 import dbg "../debug"
+import slice "core:slice"
+import "core:strconv"
+import "base:intrinsics"
+
+UIRenderBuffer :: enum {
+    ENV_FACE,
+    ENV_TEX_URI
+}
+
+// Not declaring as constant because taking pointer of Buffers is needed for slice.enumerated_array
+Buffers := [UIRenderBuffer]cstring {
+    .ENV_FACE = "##env_face_size",
+    .ENV_TEX_URI = "##env_tex_uri"
+}
+
+BUF_CHAR_LIM :: ui.DEFAULT_CHAR_LIMIT
+
+delete_bufs :: proc() -> (ok: bool) {
+    return ui.delete_buffers(..slice.enumerated_array(&Buffers))
+}
+
+load_bufs :: proc() -> (ok: bool) {
+    settings, settings_ok := GlobalRenderSettings.unapplied_environment_settings.?
+    if !settings_ok {
+        dbg.log(.ERROR, "Settings must be available to load bufs")
+        return
+    }
+
+    buf_infos: [len(UIRenderBuffer)]ui.BufferInit
+    buffers := slice.enumerated_array(&Buffers)
+
+    i := 0
+    for buf, buf_type in Buffers {
+        str_buf: string
+        byte_buf := make([]byte, BUF_CHAR_LIM, Context.allocator)
+        buf_type: UIRenderBuffer = buf_type  // Intellij doesn't know the type
+
+        switch buf_type {
+            case .ENV_FACE:
+                str_buf = strconv.itoa(byte_buf, int(settings.environment_face_size))
+            case .ENV_TEX_URI:
+                byte_buf = slice.clone(transmute([]byte)(settings.environment_texture_uri), Context.allocator)
+        }
+
+        buf_infos[i] = { buf, byte_buf }
+        i += 1
+    }
+
+    ui.load_buffers(..buf_infos[:])
+
+    for info in buf_infos do delete(info.buf, Context.allocator)
+
+    return true
+}
 
 render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
     if Context.manager == nil {
@@ -20,6 +75,7 @@ render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
         if GlobalRenderSettings.environment_settings != nil {
             if im.Button("Disable Image Environment") {
                 disable_environment_settings()
+                delete_bufs()
                 return true
             }
             // Show environment settings
@@ -58,6 +114,7 @@ render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
         else do if im.Button("Enable Image Environment") {
             set_environment_settings(make_environment_settings())
             apply_environment_settings(Context.manager, Context.allocator) or_return
+            load_bufs() or_return
             return true
         }
 

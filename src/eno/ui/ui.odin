@@ -125,7 +125,7 @@ toggle_mouse_usage :: proc() {
     else do io.ConfigFlags += { .NoMouse }
 }
 
-DEFAULT_CHAR_LIMIT: uint = 10
+DEFAULT_CHAR_LIMIT: uint : 10
 text_input :: proc(label: cstring, #any_int char_limit: uint = DEFAULT_CHAR_LIMIT, flags: im.InputTextFlags = {}) -> (result: Maybe(string), ok: bool) {
     ctx := check_context() or_return
     buf := get_buffer(label, char_limit) or_return
@@ -154,6 +154,35 @@ get_buffer :: proc(label: cstring, size: uint) -> (buf: []byte, ok: bool) {
 
     ok = true
     return
+}
+
+BufferInit :: struct { label: cstring, buf: []byte }
+load_buffers :: proc(buffers: ..BufferInit) -> (ok: bool) {
+    ctx := check_context() or_return
+
+    for buffer in buffers {
+        if buffer.label in ctx.buffers do continue
+        ctx.buffers[buffer.label] = slice.clone(buffer.buf, ctx.allocator)
+    }
+
+    return true
+}
+
+delete_buffers :: proc(buffers: ..cstring) -> (ok: bool) {
+    ctx := check_context() or_return
+
+    for buffer in buffers {
+        exist_buf, buf_exists := ctx.buffers[buffer]
+        if !buf_exists {
+            dbg.log(.ERROR, "Attempting to delete buffer that does not map")
+            return
+        }
+
+        delete(exist_buf, ctx.allocator)
+        delete_key(&ctx.buffers, buffer)
+    }
+
+    return true
 }
 
 // Copies buf if new label
