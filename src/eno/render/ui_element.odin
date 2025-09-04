@@ -43,21 +43,8 @@ load_bufs :: proc() -> (ok: bool) {
         buf_type: UIRenderBuffer = buf_type  // Intellij doesn't know the type
 
         switch buf_type {
-            case .ENV_FACE:
-                if settings.environment_face_size % 10 >= i32(BUF_NUMERIC_CHAR_LIM) {
-                    dbg.log(.ERROR, "Environment face size needs to many characters for ui buffer")
-                    return
-                }
-                byte_buf = make([]byte, BUF_NUMERIC_CHAR_LIM, Context.allocator)
-                strconv.itoa(byte_buf, int(settings.environment_face_size))
-            case .ENV_TEX_URI:
-                if uint(len(settings.environment_texture_uri)) >= BUF_TEXT_CHAR_LIM {
-                    dbg.log(.ERROR, "Environment texture uri is greater than the ui buffer char limit")
-                    return
-                }
-
-                byte_buf = make([]byte, BUF_TEXT_CHAR_LIM, Context.allocator)
-                copy(byte_buf, transmute([]byte)(settings.environment_texture_uri))
+            case .ENV_FACE: byte_buf = ui.int_to_buf(settings.environment_face_size, BUF_NUMERIC_CHAR_LIM, Context.allocator) or_return
+            case .ENV_TEX_URI: byte_buf = ui.str_to_buf(settings.environment_texture_uri, BUF_TEXT_CHAR_LIM, Context.allocator) or_return
         }
 
         buf_infos[i] = { buf, byte_buf }

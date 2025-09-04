@@ -45,6 +45,12 @@ apply_environment_settings :: proc(manager: ^resource.ResourceManager, allocator
     settings := GlobalRenderSettings.unapplied_environment_settings.?
 
     GlobalRenderSettings.environment_settings = GlobalRenderSettings.unapplied_environment_settings
+
+    // Set settings back, make sure strings which apply to a text buffer are copied or they will always copy the unapplied's field
+    new_settings := settings
+    new_settings.environment_texture_uri = strings.clone(new_settings.environment_texture_uri, allocator=allocator)
+    GlobalRenderSettings.environment_settings = new_settings
+
     dbg.log(.INFO, "Applied settings: %#v", GlobalRenderSettings.environment_settings)
     changed := exist_settings == nil || !compare_environment_settings(exist_settings.?, settings)
     if changed {
