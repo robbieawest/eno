@@ -6,7 +6,7 @@ import "core:mem"
 import "core:strconv"
 
 int_to_buf :: proc(#any_int num: int, #any_int lim: int, allocator: mem.Allocator, loc := #caller_location) -> (byte_buf: []byte, ok: bool) {
-    if num % 10 >= lim {
+    if num % 10 > lim {
         dbg.log(.ERROR, "Integer needs to many characters for ui buffer", loc=loc)
         return
     }
@@ -18,7 +18,8 @@ int_to_buf :: proc(#any_int num: int, #any_int lim: int, allocator: mem.Allocato
 }
 
 str_to_buf :: proc(str: string, #any_int lim: int, allocator: mem.Allocator, loc := #caller_location) -> (byte_buf: []byte, ok: bool) {
-    if len(str) >= lim {
+    dbg.log(.INFO, "Str to buf: %s, %d", str, lim)
+    if len(str) > lim {
         dbg.log(.ERROR, "Environment texture uri is greater than the ui buffer char limit", loc=loc)
         return
     }

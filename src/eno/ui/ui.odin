@@ -168,7 +168,7 @@ load_buffers :: proc(buffers: ..BufferInit) -> (ok: bool) {
     ctx := check_context() or_return
 
     for buffer in buffers {
-        if buffer.label in ctx.buffers do continue
+        if buffer.label == nil || buffer.label in ctx.buffers do continue
         ctx.buffers[buffer.label] = slice.clone(buffer.buf, ctx.allocator)
     }
 

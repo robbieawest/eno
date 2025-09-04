@@ -11,14 +11,20 @@ import "core:strconv"
 import "base:intrinsics"
 
 UIRenderBuffer :: enum {
-    ENV_FACE,
-    ENV_TEX_URI
+    ENV_FACE_SIZE,
+    ENV_TEX_URI,
+    IRR_FACE_SIZE,
+    PREFILTER_FACE_SIZE,
+    BRDF_LUT_SIZE
 }
 
 // Not declaring as constant because taking pointer of Buffers is needed for slice.enumerated_array
 Buffers := [UIRenderBuffer]cstring {
-    .ENV_FACE = "##env_face_size",
-    .ENV_TEX_URI = "##env_tex_uri"
+    .ENV_FACE_SIZE = "##env_face_size",
+    .ENV_TEX_URI = "##env_tex_uri",
+    .IRR_FACE_SIZE = "##irr_face_size",
+    .PREFILTER_FACE_SIZE = "##pref_face_size",
+    .BRDF_LUT_SIZE = "##brdf_lut_size"
 }
 
 delete_bufs :: proc() -> (ok: bool) {
@@ -34,20 +40,25 @@ load_bufs :: proc() -> (ok: bool) {
         return
     }
 
+    ibl_settings, ibl_enabled := settings.ibl_settings.?
+
     buf_infos: [len(UIRenderBuffer)]ui.BufferInit
     buffers := slice.enumerated_array(&Buffers)
 
     i := 0
     for buf, buf_type in Buffers {
-        byte_buf: []byte
+        byte_buf: Maybe([]byte)
         buf_type: UIRenderBuffer = buf_type  // Intellij doesn't know the type
 
         switch buf_type {
-            case .ENV_FACE: byte_buf = ui.int_to_buf(settings.environment_face_size, BUF_NUMERIC_CHAR_LIM, Context.allocator) or_return
+            case .ENV_FACE_SIZE: byte_buf = ui.int_to_buf(settings.environment_face_size, BUF_NUMERIC_CHAR_LIM, Context.allocator) or_return
             case .ENV_TEX_URI: byte_buf = ui.str_to_buf(settings.environment_texture_uri, BUF_TEXT_CHAR_LIM, Context.allocator) or_return
+            case .IRR_FACE_SIZE: if ibl_enabled do byte_buf = ui.int_to_buf(ibl_settings.irradiance_map_face_size, BUF_NUMERIC_CHAR_LIM, Context.allocator) or_return
+            case .PREFILTER_FACE_SIZE: if ibl_enabled do byte_buf = ui.int_to_buf(ibl_settings.prefilter_map_face_size, BUF_NUMERIC_CHAR_LIM, Context.allocator) or_return
+            case .BRDF_LUT_SIZE: if ibl_enabled do byte_buf = ui.int_to_buf(ibl_settings.brdf_lut_size, BUF_NUMERIC_CHAR_LIM, Context.allocator) or_return
         }
 
-        buf_infos[i] = { buf, byte_buf }
+        if byte_buf != nil do buf_infos[i] = { buf, byte_buf.? }
         i += 1
     }
 
@@ -80,10 +91,10 @@ render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
             env_settings: ^EnvironmentSettings = &GlobalRenderSettings.unapplied_environment_settings.?
 
             im.Text("Environment face size:")
-            env_settings.environment_face_size = i32(ui.int_text_input("##env_face_size") or_return)
+            env_settings.environment_face_size = i32(ui.int_text_input(Buffers[.ENV_FACE_SIZE]) or_return)
 
             im.Text("Environment texture uri")
-            env_settings.environment_texture_uri = ui.text_input("##env_tex_uri") or_return
+            env_settings.environment_texture_uri = ui.text_input(Buffers[.ENV_TEX_URI]) or_return
 
             if im.TreeNode("IBL Settings") {
                 defer im.TreePop()
@@ -92,12 +103,24 @@ render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
                         env_settings.ibl_settings = make_ibl_settings()
                         // set_environment_settings(env_settings^)
                         apply_environment_settings(Context.manager, Context.allocator) or_return
+                        load_bufs() or_return
                         return true
                     }
                 }
                 else {
+                    ibl_settings: ^IBLSettings = &env_settings.ibl_settings.?
+                    im.Text("Irradiance map face size:")
+                    ibl_settings.irradiance_map_face_size = i32(ui.int_text_input(Buffers[.IRR_FACE_SIZE]) or_return)
+
+                    im.Text("Prefilter map face size:")
+                    ibl_settings.prefilter_map_face_size = i32(ui.int_text_input(Buffers[.PREFILTER_FACE_SIZE]) or_return)
+
+                    im.Text("BRDF LUT size:")
+                    ibl_settings.brdf_lut_size = i32(ui.int_text_input(Buffers[.BRDF_LUT_SIZE]) or_return)
+
                     if im.Button("Disable IBL") {
                         disable_ibl_settings()
+                        ui.delete_buffers(Buffers[.IRR_FACE_SIZE], Buffers[.PREFILTER_FACE_SIZE], Buffers[.BRDF_LUT_SIZE])
                         return true
                     }
                 }
