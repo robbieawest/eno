@@ -4,6 +4,7 @@ import im "../../../libs/dear-imgui/"
 import "../ui"
 import utils "../utils"
 
+import "core:strings"
 import dbg "../debug"
 import slice "core:slice"
 import "core:strconv"
@@ -20,12 +21,12 @@ Buffers := [UIRenderBuffer]cstring {
     .ENV_TEX_URI = "##env_tex_uri"
 }
 
-BUF_CHAR_LIM :: ui.DEFAULT_CHAR_LIMIT
-
 delete_bufs :: proc() -> (ok: bool) {
     return ui.delete_buffers(..slice.enumerated_array(&Buffers))
 }
 
+BUF_TEXT_CHAR_LIM :: ui.DEFAULT_TEXT_CHAR_LIMIT
+BUF_NUMERIC_CHAR_LIM :: ui.DEFAULT_NUMERIC_CHAR_LIMIT
 load_bufs :: proc() -> (ok: bool) {
     settings, settings_ok := GlobalRenderSettings.unapplied_environment_settings.?
     if !settings_ok {
@@ -38,15 +39,25 @@ load_bufs :: proc() -> (ok: bool) {
 
     i := 0
     for buf, buf_type in Buffers {
-        str_buf: string
-        byte_buf := make([]byte, BUF_CHAR_LIM, Context.allocator)
+        byte_buf: []byte
         buf_type: UIRenderBuffer = buf_type  // Intellij doesn't know the type
 
         switch buf_type {
             case .ENV_FACE:
-                str_buf = strconv.itoa(byte_buf, int(settings.environment_face_size))
+                if settings.environment_face_size % 10 >= i32(BUF_NUMERIC_CHAR_LIM) {
+                    dbg.log(.ERROR, "Environment face size needs to many characters for ui buffer")
+                    return
+                }
+                byte_buf = make([]byte, BUF_NUMERIC_CHAR_LIM, Context.allocator)
+                strconv.itoa(byte_buf, int(settings.environment_face_size))
             case .ENV_TEX_URI:
-                byte_buf = slice.clone(transmute([]byte)(settings.environment_texture_uri), Context.allocator)
+                if uint(len(settings.environment_texture_uri)) >= BUF_TEXT_CHAR_LIM {
+                    dbg.log(.ERROR, "Environment texture uri is greater than the ui buffer char limit")
+                    return
+                }
+
+                byte_buf = make([]byte, BUF_TEXT_CHAR_LIM, Context.allocator)
+                copy(byte_buf, transmute([]byte)(settings.environment_texture_uri))
         }
 
         buf_infos[i] = { buf, byte_buf }

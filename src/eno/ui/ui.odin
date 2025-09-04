@@ -125,12 +125,14 @@ toggle_mouse_usage :: proc() {
     else do io.ConfigFlags += { .NoMouse }
 }
 
-DEFAULT_CHAR_LIMIT: uint : 10
-text_input :: proc(label: cstring, #any_int char_limit: uint = DEFAULT_CHAR_LIMIT, flags: im.InputTextFlags = {}) -> (result: string, ok: bool) {
+// Includes null character
+DEFAULT_NUMERIC_CHAR_LIMIT: uint : 10
+DEFAULT_TEXT_CHAR_LIMIT: uint : 75
+
+text_input :: proc(label: cstring, #any_int char_limit: uint = DEFAULT_TEXT_CHAR_LIMIT, flags: im.InputTextFlags = {}) -> (result: string, ok: bool) {
     ctx := check_context() or_return
     buf := get_buffer(ctx, label, char_limit)
-
-    im.InputText(label, cstring(raw_data(buf)), char_limit, flags)
+    im.InputText(label, cstring(raw_data(buf)), len(buf), flags)
     if buf == nil {
         dbg.log(.ERROR, "Buf is nil")
         return
@@ -144,7 +146,7 @@ text_input :: proc(label: cstring, #any_int char_limit: uint = DEFAULT_CHAR_LIMI
     return transmute(string)buf, true
 }
 
-int_text_input :: proc(label: cstring, #any_int char_limit: uint = DEFAULT_CHAR_LIMIT) -> (result: int, ok: bool) {
+int_text_input :: proc(label: cstring, #any_int char_limit: uint = DEFAULT_NUMERIC_CHAR_LIMIT) -> (result: int, ok: bool) {
     str := text_input(label, char_limit, { .CharsDecimal }) or_return
     return strconv.atoi(str), true
 }
