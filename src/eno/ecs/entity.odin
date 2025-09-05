@@ -242,3 +242,30 @@ archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label:
     return
 }
 
+
+archetype_get_entity :: proc(archetype: ^Archetype, name: string) -> (entity: Entity, ok: bool) {
+    if name not_in archetype.entities {
+        dbg.log(.ERROR, "'%s' is not a valid entity", name)
+        return
+    }
+
+    return archetype.entities[name], true
+}
+
+
+/*
+    Depending on postpone_true_delete this will either:
+        (1) false : mark entity as deleted, preserving pointers to other entity data
+        (2) true: : do a swap with the end entity data, O(1), and clear the deleted data, does not preserve the end entity component
+
+    In situation (1) the entity will be deleted via (2) later in any clean_archetype_of_deletions calls
+*/
+archetype_remove_entity :: proc(archetype: ^Archetype, entities: ..Entity, defer_true_delete := true) -> (ok: bool) {
+
+    return true
+}
+
+clean_archetype_of_deletions :: proc(archetype: ^Archetype) -> (ok: bool) {
+
+    return true
+}

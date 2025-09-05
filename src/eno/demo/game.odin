@@ -7,6 +7,7 @@ import "../resource"
 import cutils "../camera_utils"
 import "../standards"
 import "../ui"
+import im "../../../libs/dear-imgui/"
 
 import "core:strings"
 import "core:log"
@@ -31,6 +32,8 @@ every_frame :: proc() -> (ok: bool) {
 load_supra :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
     scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/Supra/scene.gltf") or_return
     models := scene_res.models
+    delete(models[0].model.name)
+    models[0].model.name = "demo_entity"
 
     defer resource.destroy_model_scene_result(scene_res)
     ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
@@ -41,10 +44,10 @@ load_sword :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
     scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/gradient_fantasy_sword/scene.gltf") or_return
     defer resource.destroy_model_scene_result(scene_res)
     models := scene_res.models
+    delete(models[0].model.name)
+    models[0].model.name = "demo_entity"
 
     models[0].model.meshes[0].transpose_transformation = true
-
-    log.infof("world: %#v", models[0].world_comp)
 
     ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
     return true
@@ -53,6 +56,9 @@ load_sword :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
 load_clearcoat_test :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
     scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/CompareClearcoat/glTF/CompareClearcoat.gltf") or_return
     models := scene_res.models
+    delete(models[0].model.name)
+    models[0].model.name = "demo_entity"
+
     defer resource.destroy_model_scene_result(scene_res)
     ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
     return true
@@ -62,6 +68,10 @@ load_helmet :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
     scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf") or_return
 
     models := scene_res.models
+    delete(models[0].model.name)
+    models[0].model.name = "demo_entity"
+
+    // Second helmet != preview entity so it will persist always
     second_helmet := models[0]
     second_helmet.model.name = strings.clone("model clone")
     second_helmet.world_comp = standards.make_world_component(position=glm.vec3{ 3.0, 0.0, 3.0 })
@@ -76,15 +86,19 @@ load_dhelmet :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
     scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/DamagedHelmet/glTF/DamagedHelmet.gltf") or_return
 
     models := scene_res.models
+    delete(models[0].model.name)
+    models[0].model.name = "demo_entity"
 
     defer resource.destroy_model_scene_result(scene_res)
     ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
     return true
 }
 
+demo_arch: ^ecs.Archetype
 before_frame :: proc() -> (ok: bool) {
 
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
+    demo_arch = ecs.scene_get_archetype(game.Game.scene, "demo_entities") or_return
     load_helmet(arch) or_return
 
     render.init_render_pipeline()
@@ -203,7 +217,7 @@ before_frame :: proc() -> (ok: bool) {
     // Use if you have pre render passes
     // render.pre_render(manager, game_data.render_pipeline, game.Game.scene) or_return
 
-    ui.add_ui_elements(render.render_settings_ui_element) or_return
+    ui.add_ui_elements(render.render_settings_ui_element, demo_ui_element) or_return
     ui.show_demo_window(true) or_return
 
     return true
@@ -229,6 +243,45 @@ set_light_position :: proc() -> (ok: bool) {
     light.position.z = 3.0 * f32(math.sin_f64(time_seconds + math.PI / 2))
 
     worlds[0].position = light.position
+
+    return true
+}
+
+unload_current_preview_model :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
+    ecs.archetype_remove_entity(arch, ecs.archetype_get_entity(arch, "demo_entity") or_return) or_return
+    return true
+}
+
+load_proc :: #type proc(arch: ^ecs.Archetype) -> bool
+demo_ui_element : ui.UIElement : proc() -> (ok: bool) {
+    im.Begin("Demo Settings")
+    defer im.End()
+
+    @(static) preview_models: []cstring = { "SciFiHelmet", "DamagedHelmet", "Supra", "Clearcoat Test", "Fantasy Sword" }
+
+    // Must be seperate ? compiler ;//
+    @(static) load_model_procs: []load_proc
+    load_model_procs = []load_proc{ load_helmet, load_dhelmet, load_supra, load_clearcoat_test, load_sword }
+
+    @(static) selected_model_ind := 0
+    if (im.BeginCombo("Preview model", preview_models[selected_model_ind])) {
+        defer im.EndCombo()
+
+        for i in 0..<len(preview_models) {
+            selected := selected_model_ind == i
+            if im.Selectable(preview_models[i], selected) {
+                if !selected {
+                    log.info("selected new preview model")
+                    unload_current_preview_model(demo_arch) or_return
+                    load_model_procs[i](demo_arch) or_return
+                    render.populate_all_shaders(&game.Game.resource_manager, game.Game.scene) or_return
+                }
+                selected_model_ind = i
+            }
+
+            if selected do im.SetItemDefaultFocus()
+        }
+    }
 
     return true
 }
