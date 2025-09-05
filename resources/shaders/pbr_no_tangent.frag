@@ -107,8 +107,7 @@ uniform vec3 baseColourOverride;
 uniform bool unlit;
 
 uniform uint materialUsages;
-
-uniform bool enableIBL;
+uniform uint lightingSettings;
 
 float PI = 3.14159265358979323;
 
@@ -276,13 +275,13 @@ vec3 IBLAmbientTerm(vec3 N, vec3 V, vec3 fresnelRoughness, vec3 albedo, float ro
     }
 }
 
-bool checkBitMask(int bitPosition) {
-    return (materialUsages & uint(1 << bitPosition)) != 0;
+bool checkBitMask(uint mask, int bitPosition) {
+    return (mask & uint(1 << bitPosition)) != 0;
 }
 
 void main() {
     vec4 baseColour = baseColourFactor.rgba;
-    if (checkBitMask(1)) {
+    if (checkBitMask(materialUsages, 1)) {
         baseColour *= texture(baseColourTexture, texCoords).rgba;
     }
     if (enableBaseColourOverride) baseColour = vec4(baseColourOverride, baseColour.a);
@@ -297,14 +296,14 @@ void main() {
 
     float roughness = roughnessFactor;
     float metallic = metallicFactor;
-    if (checkBitMask(0)) {
+    if (checkBitMask(materialUsages, 0)) {
         vec2 metallicRoughness = texture(pbrMetallicRoughness, texCoords).gb;
         roughness *= metallicRoughness.x;
         metallic *= metallicRoughness.y;
     }
 
     vec3 normal = vec3(1.0);
-    if (checkBitMask(4)) {
+    if (checkBitMask(materialUsages, 4)) {
         normal = texture(normalTexture, texCoords).rgb * 2.0 - 1.0;
         normal = calculateTBN() * normal;
     }
@@ -316,7 +315,7 @@ void main() {
     }
 
     float occlusion = 1.0;
-    if (checkBitMask(3)) {
+    if (checkBitMask(materialUsages, 3)) {
         occlusion = texture(occlusionTexture, texCoords).r;
     }
 
@@ -324,13 +323,13 @@ void main() {
     float clearcoat = clearcoatFactor;
     float clearcoatRoughness = clearcoatRoughnessFactor;
     vec3 clearcoatNormal;
-    if (checkBitMask(5)) {
+    if (checkBitMask(materialUsages, 5)) {
         clearcoat *= texture(clearcoatTexture, texCoords).r;
     }
-    if (checkBitMask(8)) {
+    if (checkBitMask(materialUsages, 8)) {
         clearcoatRoughness *= texture(clearcoatRoughnessTexture, texCoords).g;
     }
-    if (checkBitMask(7)) {
+    if (checkBitMask(materialUsages, 7)) {
         clearcoatNormal = texture(clearcoatNormalTexture, texCoords).rgb * 2.0 - 1.0;
         clearcoatNormal = normalize(calculateTBN() * clearcoatNormal); // Todo find a way to reuse TBN if possible
     }
@@ -342,17 +341,17 @@ void main() {
     clearcoatRoughness = clamp(clearcoatRoughness, 0.089, 1.0);
 
     vec3 emissive = vec3(0.0);
-    if (checkBitMask(2)) {
+    if (checkBitMask(materialUsages, 2)) {
         emissive += texture(emissiveTexture, texCoords).rgb;
         emissive *= emissiveFactor;
     }
 
     float specular = specularFactor;
     vec3 specularColour = specularColourFactor;
-    if (checkBitMask(9)) {
+    if (checkBitMask(materialUsages, 9)) {
         specular *= texture(specularTexture, texCoords).a;
     }
-    if (checkBitMask(10)) {
+    if (checkBitMask(materialUsages, 10)) {
         specularColour *= texture(specularColourTexture, texCoords).rgb;
     }
 
@@ -360,47 +359,49 @@ void main() {
 
     vec3 baseFresnelIncidence;
     baseFresnelIncidence = mix(min(vec3(0.04) * specularColour * specular, vec3(1.0)), albedo, metallic);
-    baseFresnelIncidence = mix(vec3(0.04), albedo, metallic);
+    // baseFresnelIncidence = mix(vec3(0.04), albedo, metallic);
     if (clearcoatActive) {
         // Assumes clearcoat layer IOR of 1.5
         baseFresnelIncidence = pow((1.0 - 5.0 * sqrt(baseFresnelIncidence)) / (5.0 - sqrt(baseFresnelIncidence)), vec3(2.0));
     }
 
-
-    uint spotLightSize = 16;
-    uint directionalLightSize = 12;
-    uint pointLightSize = 8;
-
     vec3 lightOutputted = vec3(0.0);
 
-    // Calculate for point lights
-    uint bufIndex = Lights.numSpotLights * spotLightSize + Lights.numDirectionalLights * directionalLightSize;
-    for (uint i = 0; i < Lights.numPointLights; i++) {
-        PointLight light = getPointLight(bufIndex);
-        vec3 lightPos = light.lightInformation.position;
-        vec3 lightDir = normalize(lightPos - position);
-        float lightDist = length(lightDir);
+    if (checkBitMask(lightingSettings, 1)) {
+        uint spotLightSize = 16;
+        uint directionalLightSize = 12;
+        uint pointLightSize = 8;
 
-        vec3 halfVec = normalize(lightDir + viewDir);
 
-        vec3 radiance = light.lightInformation.intensity * light.lightInformation.colour / (lightDist * lightDist);
+        // Calculate for point lights
+        uint bufIndex = Lights.numSpotLights * spotLightSize + Lights.numDirectionalLights * directionalLightSize;
+        for (uint i = 0; i < Lights.numPointLights; i++) {
+            PointLight light = getPointLight(bufIndex);
+            vec3 lightPos = light.lightInformation.position;
+            vec3 lightDir = normalize(lightPos - position);
+            float lightDist = length(lightDir);
 
-        vec3 BRDF = calculateBRDF(normal, viewDir, lightDir, halfVec, albedo, roughness * roughnessFactor, metallic * metallicFactor, baseFresnelIncidence, specular);
-        if (clearcoatActive) {
-            vec3 clearcoatFresnel = FresnelSchlick(viewDir, halfVec, vec3(0.04)) * clearcoat;
-            BRDF *= (1.0 - clearcoatFresnel);
-            BRDF += calculateClearcoatBRDF(normal, lightDir, halfVec, clearcoatRoughness, clearcoatFresnel);
+            vec3 halfVec = normalize(lightDir + viewDir);
+
+            vec3 radiance = light.lightInformation.intensity * light.lightInformation.colour / (lightDist * lightDist);
+
+            vec3 BRDF = calculateBRDF(normal, viewDir, lightDir, halfVec, albedo, roughness * roughnessFactor, metallic * metallicFactor, baseFresnelIncidence, specular);
+            if (clearcoatActive) {
+                vec3 clearcoatFresnel = FresnelSchlick(viewDir, halfVec, vec3(0.04)) * clearcoat;
+                BRDF *= (1.0 - clearcoatFresnel);
+                BRDF += calculateClearcoatBRDF(normal, lightDir, halfVec, clearcoatRoughness, clearcoatFresnel);
+            }
+
+            vec3 reflectance = calculateReflectance(BRDF, normal, lightDir, radiance);
+            lightOutputted += reflectance;
+
+            bufIndex += pointLightSize;
         }
-
-        vec3 reflectance = calculateReflectance(BRDF, normal, lightDir, radiance);
-        lightOutputted += reflectance;
-
-        bufIndex += pointLightSize;
     }
 
     vec3 ambient = vec3(0.0);
     vec3 Fc = vec3(0.0);
-    if (enableIBL) {
+    if (checkBitMask(lightingSettings, 0)) {
         vec3 F = FresnelSchlickRoughness(normal, viewDir, baseFresnelIncidence, roughness);
         ambient = IBLAmbientTerm(normal, viewDir, F, albedo, roughness, metallic, false, specular, specularColour);
 

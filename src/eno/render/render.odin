@@ -141,12 +141,9 @@ render_geometry :: proc(
         shader_pass := resource.get_shader_pass(manager, mapping.shader) or_return
         attach_program(shader_pass^)
 
-        env_settings, env_set := GlobalRenderSettings.environment_settings.?
-        if env_set {
-            ibl_set := env_settings.ibl_settings != nil
-            if ibl_set do bind_ibl_uniforms(shader_pass) or_return
-            resource.set_uniform(shader_pass, IBL_ENABLED, i32(ibl_set))
-        }
+        lighting_settings := get_lighting_settings()
+        resource.set_uniform(shader_pass, LIGHTING_SETTINGS, transmute(u32)(lighting_settings))
+        if .IBL in lighting_settings do bind_ibl_uniforms(shader_pass)
 
         for mesh_data in mapping.meshes {
             model_mat, normal_mat := model_and_normal(mesh_data.mesh, mesh_data.world, scene.viewpoint)

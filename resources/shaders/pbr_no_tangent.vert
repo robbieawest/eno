@@ -18,7 +18,6 @@ out vec3 position;
 out vec3 geomNormal;
 out vec2 texCoords;
 out vec3 cameraPosition;
-out mat3 TBN;
 
 void main() {
     // All in world space

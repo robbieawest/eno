@@ -85,7 +85,7 @@ load_dhelmet :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
 before_frame :: proc() -> (ok: bool) {
 
     arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
-    load_clearcoat_test(arch) or_return
+    load_helmet(arch) or_return
 
     render.init_render_pipeline()
 
@@ -167,7 +167,7 @@ before_frame :: proc() -> (ok: bool) {
     light_height: f32 = 5.0
     light_dist: f32 = 5.0
     intensity: f32 = 3.0
-    enabled := false
+    enabled := true
     append_elems(&lights,
         resource.PointLight{ "demo_light", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ light_dist, light_height, light_dist } },
         resource.PointLight{ "demo_light2", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ light_dist, light_height, -light_dist } },

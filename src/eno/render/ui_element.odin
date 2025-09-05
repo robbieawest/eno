@@ -139,5 +139,19 @@ render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
 
     }
 
+    if im.TreeNode("Direct lighting settings") {
+        defer im.TreePop()
+        if GlobalRenderSettings.direct_lighting_settings != nil {
+            if im.Button("Disable direct lighting") {
+                disable_direct_lighting()
+            }
+        }
+        else {
+            if im.Button("Enable direct lighting") {
+                enable_direct_lighting()
+            }
+        }
+    }
+
     return true
 }

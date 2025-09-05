@@ -11,7 +11,9 @@ import "core:strings"
 
 RenderSettings :: struct {
     environment_settings: Maybe(EnvironmentSettings),
-    unapplied_environment_settings: Maybe(EnvironmentSettings)
+    unapplied_environment_settings: Maybe(EnvironmentSettings),
+    direct_lighting_settings: Maybe(DirectLightingSettings),
+    unapplied_direct_lighting_settings: Maybe(DirectLightingSettings), // Useless right now but alas
 }
 GlobalRenderSettings: RenderSettings
 
@@ -19,6 +21,26 @@ EnvironmentSettings :: struct {
     environment_face_size: i32,
     environment_texture_uri: string,
     ibl_settings: Maybe(IBLSettings),
+}
+
+DirectLightingSettings :: struct {
+    // Add things?
+}
+
+LightingSetting :: enum {
+    IBL = 0,
+    DIRECT_LIGHTING = 1
+}
+LightingSettings :: bit_set[LightingSetting; u32]
+LIGHTING_SETTINGS :: "lightingSettings"
+
+get_lighting_settings :: proc() -> (res: LightingSettings) {
+    if GlobalRenderSettings.environment_settings != nil {
+        env_settings := GlobalRenderSettings.environment_settings.?
+        if env_settings.ibl_settings != nil do res |= { .IBL }
+    }
+    if GlobalRenderSettings.direct_lighting_settings != nil do res |= { .DIRECT_LIGHTING }
+    return
 }
 
 DEFAULT_ENV_MAP :: standards.TEXTURE_RESOURCE_PATH + "drackenstein_quarry_4k.hdr"
@@ -69,7 +91,6 @@ disable_environment_settings :: proc() {
     GlobalRenderSettings.environment_settings = nil
 }
 
-IBL_ENABLED :: "enableIBL"
 IBLSettings :: struct {
     prefilter_map_face_size: i32,
     irradiance_map_face_size: i32,
@@ -91,4 +112,15 @@ disable_ibl_settings :: proc() {
     if GlobalRenderSettings.unapplied_environment_settings == nil do return
     env_settings_unapplied: ^EnvironmentSettings = &GlobalRenderSettings.unapplied_environment_settings.?
     env_settings_unapplied.ibl_settings = nil
+}
+
+
+enable_direct_lighting :: proc() {
+    GlobalRenderSettings.direct_lighting_settings = DirectLightingSettings{}
+    GlobalRenderSettings.unapplied_direct_lighting_settings = GlobalRenderSettings.direct_lighting_settings
+}
+
+disable_direct_lighting :: proc() {
+    GlobalRenderSettings.direct_lighting_settings = nil
+    GlobalRenderSettings.unapplied_direct_lighting_settings = nil
 }
