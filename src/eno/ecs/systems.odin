@@ -138,9 +138,10 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, allocator 
         if component_query.data != nil {
             component_data: [dynamic][dynamic]byte = result.data[comp_ind]
             for component, i in component_data {
-                if mem.compare_ptrs(raw_data(component), component_query.data, len(component)) != 0 {
+                entity := result.entity_map[entity_index_to_label_map[u32(i)]]
+                if entity.deleted || mem.compare_ptrs(raw_data(component), component_query.data, len(component)) != 0 {
                     // The map chain is to give as much context later when ultimately removing the entities
-                    append(&entities_to_be_filtered, result.entity_map[entity_index_to_label_map[u32(i)]])
+                    append(&entities_to_be_filtered, entity)
                 }
             }
         }

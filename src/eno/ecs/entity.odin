@@ -5,6 +5,7 @@ import cam "../camera"
 import "../resource"
 import "../standards"
 
+import "core:fmt"
 import "core:mem"
 import "core:slice"
 import "core:strings"
@@ -22,7 +23,8 @@ ChunkAllocator :: struct {
 Entity :: struct {
     id: u32,
     archetype_column: u32,
-    name: string
+    name: string,
+    deleted: bool,
 }
 
 
@@ -79,6 +81,7 @@ init_scene :: proc() -> (scene: ^Scene) {
 // Does not free top level archetype
 destroy_archetype :: proc(archetype: ^Archetype, allocator := context.allocator, loc := #caller_location) {
     delete(archetype.label)
+    for _, entity in archetype.entities do delete(entity.name)
     delete(archetype.entities, loc)
     delete(archetype.component_info.component_infos, allocator, loc)
     delete(archetype.components_label_match, loc)
@@ -193,9 +196,14 @@ scene_add_archetype :: proc(scene: ^Scene, label: string, component_infos: ..Com
 
 @(private)
 archetype_add_entity_checks :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string) -> (ok: bool) {
+    if strings.contains(entity_label, DELETED_ENTITY_LABEL) {
+        dbg.log(.ERROR, "Archetype entity name substring '%s' is reserved")
+        return
+    }
+
     duplicate_entity_label := entity_label in archetype.entities
     if duplicate_entity_label {
-        dbg.log(.ERROR, "Attempted to create entity with a duplicate label")
+        dbg.log(.ERROR, "Attempted to create entity with a duplicate label: '%s'", entity_label)
         return
     }
 
@@ -212,7 +220,6 @@ archetype_add_entity_checks :: proc(scene: ^Scene, archetype: ^Archetype, entity
     ok = true
     return
 }
-
 
 archetype_add_entity :: proc(scene: ^Scene, archetype: ^Archetype, entity_label: string, component_data: ..ECSComponentData) -> (ok: bool) {
     dbg.log(.INFO, "Adding archetype entity: %s", entity_label)
@@ -252,20 +259,70 @@ archetype_get_entity :: proc(archetype: ^Archetype, name: string) -> (entity: En
     return archetype.entities[name], true
 }
 
+@(private)
+archetype_get_entity_ptr :: proc(archetype: ^Archetype, name: string) -> (entity: ^Entity, ok: bool) {
+    if name not_in archetype.entities {
+        dbg.log(.ERROR, "'%s' is not a valid entity", name)
+        return
+    }
+
+    return &archetype.entities[name], true
+}
+
 
 /*
     Depending on postpone_true_delete this will either:
         (1) false : mark entity as deleted, preserving pointers to other entity data
-        (2) true: : do a swap with the end entity data, O(1), and clear the deleted data, does not preserve the end entity component
+        (2) true : do a swap with the end entity data, O(1), and clear the deleted data, does not preserve the end entity component
 
     In situation (1) the entity will be deleted via (2) later in any clean_archetype_of_deletions calls
 */
-archetype_remove_entity :: proc(archetype: ^Archetype, entities: ..Entity, defer_true_delete := true) -> (ok: bool) {
+DELETED_ENTITY_LABEL :: "**DELETED ENTITY**"
+archetype_remove_entities :: proc(archetype: ^Archetype, entities: ..string, contains_name := false, defer_true_delete := true, allocator := context.allocator) -> (ok: bool) {
+
+    if defer_true_delete {
+        for entity_name in entities {
+            entities_to_delete := make([dynamic]^Entity, allocator=allocator)
+
+            if contains_name {
+                for e_entity_name, &entity in archetype.entities {
+                    if strings.contains(e_entity_name, entity_name) do append(&entities_to_delete, &entity)
+                }
+            }
+            else {
+                append(&entities_to_delete, archetype_get_entity_ptr(archetype, entity_name) or_return)
+            }
+
+            dbg.log(.INFO, "delete: %v", entities_to_delete)
+
+            for entity in entities_to_delete {
+                if entity.deleted do continue
+                entity_name_to_delete := entity.name
+                defer delete(entity_name_to_delete)
+
+                dbg.log(.INFO, "Deferring deletion of entity: '%s'", entity.name)
+                entity.deleted = true
+                entity.name = fmt.aprintf("**DELETED ENTITY**(%d)", entity.id)
+
+                // Update map
+                ent_copy := entity^
+                delete_key(&archetype.entities, entity_name_to_delete)
+                archetype.entities[ent_copy.name] = ent_copy
+
+                dbg.log(.INFO, "New entities: %v", archetype.entities)
+
+                dbg.log(.INFO, "New deferred entity: %v", entity)
+            }
+        }
+    }
+    else {
+        // Todo true deletion
+    }
 
     return true
 }
 
 clean_archetype_of_deletions :: proc(archetype: ^Archetype) -> (ok: bool) {
-
+    // Todo
     return true
 }
