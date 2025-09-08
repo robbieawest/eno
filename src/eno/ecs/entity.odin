@@ -269,6 +269,10 @@ archetype_get_entity_ptr :: proc(archetype: ^Archetype, name: string) -> (entity
     return &archetype.entities[name], true
 }
 
+// Just deletes the name... For standards
+destroy_entity :: proc(entity: Entity) {
+    delete(entity.name)
+}
 
 /*
     Depending on postpone_true_delete this will either:
@@ -282,36 +286,31 @@ archetype_remove_entities :: proc(archetype: ^Archetype, entities: ..string, con
 
     if defer_true_delete {
         for entity_name in entities {
-            entities_to_delete := make([dynamic]^Entity, allocator=allocator)
+            entity_keys_to_delete := make([dynamic]string, allocator=allocator)
+            defer delete(entity_keys_to_delete)
 
             if contains_name {
                 for e_entity_name, &entity in archetype.entities {
-                    if strings.contains(e_entity_name, entity_name) do append(&entities_to_delete, &entity)
+                    if strings.contains(e_entity_name, entity_name) do append(&entity_keys_to_delete, strings.clone(e_entity_name, allocator=allocator))
                 }
             }
-            else {
-                append(&entities_to_delete, archetype_get_entity_ptr(archetype, entity_name) or_return)
-            }
+            else if entity_name in archetype.entities do append(&entity_keys_to_delete, strings.clone(entity_name, allocator=allocator))
 
-            dbg.log(.INFO, "delete: %v", entities_to_delete)
-
-            for entity in entities_to_delete {
+            for key in entity_keys_to_delete {
+                entity := archetype.entities[key]
                 if entity.deleted do continue
-                entity_name_to_delete := entity.name
-                defer delete(entity_name_to_delete)
 
                 dbg.log(.INFO, "Deferring deletion of entity: '%s'", entity.name)
                 entity.deleted = true
                 entity.name = fmt.aprintf("**DELETED ENTITY**(%d)", entity.id)
 
-                // Update map
-                ent_copy := entity^
-                delete_key(&archetype.entities, entity_name_to_delete)
-                archetype.entities[ent_copy.name] = ent_copy
+                archetype.entities[entity.name] = entity
+            }
 
-                dbg.log(.INFO, "New entities: %v", archetype.entities)
-
-                dbg.log(.INFO, "New deferred entity: %v", entity)
+            for key_to_delete in entity_keys_to_delete {
+                destroy_entity(archetype.entities[key_to_delete])
+                delete_key(&archetype.entities, key_to_delete)
+                delete(key_to_delete)
             }
         }
     }
