@@ -273,31 +273,89 @@ bool checkBitMask(uint mask, int bitPosition) {
     return (mask & uint(1 << bitPosition)) != 0;
 }
 
-void main() {
-    vec4 baseColour = baseColourFactor.rgba;
-    if (checkBitMask(materialUsages, 1)) {
-        baseColour *= texture(baseColourTexture, texCoords).rgba;
+// Material usage enumerations
+// Todo add defines pre compilation?
+// Allows for less coordination between engine and shader
+// Could use for vertex attributes as well, making only one shader needed
+// With these changes shader includes could be made as well
+#define BaseColourFactor 0
+bool baseColourFactorSet = checkBitMask(materialUsages, BaseColourFactor);
+#define BaseColourTexture 1
+bool baseColourTextureSet = checkBitMask(materialUsages, BaseColourTexture);
+#define PBRMetallicFactor 2
+bool PBRMetallicFactorSet = checkBitMask(materialUsages, PBRMetallicFactor);
+#define PBRRoughnessFactor 3
+bool PBRRoughnessFactorSet = checkBitMask(materialUsages, PBRRoughnessFactor);
+#define PBRMetallicRoughnessTexture 4
+bool PBRMetallicRoughnessTextureSet = checkBitMask(materialUsages, PBRMetallicRoughnessTexture);
+#define EmissiveFactor 5
+bool emissiveFactorSet = checkBitMask(materialUsages, EmissiveFactor);
+#define EmissiveTexture 6
+bool emissiveTextureSet = checkBitMask(materialUsages, EmissiveTexture);
+#define OcclusionTexture 7
+bool occlusionTextureSet = checkBitMask(materialUsages, OcclusionTexture);
+#define NormalTexture 8
+bool normalTextureSet = checkBitMask(materialUsages, NormalTexture);
+#define ClearcoatFactor 9
+bool clearcoatFactorSet = checkBitMask(materialUsages, ClearcoatFactor);
+#define ClearcoatTexture 10
+bool clearcoatTextureSet = checkBitMask(materialUsages, ClearcoatTexture);
+#define ClearcoatRoughnessFactor 11
+bool clearcoatRoughnessFactorSet = checkBitMask(materialUsages, ClearcoatRoughnessFactor);
+#define ClearcoatRoughnessTexture 12
+bool clearcoatRoughnessTextureSet = checkBitMask(materialUsages, ClearcoatRoughnessTexture);
+#define ClearcoatNormalTexture 13
+bool clearcoatNormalTextureSet = checkBitMask(materialUsages, ClearcoatNormalTexture);
+#define SpecularFactor 14
+bool specularFactorSet = checkBitMask(materialUsages, SpecularFactor);
+#define SpecularTexture 15
+bool specularTextureSet = checkBitMask(materialUsages, SpecularTexture);
+#define SpecularColourFactor 16
+bool specularColourFactorSet = checkBitMask(materialUsages, SpecularColourFactor);
+#define SpecularColourTexture 17
+bool specularColourTextureSet = checkBitMask(materialUsages, SpecularColourTexture);
+
+
+vec4 getBaseColour() {
+    vec4 baseColour = vec4(vec3(0.0), 1.0);
+    if (baseColourFactorSet) {
+        baseColour = baseColourFactor.rgba;
+    }
+    if (baseColourTextureSet) {
+        vec4 baseColourTextureVal = texture(baseColourTexture, texCoords).rgba;
+        if (baseColourFactorSet) baseColour *= baseColourTextureVal;
+        else baseColour = baseColourTextureVal;
     }
     if (enableBaseColourOverride) baseColour = vec4(baseColourOverride, baseColour.a);
+    return baseColour;
+}
 
-    if (enableAlphaCutoff && baseColour.a < alphaCutoff) discard;
-    if (unlit) {
-        Colour = baseColour;
-        return;
+struct MetallicRoughness  {
+    float metallic;
+    float roughness;
+};
+MetallicRoughness getMetallicRoughness() {
+    MetallicRoughness metallicRoughness;
+    metallicRoughness.metallic = 1.0;
+    metallicRoughness.roughness = 1.0;
+    if (PBRMetallicFactorSet) metallicRoughness.metallic *= metallicFactor;
+    if (PBRRoughnessFactorSet) metallicRoughness.roughness *= roughnessFactor;
+
+    if (PBRMetallicRoughnessTextureSet) {
+        vec2 metallicRoughnessTextureVal = texture(pbrMetallicRoughness, texCoords).gb;
+        if (PBRRoughnessFactorSet) metallicRoughness.roughness *= metallicRoughnessTextureVal.x;
+        else metallicRoughness.roughness = metallicRoughnessTextureVal.x;
+
+        if (PBRMetallicFactorSet) metallicRoughness.metallic *= metallicRoughnessTextureVal.y;
+        else metallicRoughness.metallic = metallicRoughnessTextureVal.y;
     }
 
-    vec3 albedo = baseColour.rgb;
+    return metallicRoughness;
+}
 
-    float roughness = roughnessFactor;
-    float metallic = metallicFactor;
-    if (checkBitMask(materialUsages, 0)) {
-        vec2 metallicRoughness = texture(pbrMetallicRoughness, texCoords).gb;
-        roughness *= metallicRoughness.x;
-        metallic *= metallicRoughness.y;
-    }
-
+vec3 getNormal() {
     vec3 normal = vec3(1.0);
-    if (checkBitMask(materialUsages, 4)) {
+    if (normalTextureSet) {
         normal = texture(normalTexture, texCoords).rgb * 2.0 - 1.0;
     }
     else normal = geomNormal;
@@ -307,45 +365,124 @@ void main() {
         normal = -normal;
     }
 
+    return normal;
+}
+
+float getOcclusion() {
     float occlusion = 1.0;
-    if (checkBitMask(materialUsages, 3)) {
-        occlusion = texture(occlusionTexture, texCoords).r;
+    if (occlusionTextureSet) occlusion = texture(occlusionTexture, texCoords).r;
+    return occlusion;
+}
+
+struct Clearcoat {
+    float clearcoat;
+    float clearcoatRoughness;
+    vec3 clearcoatNormal;
+};
+Clearcoat getClearcoat(vec3 eNormal) {
+    Clearcoat clearcoat;
+    clearcoat.clearcoat = 0.0;
+    clearcoat.clearcoatRoughness = 0.0;
+    clearcoat.clearcoatNormal = eNormal;
+
+    if (clearcoatFactorSet) {
+        clearcoat.clearcoat = clearcoatFactor;
+    }
+    if (clearcoatRoughnessFactorSet) {
+        clearcoat.clearcoatRoughness = clearcoatRoughnessFactor;
     }
 
-    float clearcoat = clearcoatFactor;
-    float clearcoatRoughness = clearcoatRoughnessFactor;
-    vec3 clearcoatNormal;
-    if (checkBitMask(materialUsages, 5)) {
-        clearcoat *= texture(clearcoatTexture, texCoords).r;
+    if (clearcoatTextureSet) {
+        float clearcoatTextureVal = texture(clearcoatTexture, texCoords).r;
+        if (clearcoatFactorSet) clearcoat.clearcoat *= clearcoatTextureVal;
+        else clearcoat.clearcoat = clearcoatTextureVal;
     }
-    if (checkBitMask(materialUsages, 8)) {
-        clearcoatRoughness *= texture(clearcoatRoughnessTexture, texCoords).g;
+    if (clearcoatRoughnessTextureSet) {
+        float clearcoatRoughTextureVal = texture(clearcoatRoughnessTexture, texCoords).r;
+        if (clearcoatRoughnessFactorSet) clearcoat.clearcoatRoughness *= clearcoatRoughTextureVal;
+        else clearcoat.clearcoatRoughness = clearcoatRoughTextureVal;
     }
-    if (checkBitMask(materialUsages, 7)) {
-        clearcoatNormal = texture(clearcoatNormalTexture, texCoords).rgb * 2.0 - 1.0;
-        clearcoatNormal = normalize(clearcoatNormal);
+    if (clearcoatNormalTextureSet) {
+        clearcoat.clearcoatNormal = texture(clearcoatNormalTexture, texCoords).rgb * 2.0 - 1.0;
     }
-    else clearcoatNormal = normal;
+
+    return clearcoat;
+}
+
+vec3 getEmissive() {
+    vec3 emissive = vec3(0.0);
+    if (emissiveFactorSet) {
+        emissive = emissiveFactor;
+    }
+
+    if (emissiveTextureSet) {
+        vec3 emissiveTextureVal = texture(emissiveTexture, texCoords).rgb;
+        if (emissiveFactorSet) emissive *= emissiveTextureVal;
+        else emissive = emissiveTextureVal;
+    }
+
+    return emissive;
+}
+
+struct Specular {
+    float specular;
+    vec3 specularColour;
+};
+Specular getSpecular() {
+    Specular specular;
+    specular.specular = 1.0;
+    specular.specularColour = vec3(1.0);
+    if (specularFactorSet) specular.specular = specularFactor;
+    if (specularColourFactorSet) specular.specularColour = specularColourFactor;
+
+    if (specularTextureSet) {
+        float specularTextureVal = texture(specularTexture, texCoords).a;
+        if (specularFactorSet) specular.specular *= specularTextureVal;
+        else specular.specular = specularTextureVal;
+    }
+
+    if (specularColourTextureSet) {
+        vec3 specularColourTextureVal = texture(specularColourTexture, texCoords).rgb;
+        if (specularColourFactorSet) specular.specularColour *= specularColourTextureVal;
+        else specular.specularColour = specularColourTextureVal;
+    }
+
+    return specular;
+}
+
+void main() {
+    vec4 baseColour = getBaseColour();
+    if (enableAlphaCutoff && baseColour.a < alphaCutoff) discard;
+    if (unlit) {
+        Colour = baseColour;
+        return;
+    }
+    vec3 albedo = baseColour.rgb;
+
+    MetallicRoughness metallicRoughness = getMetallicRoughness();
+    float metallic = metallicRoughness.metallic;
+    float roughness = metallicRoughness.roughness;
+
+    vec3 normal = getNormal();
+
+    Clearcoat clearcoatResult = getClearcoat(normal);
+    float clearcoat = clearcoatResult.clearcoat;
+    float clearcoatRoughness = clearcoatResult.clearcoatRoughness;
+    vec3 clearcoatNormal = clearcoatResult.clearcoatNormal;
+
     bool clearcoatActive = clearcoat != 0.0;
+
+    vec3 emissive = getEmissive();
+    Specular specularTotal = getSpecular();
+    float specular = specularTotal.specular;
+    vec3 specularColour = specularTotal.specularColour;
+
+    float occlusion = getOcclusion();
 
     // Clamp roughnesses, roughness at zero isn't great visually
     roughness = clamp(roughness, 0.089, 1.0);
     clearcoatRoughness = clamp(clearcoatRoughness, 0.089, 1.0);
 
-    vec3 emissive = vec3(0.0);
-    if (checkBitMask(materialUsages, 2)) {
-        emissive += texture(emissiveTexture, texCoords).rgb;
-        emissive *= emissiveFactor;
-    }
-
-    float specular = specularFactor;
-    vec3 specularColour = specularColourFactor;
-    if (checkBitMask(materialUsages, 9)) {
-        specular *= texture(specularTexture, texCoords).a;
-    }
-    if (checkBitMask(materialUsages, 10)) {
-        specularColour *= texture(specularColourTexture, texCoords).rgb;
-    }
 
     vec3 viewDir = normalize(cameraPosition - position);
 
@@ -402,7 +539,6 @@ void main() {
             ambient += IBLAmbientTerm(clearcoatNormal, viewDir, Fc, vec3(0.0), clearcoatRoughness, 0.0, true, specular, specularColour);
         }
     }
-
 
     vec3 colour = ambient * occlusion + lightOutputted;
     colour += emissive * (1.0 - clearcoat * Fc);

@@ -580,17 +580,26 @@ model_and_normal :: proc(mesh: ^resource.Mesh, world: ^standards.WorldComponent,
 // I've made this pascal case for some reason
 MAX_MATERIAL_USAGE :: u32  // Must be reflected as the same type in any shaders
 MaterialUsage :: enum {
-    PBRMetallicRoughnessTexture,
-    BaseColourTexture,
-    EmissiveTexture,
-    OcclusionTexture,
-    NormalTexture,
-    ClearcoatTexture,
-    ClearcoatRoughnessTexture,
-    ClearcoatNormalTexture,
-    SpecularTexture,
-    SpecularColourTexture
+    BaseColourFactor = 0,
+    BaseColourTexture = 1,
+    PBRMetallicFactor = 2,
+    PBRRoughnessFactor = 3,
+    PBRMetallicRoughnessTexture = 4,
+    EmissiveFactor = 5,
+    EmissiveTexture = 6,
+    OcclusionTexture = 7,
+    NormalTexture = 8,
+    ClearcoatFactor = 9,
+    ClearcoatTexture = 10,
+    ClearcoatRoughnessFactor = 11,
+    ClearcoatRoughnessTexture = 12,
+    ClearcoatNormalTexture = 13,
+    SpecularFactor = 14,
+    SpecularTexture = 15,
+    SpecularColourFactor = 16,
+    SpecularColourTexture = 17
 }
+MaterialUsages :: bit_set[MaterialUsage; MAX_MATERIAL_USAGE]
 
 // Arbitrary, PBR shaders defining materials must match these sampler binding locations
 PBRSamplerBindingLocation :: enum u32 {
@@ -616,15 +625,14 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
     resource.set_uniform(lighting_shader, resource.UNLIT, i32(type.unlit))
     resource.set_uniform(lighting_shader, resource.EMISSIVE_FACTOR, material.emissive_factor[0], material.emissive_factor[1], material.emissive_factor[2])
 
-    specular_factor: f32 = 1.0
-    specular_colour_factor := [3]f32{ 1.0, 1.0, 1.0 }
-
-    usages: bit_set[MaterialUsage; MAX_MATERIAL_USAGE]
+    usages: MaterialUsages
+    usages += { .EmissiveFactor }
     for info, property in material.properties {
         switch v in property.value {
             case resource.PBRMetallicRoughness:
+                usages += { .BaseColourFactor, .PBRMetallicFactor, .PBRRoughnessFactor }
                 if v.base_colour != nil {
-                    usages += { .BaseColourTexture}
+                    usages += { .BaseColourTexture }
                     base_colour := resource.get_texture(manager, v.base_colour) or_return
                     texture_unit := i32(PBRSamplerBindingLocation.BASE_COLOUR)
 
@@ -679,8 +687,9 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 bind_texture(texture_unit, normal_texture.gpu_texture.?) or_return
                 resource.set_uniform(lighting_shader, resource.NORMAL_TEXTURE, texture_unit)
             case resource.Clearcoat:
+                usages += { .ClearcoatFactor, .ClearcoatRoughnessFactor }
                 if v.clearcoat_texture != nil {
-                    usages += { .ClearcoatTexture}
+                    usages += { .ClearcoatTexture }
                     clearcoat := resource.get_texture(manager, v.clearcoat_texture) or_return
                     texture_unit := i32(PBRSamplerBindingLocation.CLEARCOAT)
 
@@ -712,7 +721,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 resource.set_uniform(lighting_shader, resource.CLEARCOAT_FACTOR, v.clearcoat_factor)
                 resource.set_uniform(lighting_shader, resource.CLEARCOAT_ROUGHNESS_FACTOR, v.clearcoat_roughness_factor)
             case resource.Specular:
-
+                usages += { .SpecularFactor, .SpecularColourFactor }
                 if v.specular_texture != nil {
                     usages += { .SpecularTexture }
                     specular := resource.get_texture(manager, v.specular_texture) or_return
@@ -733,13 +742,13 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                     resource.set_uniform(lighting_shader, resource.SPECULAR_COLOUR_TEXTURE, texture_unit)
                 }
 
-                specular_factor = v.specular_factor
-                specular_colour_factor = v.specular_colour_factor
+                resource.set_uniform(lighting_shader, resource.SPECULAR_FACTOR, v.specular_factor)
+                resource.set_uniform(lighting_shader, resource.SPECULAR_COLOUR_FACTOR, v.specular_colour_factor[0], v.specular_colour_factor[1], v.specular_colour_factor[2])
         }
     }
-    resource.set_uniform(lighting_shader, resource.SPECULAR_FACTOR, specular_factor)
-    resource.set_uniform(lighting_shader, resource.SPECULAR_COLOUR_FACTOR, specular_colour_factor[0], specular_colour_factor[1], specular_colour_factor[2])
+
     resource.set_uniform(lighting_shader, resource.MATERIAL_USAGES, transmute(MAX_MATERIAL_USAGE)usages)
+
     return true
 }
 

@@ -79,3 +79,7 @@ map_to_bytes :: proc(m: map[$K]$V, bytes: ^[dynamic]byte) {
         append_elems(bytes, ..to_bytes(&value))
     }
 }
+
+flip_bitset :: proc(bitset: $T/bit_set[$E; $B]) -> (flipped: T) {
+    return transmute(T)(!(transmute(B)bitset))
+}
