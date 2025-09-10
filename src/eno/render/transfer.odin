@@ -222,7 +222,6 @@ transfer_texture :: proc(
 
 make_texture :: proc{ make_texture_, make_texture_raw }
 
-// resource.Texture refers specifically to material textures - therefore they will be colour attachments and will use RGBA16F
 make_texture_ :: proc(
     tex: resource.Texture,
     internal_format: i32 = gl.RGBA8,
@@ -820,4 +819,8 @@ conv_depth_func :: proc(func: DepthFunc) -> u32 {
 
 set_default_depth_func :: proc() {
     gl.DepthFunc(gl.LESS)
+}
+
+draw_buffers :: proc(buffers: ..u32) {
+    gl.DrawBuffers(i32(len(buffers)), raw_data(buffers))
 }

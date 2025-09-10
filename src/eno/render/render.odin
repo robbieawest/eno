@@ -290,7 +290,7 @@ group_meshes_by_shader :: proc(
                 case ^RenderPass:
                     dbg.log(.ERROR, "If a render pass shader gather points to another render pass, that other render pass must not point to another pass")
                     return
-                case RenderPassShaderGenerate:
+                case RenderPassShaderGenerate :
                     if gather not_in shader_store.render_pass_mappings {
                         dbg.log(.ERROR, "Inner render pass not gathered data yet, please sort render passes by gathers")
                         return
@@ -1143,14 +1143,14 @@ populate_shaders :: proc(
     allocator := context.allocator
 ) -> (ok: bool) {
 
-    shader_generate_type, do_generate := render_pass.shader_gather.(RenderPassShaderGenerate)
+    shader_generate_config, do_generate := render_pass.shader_gather.(RenderPassShaderGenerate)
     if !do_generate do return true  // If shader_gather points to a RenderPass then do nothing here
 
     dbg.log(.INFO, "Populating shaders for render pass")
 
     for &mesh in meshes {
 
-        shader_pass, generate_ok := generate_shader_pass_for_mesh(shader_store, manager, shader_generate_type, mesh, allocator)
+        shader_pass, generate_ok := generate_shader_pass_for_mesh(shader_store, manager, shader_generate_config, mesh, allocator)
         if !generate_ok {
             dbg.log(.ERROR, "Could not populate shaders for mesh")
             return
@@ -1181,12 +1181,12 @@ populate_shaders :: proc(
 generate_shader_pass_for_mesh :: proc(
     shader_store: ^RenderShaderStore,
     manager: ^resource.ResourceManager,
-    shader_generate: RenderPassShaderGenerate,
+    shader_generate_config: RenderPassShaderGenerate,
     mesh: ^resource.Mesh,
     allocator := context.allocator
 ) -> (shader_pass_id: resource.ResourceID, ok: bool) {
-    // Upon .NO_GENERATE the pass gets ignored
-    if mesh.mesh_id != nil || shader_generate == .NO_GENERATE {
+
+    if mesh.mesh_id != nil || shader_generate_config == nil {
         dbg.log(.INFO, "Skipping shader generation for mesh")
         return nil, true
     }
@@ -1205,26 +1205,11 @@ generate_shader_pass_for_mesh :: proc(
         }
     }
 
-    if vertex_layout.shader == nil {
-        dbg.log(dbg.LogLevel.INFO, "Creating vertex shader for layout")
-        vertex_layout.shader = generate_vertex_shader(manager, shader_generate, contains_tangent, allocator) or_return
+    shader_pass: resource.ShaderProgram
+    switch v in shader_generate_config {
+        case LightingShaderGenerateConfig: shader_pass = generate_lighting_shader_pass(manager, vertex_layout, material_type, contains_tangent, allocator) or_return
+        case GBufferShaderGenerateConfig: shader_pass = generate_gbuffer_shader_pass(manager, vertex_layout, material_type, contains_tangent, allocator) or_return
     }
-
-    if material_type.shader == nil {
-        dbg.log(dbg.LogLevel.INFO, "Creating lighting shader for material type")
-        material_type.shader = generate_lighting_shader(manager, shader_generate, contains_tangent, allocator) or_return
-    }
-
-    // Grabbing shaders here makes it impossible to compile a shader twice
-    vert := resource.get_shader(manager, vertex_layout.shader.?) or_return
-    frag := resource.get_shader(manager, material_type.shader.?) or_return
-
-    if vert.id == nil do compile_shader(vert) or_return
-    if frag.id == nil do compile_shader(frag) or_return
-
-    shader_pass := resource.init_shader_program()
-    shader_pass.shaders[.VERTEX] = vertex_layout.shader.?
-    shader_pass.shaders[.FRAGMENT] = material_type.shader.?
 
     shader_pass_id = resource.add_shader_pass(manager, shader_pass) or_return
     e_shader_pass := resource.get_shader_pass(manager, shader_pass_id) or_return
@@ -1234,14 +1219,79 @@ generate_shader_pass_for_mesh :: proc(
 }
 
 @(private)
-generate_vertex_shader :: proc(
+generate_gbuffer_shader_pass :: proc(
     manager: ^resource.ResourceManager,
-    pass_type: RenderPassShaderGenerate,
+    vertex_layout: ^resource.VertexLayout,
+    material_type: ^resource.MaterialType,
+    contains_tangent: bool,
+    allocator: mem.Allocator
+) -> (shader_pass: resource.ShaderProgram, ok: bool) {
+    if vertex_layout.shader == nil {
+        dbg.log(dbg.LogLevel.INFO, "Creating gbuffer vertex shader for layout")
+        vertex_layout.shader = generate_gbuffer_vertex_shader(manager, contains_tangent, allocator) or_return
+    }
+
+    if material_type.shader == nil {
+        dbg.log(dbg.LogLevel.INFO, "Creating gbuffer fragment shader for material type")
+        material_type.shader = generate_gbuffer_frag_shader(manager, contains_tangent, allocator) or_return
+    }
+
+    // Grabbing shaders here makes it impossible to compile a shader twice
+    vert := resource.get_shader(manager, vertex_layout.shader.?) or_return
+    frag := resource.get_shader(manager, material_type.shader.?) or_return
+
+    if vert.id == nil do compile_shader(vert) or_return
+    if frag.id == nil do compile_shader(frag) or_return
+
+    shader_pass = resource.init_shader_program()
+    shader_pass.shaders[.VERTEX] = vertex_layout.shader.?
+    shader_pass.shaders[.FRAGMENT] = material_type.shader.?
+
+    ok = true
+    return
+}
+
+@(private)
+generate_lighting_shader_pass :: proc(
+    manager: ^resource.ResourceManager,
+    vertex_layout: ^resource.VertexLayout,
+    material_type: ^resource.MaterialType,
+    contains_tangent: bool,
+    allocator: mem.Allocator
+) -> (shader_pass: resource.ShaderProgram, ok: bool) {
+    if vertex_layout.shader == nil {
+        dbg.log(dbg.LogLevel.INFO, "Creating lighting vertex shader for layout")
+        vertex_layout.shader = generate_lighting_vertex_shader(manager, contains_tangent, allocator) or_return
+    }
+
+    if material_type.shader == nil {
+        dbg.log(dbg.LogLevel.INFO, "Creating lighting fragment shader for material type")
+        material_type.shader = generate_lighting_frag_shader(manager, contains_tangent, allocator) or_return
+    }
+
+    // Grabbing shaders here makes it impossible to compile a shader twice
+    vert := resource.get_shader(manager, vertex_layout.shader.?) or_return
+    frag := resource.get_shader(manager, material_type.shader.?) or_return
+
+    if vert.id == nil do compile_shader(vert) or_return
+    if frag.id == nil do compile_shader(frag) or_return
+
+    shader_pass = resource.init_shader_program()
+    shader_pass.shaders[.VERTEX] = vertex_layout.shader.?
+    shader_pass.shaders[.FRAGMENT] = material_type.shader.?
+
+    ok = true
+    return
+}
+
+@(private)
+generate_lighting_vertex_shader :: proc(
+    manager: ^resource.ResourceManager,
     contains_tangent: bool,
     allocator := context.allocator
 ) -> (id: resource.ResourceIdent, ok: bool) {
     // Todo dynamic
-    dbg.log(.INFO, "Generating vertex shader")
+    dbg.log(.INFO, "Generating lighting vertex shader")
 
     single_shader: resource.Shader
     if contains_tangent do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr.vert", .VERTEX, allocator) or_return
@@ -1253,18 +1303,51 @@ generate_vertex_shader :: proc(
 }
 
 @(private)
-generate_lighting_shader :: proc(
+generate_lighting_frag_shader :: proc(
     manager: ^resource.ResourceManager,
-    pass_type: RenderPassShaderGenerate,
     contains_tangent: bool,
     allocator := context.allocator
 ) -> (id: resource.ResourceIdent, ok: bool) {
     // Todo dynamic
-    dbg.log(.INFO, "Generating lighting shader")
+    dbg.log(.INFO, "Generating lighting frag shader")
 
     single_shader: resource.Shader
     if contains_tangent do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr.frag", .FRAGMENT, allocator) or_return
     else do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr_no_tangent.frag", .FRAGMENT, allocator) or_return
+    id = resource.add_shader(manager, single_shader) or_return
+    ok = true
+    return
+}
+
+@(private)
+generate_gbuffer_vertex_shader :: proc(
+    manager: ^resource.ResourceManager,
+    contains_tangent: bool,
+    allocator := context.allocator
+) -> (id: resource.ResourceIdent, ok: bool) {
+// Todo dynamic
+    dbg.log(.INFO, "Generating gbuffer vertex shader")
+
+    single_shader: resource.Shader
+    if contains_tangent do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "gbuffer.vert", .FRAGMENT, allocator) or_return
+    //else do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "gbuf.frag", .FRAGMENT, allocator) or_return
+    id = resource.add_shader(manager, single_shader) or_return
+    ok = true
+    return
+}
+
+@(private)
+generate_gbuffer_frag_shader :: proc(
+    manager: ^resource.ResourceManager,
+    contains_tangent: bool,
+    allocator := context.allocator
+) -> (id: resource.ResourceIdent, ok: bool) {
+// Todo dynamic
+    dbg.log(.INFO, "Generating gbuffer frag shader")
+
+    single_shader: resource.Shader
+    if contains_tangent do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "gbuffer.frag", .FRAGMENT, allocator) or_return
+    // else do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr_no_tangent.frag", .FRAGMENT, allocator) or_return
     id = resource.add_shader(manager, single_shader) or_return
     ok = true
     return

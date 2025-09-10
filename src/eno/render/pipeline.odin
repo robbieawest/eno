@@ -19,11 +19,7 @@ RenderPipeline :: struct {
 // Default render pipeline has no passes
 init_render_pipeline :: proc(buffers: ..FrameBuffer, allocator := context.allocator) {
     Context.pipeline.frame_buffers = make([dynamic]^FrameBuffer, allocator=allocator)
-    for buffer in buffers {
-        new_buf := new(FrameBuffer, allocator=allocator)
-        new_buf^ = buffer
-        append_elems(&Context.pipeline.frame_buffers, new_buf)
-    }
+    add_framebuffers(..buffers, allocator=allocator)
 
     Context.pipeline.passes = make([dynamic]^RenderPass, allocator=allocator)
     Context.pipeline.pre_passes = make([dynamic]^PreRenderPass, allocator=allocator)
@@ -31,14 +27,25 @@ init_render_pipeline :: proc(buffers: ..FrameBuffer, allocator := context.alloca
     return
 }
 
-add_render_passes :: proc(passes: ..RenderPass, allocator := context.allocator) -> (ok: bool) {
+// Copies each framebuffer
+add_framebuffers :: proc(buffers: ..FrameBuffer, allocator := context.allocator) {
+    for buffer in buffers {
+        new_buf := new(FrameBuffer, allocator=allocator)
+        new_buf^ = buffer
+        append_elems(&Context.pipeline.frame_buffers, new_buf)
+    }
+}
+
+add_render_passes :: proc(passes: ..RenderPass) {
     for pass, i in passes {
-        new_pass := new(RenderPass, allocator=allocator)
+        new_pass := new(RenderPass, allocator=Context.pipeline.passes.allocator)
         new_pass^ = pass
         append(&Context.pipeline.passes, new_pass)
     }
+}
 
-    return true
+add_render_passes_ptr :: proc(passes: ..^RenderPass) {
+    append_elems(&Context.pipeline.passes, ..passes)
 }
 
 add_pre_render_passes :: proc(passes: ..PreRenderPass, allocator := context.allocator) -> (ok: bool) {
@@ -200,17 +207,164 @@ apply_material_query :: proc(
 
 RenderPassMeshGather :: union { RenderPassQuery, ^RenderPass }
 
-// Extend
-RenderPassShaderGenerate :: enum {
-    NO_GENERATE,
-    DEPTH_ONLY,
-    LIGHTING
+RenderPassShaderGenerate :: union {
+    LightingShaderGenerateConfig,
+    GBufferShaderGenerateConfig
+}
+
+LightingShaderGenerateConfig :: struct {
+    // Fill
+}
+
+GBufferShaderGenerateConfig :: struct {
+    outputs: GBufferInfo
 }
 
 RenderPassShaderGather :: union #no_nil {
     RenderPassShaderGenerate,
     ^RenderPass
 }
+
+// It's called post process but it doesn't need to be "post"
+// Just about taking texture(s) and returning another texture
+PostProcessPass :: struct {
+    render_targets: [dynamic]RenderTarget,
+    render_inputs: [dynamic]^Attachment,
+    shader: resource.ResourceIdent
+}
+
+make_post_process_pass :: proc(
+    manager: ^resource.ResourceManager,
+    shader: resource.ShaderProgram,
+    allocator := context.allocator
+) -> (pass: PostProcessPass, ok: bool) {
+    pass.shader = resource.add_shader_pass(manager, shader) or_return
+
+    pass.render_targets = make([dynamic]RenderTarget, allocator=allocator)
+    pass.render_inputs = make([dynamic]^Attachment, allocator=allocator)
+
+    ok = true
+    return
+}
+
+add_render_targets :: proc(pass: ^PostProcessPass, targets: ..RenderTarget) {
+    append_elems(&pass.render_targets, ..targets)
+}
+
+add_render_inputs :: proc(pass: ^PostProcessPass, inputs: ..^Attachment) {
+    append_elems(&pass.render_inputs, ..inputs)
+}
+
+make_ssao_post_process_pass :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (pass: PostProcessPass, ok: bool) {
+
+    
+
+    ok = true
+    return
+}
+
+GBufferComponent :: enum u32 {
+    POSITION,
+    NORMAL,
+    DEPTH,  // Todo make sure depth is fully supported in gbuffer framebuffer
+    // extend
+}
+GBufferInfo :: bit_set[GBufferComponent; u32]
+
+TextureStorage :: struct{ internal_format: i32, format: u32, type: u32 }
+GBufferComponentStorage := [GBufferComponent]TextureStorage {
+    .POSITION = { gl.RGBA16F, gl.RGBA, gl.FLOAT },
+    .NORMAL = { gl.RGBA16F, gl.RGBA, gl.FLOAT },
+    .DEPTH = { gl.DEPTH_COMPONENT, gl.DEPTH_COMPONENT, gl.FLOAT }
+    // Colour = gl.RGBA, gl.RGBA, UNSIGNED BYTE
+    // ...
+}
+
+// Create's new framebuffer to house gbuffer
+// Defining a G-Buffer as a collection of one or more textures containing mesh data, not necessarily to be used for deferred rendering
+make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.allocator) -> (passes: []^RenderPass, ok: bool) {
+
+    if info == {} {
+        dbg.log(.ERROR, "Attempting to create gbuffer with no components")
+        return
+    }
+
+    framebuffer := make_framebuffer(w, h, allocator)
+
+    tex_properties := make(resource.TextureProperties, allocator=allocator)
+    defer delete(tex_properties)
+    tex_properties[.MIN_FILTER] = .NEAREST
+    tex_properties[.MAG_FILTER] = .NEAREST
+
+    // Allocates textures in order of the GBufferComponent enum
+    // Attachment order is the same, multiple render targets are the same
+    // Not doing any funny packing
+    for component, i in GBufferComponent {
+        if component in info {
+            storage := GBufferComponentStorage[component]
+            tex := make_texture(w, h, internal_format=storage.internal_format, format=storage.format, type=storage.type, texture_properties=tex_properties)
+
+            attachment_id := gl.COLOR_ATTACHMENT0 + u32(i)
+            attachment := Attachment{ .COLOUR, attachment_id, tex }
+            framebuffer.attachments[attachment_id] = attachment
+        }
+    }
+
+    add_framebuffers(framebuffer, allocator=allocator)
+    passes = make([]^RenderPass, 2, allocator=allocator)
+    passes = { new(RenderPass, allocator=Context.pipeline.passes.allocator), new(RenderPass, allocator=Context.pipeline.passes.allocator) }
+    passes[0]^ = make_render_pass(
+        shader_gather=RenderPassShaderGenerate(GBufferShaderGenerateConfig{ info }),
+        mesh_gather=RenderPassQuery{ material_query =
+            proc(material: resource.Material, type: resource.MaterialType) -> bool {
+                return type.alpha_mode != .BLEND && !type.double_sided
+            }
+        },
+        properties=RenderPassProperties{
+            geometry_z_sorting = .ASC,
+            face_culling = FaceCulling.BACK,
+            viewport = [4]i32{ 0, 0, w, h },
+            clear = { .COLOUR_BIT, .DEPTH_BIT },
+            clear_colour = [4]f32{ 0.0, 0.0, 0.0, 1.0 },
+        }
+    ) or_return
+
+    passes[1]^ = make_render_pass(
+        shader_gather=passes[0],
+        mesh_gather=RenderPassQuery{ material_query =
+            proc(material: resource.Material, type: resource.MaterialType) -> bool {
+                return type.alpha_mode != .BLEND && type.double_sided
+            }
+        },
+        properties=RenderPassProperties{
+            geometry_z_sorting = .ASC,
+            viewport = [4]i32{ 0, 0, w, h },
+            clear = { .COLOUR_BIT, .DEPTH_BIT },
+            clear_colour = [4]f32{ 0.0, 0.0, 0.0, 1.0 },
+        }
+    ) or_return
+
+    ok = true
+    return
+}
+
+
+// Don't think this is needed
+AttachmentOutputChannel :: enum u32 {
+    R,
+    G,
+    B,
+    A,
+    DEPTH,
+    STENCIL
+}
+
+RenderTarget :: struct {
+    framebuffer: ^FrameBuffer,
+    attachment: ^Attachment,
+    channels: bit_set[AttachmentOutputChannel; u32]
+}
+
 
 // Structure may be too simple
 RenderPass :: struct {
@@ -264,10 +418,10 @@ check_render_pass_mesh_gather :: proc(pass: ^RenderPass, iteration_curr: int, it
 @(private)
 check_render_pass_shader_gather :: proc(pass: ^RenderPass, iteration_curr: int, iteration_limit: int) -> (ok: bool) {
     switch v in pass.shader_gather {
-        case RenderPassShaderGenerate: return true
         case ^RenderPass:
             if iteration_curr == iteration_limit do return false
             return check_render_pass_shader_gather(v, iteration_curr + 1, iteration_limit)
+        case RenderPassShaderGenerate: return true
     }
     return // Impossible to reach but whatever
 }
@@ -285,7 +439,6 @@ AttachmentInfo :: struct {
     internal_backing_type: u32
 }
 
-// Todo make sure inner framebuffers only use textures
 FrameBuffer :: struct {
     id: Maybe(u32),
     w, h: i32,
@@ -344,15 +497,27 @@ destroy_framebuffer :: proc(frame_buffer: ^FrameBuffer, release_attachments := t
     if id, id_ok := frame_buffer.id.?; id_ok do release_framebuffer(frame_buffer^)
 }
 
+// Attachments are gl.COLOR_ATTACHMENT0 etc.
+framebuffer_draw_attachments :: proc(framebuffer: FrameBuffer, attachments: ..u32, allocator := context.allocator) -> (ok: bool) {
+    bind_framebuffer(framebuffer) or_return
+    if len(attachments) != 0 {
+        for attachment, i in attachments {
+            if attachment not_in framebuffer.attachments {
+                dbg.log(.ERROR, "Attachment index is not valid: '%d'", attachment)
+                return
+            }
+        }
+        draw_buffers(..attachments)
+    }
+    else {
+        attachments, _ := slice.map_keys(framebuffer.attachments, allocator=allocator)
+        defer delete(attachments)
+        draw_buffers(..attachments)
+    }
 
-
-
-RenderType :: enum {
-    COLOUR = intrinsics.constant_log2(gl.COLOR_BUFFER_BIT),
-    DEPTH = intrinsics.constant_log2(gl.DEPTH_BUFFER_BIT),
-    STENCIL = intrinsics.constant_log2(gl.STENCIL_BUFFER_BIT)
+    bind_default_framebuffer()
+    return true
 }
-
 
 PreRenderPassInput :: union {
     IBLInput

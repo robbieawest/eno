@@ -135,11 +135,13 @@ before_frame :: proc() -> (ok: bool) {
 
     window_res := win.get_window_resolution(game.Game.window)
 
+    render.add_render_passes_ptr(..render.make_gbuffer_passes(window_res.w, window_res.h, render.GBufferInfo{ .NORMAL, .DEPTH }) or_return)
+
     background_colour := [4]f32{ 1.0, 1.0, 1.0, 1.0 }
     background_colour_factor: f32 = 0.85
     render.add_render_passes(
          render.make_render_pass(
-            shader_gather=render.RenderPassShaderGenerate.LIGHTING,
+            shader_gather=render.RenderPassShaderGenerate(render.LightingShaderGenerateConfig{}),
             mesh_gather=render.RenderPassQuery{ material_query =
                 proc(material: resource.Material, type: resource.MaterialType) -> bool {
                     return type.alpha_mode != .BLEND && !type.double_sided
@@ -185,7 +187,7 @@ before_frame :: proc() -> (ok: bool) {
                 blend_func = render.BlendFunc{ .SOURCE_ALPHA, .ONE_MINUS_SOURCE_ALPHA },
             },
         ) or_return
-    ) or_return
+    )
 
     /* Setup for pre passes
     game_data.render_pipeline.pre_passes[0] = render.make_pre_render_pass(
