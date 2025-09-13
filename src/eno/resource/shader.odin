@@ -846,11 +846,11 @@ init_shader_source :: proc(source: string, extension: string, allocator := conte
 }
 
 
-read_single_shader_source :: proc(full_path: string, shader_type: ShaderType, allocator := context.allocator) -> (shader: Shader, ok: bool) {
-    dbg.log(dbg.LogLevel.INFO, "Reading single shader source: %s", full_path)
+read_single_shader_source :: proc(full_path: string, shader_type: ShaderType, allocator := context.allocator, loc := #caller_location) -> (shader: Shader, ok: bool) {
+    dbg.log(dbg.LogLevel.INFO, "Reading single shader source: %s", full_path, loc=loc)
     source, err := futils.read_file_source(full_path, allocator)
     if err != .None {
-        dbg.log(dbg.LogLevel.ERROR, "Could not read file source for shader")
+        dbg.log(dbg.LogLevel.ERROR, "Could not read file source for shader of path '%s'", full_path, loc=loc)
         return
     }
 

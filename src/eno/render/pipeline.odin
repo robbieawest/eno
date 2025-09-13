@@ -282,7 +282,7 @@ GBufferComponentStorage := [GBufferComponent]TextureStorage {
 
 // Create's new framebuffer to house gbuffer
 // Defining a G-Buffer as a collection of one or more textures containing mesh data, not necessarily to be used for deferred rendering
-make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.allocator) -> (passes: []^RenderPass, ok: bool) {
+make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.allocator) -> (ok: bool) {
 
     if info == {} {
         dbg.log(.ERROR, "Attempting to create gbuffer with no components")
@@ -311,38 +311,39 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
     }
 
     add_framebuffers(framebuffer, allocator=allocator)
-    passes = make([]^RenderPass, 2, allocator=allocator)
-    passes = { new(RenderPass, allocator=Context.pipeline.passes.allocator), new(RenderPass, allocator=Context.pipeline.passes.allocator) }
-    passes[0]^ = make_render_pass(
-        shader_gather=RenderPassShaderGenerate(GBufferShaderGenerateConfig{ info }),
-        mesh_gather=RenderPassQuery{ material_query =
-            proc(material: resource.Material, type: resource.MaterialType) -> bool {
-                return type.alpha_mode != .BLEND && !type.double_sided
+    add_render_passes(
+        make_render_pass(
+            shader_gather=RenderPassShaderGenerate(GBufferShaderGenerateConfig{ info }),
+            mesh_gather=RenderPassQuery{ material_query =
+                proc(material: resource.Material, type: resource.MaterialType) -> bool {
+                    return type.alpha_mode != .BLEND && !type.double_sided
+                }
+            },
+            properties=RenderPassProperties{
+                geometry_z_sorting = .ASC,
+                face_culling = FaceCulling.BACK,
+                viewport = [4]i32{ 0, 0, w, h },
+                clear = { .COLOUR_BIT, .DEPTH_BIT },
+                clear_colour = [4]f32{ 0.0, 0.0, 0.0, 1.0 },
             }
-        },
-        properties=RenderPassProperties{
-            geometry_z_sorting = .ASC,
-            face_culling = FaceCulling.BACK,
-            viewport = [4]i32{ 0, 0, w, h },
-            clear = { .COLOUR_BIT, .DEPTH_BIT },
-            clear_colour = [4]f32{ 0.0, 0.0, 0.0, 1.0 },
-        }
-    ) or_return
-
-    passes[1]^ = make_render_pass(
-        shader_gather=passes[0],
-        mesh_gather=RenderPassQuery{ material_query =
-            proc(material: resource.Material, type: resource.MaterialType) -> bool {
-                return type.alpha_mode != .BLEND && type.double_sided
+        ) or_return
+    )
+    add_render_passes(
+        make_render_pass(
+            shader_gather=Context.pipeline.passes[len(Context.pipeline.passes) - 1],
+            mesh_gather=RenderPassQuery{ material_query =
+                proc(material: resource.Material, type: resource.MaterialType) -> bool {
+                    return type.alpha_mode != .BLEND && type.double_sided
+                }
+            },
+            properties=RenderPassProperties{
+                geometry_z_sorting = .ASC,
+                viewport = [4]i32{ 0, 0, w, h },
+                clear = { .COLOUR_BIT, .DEPTH_BIT },
+                clear_colour = [4]f32{ 0.0, 0.0, 0.0, 1.0 },
             }
-        },
-        properties=RenderPassProperties{
-            geometry_z_sorting = .ASC,
-            viewport = [4]i32{ 0, 0, w, h },
-            clear = { .COLOUR_BIT, .DEPTH_BIT },
-            clear_colour = [4]f32{ 0.0, 0.0, 0.0, 1.0 },
-        }
-    ) or_return
+        ) or_return
+    )
 
     ok = true
     return
@@ -384,6 +385,7 @@ make_render_pass :: proc(
     mesh_gather: RenderPassMeshGather = nil,  // Nil corresponds to default return all mesh query
     properties: RenderPassProperties = {}
 ) -> (pass: RenderPass, ok: bool) {
+    dbg.log(.INFO, "Creating render pass")
     pass.frame_buffer = frame_buffer
     pass.mesh_gather = mesh_gather
     pass.shader_gather = shader_gather
@@ -507,12 +509,12 @@ framebuffer_draw_attachments :: proc(framebuffer: FrameBuffer, attachments: ..u3
                 return
             }
         }
-        draw_buffers(..attachments)
+        draw_buffers(..attachments, allocator=allocator)
     }
     else {
         attachments, _ := slice.map_keys(framebuffer.attachments, allocator=allocator)
-        defer delete(attachments)
-        draw_buffers(..attachments)
+        defer delete(attachments, allocator=allocator)
+        draw_buffers(..attachments, allocator=allocator)
     }
 
     bind_default_framebuffer()

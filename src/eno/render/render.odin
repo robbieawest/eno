@@ -1325,7 +1325,6 @@ generate_gbuffer_vertex_shader :: proc(
     contains_tangent: bool,
     allocator := context.allocator
 ) -> (id: resource.ResourceIdent, ok: bool) {
-// Todo dynamic
     dbg.log(.INFO, "Generating gbuffer vertex shader")
 
     single_shader: resource.Shader
@@ -1342,7 +1341,6 @@ generate_gbuffer_frag_shader :: proc(
     contains_tangent: bool,
     allocator := context.allocator
 ) -> (id: resource.ResourceIdent, ok: bool) {
-// Todo dynamic
     dbg.log(.INFO, "Generating gbuffer frag shader")
 
     single_shader: resource.Shader

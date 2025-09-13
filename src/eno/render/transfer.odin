@@ -6,6 +6,7 @@ import "../resource"
 import dbg "../debug"
 import "../utils"
 
+import "core:slice"
 import "core:log"
 import "core:mem"
 import "base:runtime"
@@ -821,6 +822,8 @@ set_default_depth_func :: proc() {
     gl.DepthFunc(gl.LESS)
 }
 
-draw_buffers :: proc(buffers: ..u32) {
-    gl.DrawBuffers(i32(len(buffers)), raw_data(buffers))
+draw_buffers :: proc(buffers: ..u32, allocator := context.allocator) {
+    bufs := slice.filter(buffers, proc(a: u32) -> bool { return a >= gl.COLOR_ATTACHMENT0 && a <= gl.COLOR_ATTACHMENT31; }, allocator=allocator)
+    defer delete(bufs, allocator=allocator)
+    gl.DrawBuffers(i32(len(bufs)), raw_data(bufs))
 }
