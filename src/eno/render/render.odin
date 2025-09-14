@@ -1197,18 +1197,10 @@ generate_shader_pass_for_mesh :: proc(
     material_type := resource.get_material(manager, mesh.material.type) or_return
     log.infof("layout: %v, mat: %v", mesh.layout, mesh.material.type)
 
-    contains_tangent := false
-    for info in vertex_layout.infos {
-        if info.type == .tangent  {
-            contains_tangent = true
-            break
-        }
-    }
-
     shader_pass: resource.ShaderProgram
     switch v in shader_generate_config {
-        case LightingShaderGenerateConfig: shader_pass = generate_lighting_shader_pass(manager, vertex_layout, material_type, contains_tangent, allocator) or_return
-        case GBufferShaderGenerateConfig: shader_pass = generate_gbuffer_shader_pass(manager, vertex_layout, material_type, contains_tangent, allocator) or_return
+        case LightingShaderGenerateConfig: shader_pass = generate_lighting_shader_pass(manager, vertex_layout, material_type, v, allocator) or_return
+        case GBufferShaderGenerateConfig: shader_pass = generate_gbuffer_shader_pass(manager, vertex_layout, material_type, v, allocator) or_return
     }
 
     shader_pass_id = resource.add_shader_pass(manager, shader_pass) or_return
@@ -1223,17 +1215,17 @@ generate_gbuffer_shader_pass :: proc(
     manager: ^resource.ResourceManager,
     vertex_layout: ^resource.VertexLayout,
     material_type: ^resource.MaterialType,
-    contains_tangent: bool,
+    generate_config: GBufferShaderGenerateConfig,
     allocator: mem.Allocator
 ) -> (shader_pass: resource.ShaderProgram, ok: bool) {
     if vertex_layout.shader == nil {
-        dbg.log(dbg.LogLevel.INFO, "Creating gbuffer vertex shader for layout")
-        vertex_layout.shader = generate_gbuffer_vertex_shader(manager, contains_tangent, allocator) or_return
+        dbg.log(dbg.LogLevel.INFO, "Creating gbuffer vertex shader")
+        vertex_layout.shader = generate_gbuffer_vertex_shader(manager, generate_config, vertex_layout, allocator) or_return
     }
 
     if material_type.shader == nil {
-        dbg.log(dbg.LogLevel.INFO, "Creating gbuffer fragment shader for material type")
-        material_type.shader = generate_gbuffer_frag_shader(manager, contains_tangent, allocator) or_return
+        dbg.log(dbg.LogLevel.INFO, "Creating gbuffer fragment shader")
+        material_type.shader = generate_gbuffer_frag_shader(manager, generate_config, vertex_layout, allocator) or_return
     }
 
     // Grabbing shaders here makes it impossible to compile a shader twice
@@ -1247,6 +1239,9 @@ generate_gbuffer_shader_pass :: proc(
     shader_pass.shaders[.VERTEX] = vertex_layout.shader.?
     shader_pass.shaders[.FRAGMENT] = material_type.shader.?
 
+    dbg.log(.INFO, "Vert source: %#s", vert.source.string_source)
+    dbg.log(.INFO, "Frag source: %#s", frag.source.string_source)
+
     ok = true
     return
 }
@@ -1256,9 +1251,18 @@ generate_lighting_shader_pass :: proc(
     manager: ^resource.ResourceManager,
     vertex_layout: ^resource.VertexLayout,
     material_type: ^resource.MaterialType,
-    contains_tangent: bool,
+    generate_config: LightingShaderGenerateConfig,
     allocator: mem.Allocator
 ) -> (shader_pass: resource.ShaderProgram, ok: bool) {
+
+    contains_tangent := false
+    for info in vertex_layout.infos {
+        if info.type == .tangent  {
+            contains_tangent = true
+            break
+        }
+    }
+
     if vertex_layout.shader == nil {
         dbg.log(dbg.LogLevel.INFO, "Creating lighting vertex shader for layout")
         vertex_layout.shader = generate_lighting_vertex_shader(manager, contains_tangent, allocator) or_return
@@ -1322,33 +1326,51 @@ generate_lighting_frag_shader :: proc(
 @(private)
 generate_gbuffer_vertex_shader :: proc(
     manager: ^resource.ResourceManager,
-    contains_tangent: bool,
+    generate_config: GBufferShaderGenerateConfig,
+    vertex_layout: ^resource.VertexLayout,
     allocator := context.allocator
 ) -> (id: resource.ResourceIdent, ok: bool) {
     dbg.log(.INFO, "Generating gbuffer vertex shader")
 
-    single_shader: resource.Shader
-    if contains_tangent do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "gbuffer.vert", .FRAGMENT, allocator) or_return
-    //else do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "gbuf.frag", .FRAGMENT, allocator) or_return
-    id = resource.add_shader(manager, single_shader) or_return
-    ok = true
-    return
+    shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "gbuffer.vert", .VERTEX, allocator) or_return
+
+    defines := make([dynamic]string, allocator=allocator)
+    defer delete(defines)
+
+    for attribute in vertex_layout.infos do #partial switch attribute.type {
+        case .position: if .POSITION in generate_config.outputs do append_elem(&defines, "#define POSITION_INPUT")
+        case .normal: if .NORMAL in generate_config.outputs do append_elem(&defines, "#define NORMAL_INPUT")
+    }
+    old_src := shader.source.string_source
+    defer delete(old_src)
+    shader.source.string_source = resource.add_shader_defines(old_src, ..defines[:], allocator=allocator) or_return
+
+    return resource.add_shader(manager, shader)
 }
 
 @(private)
 generate_gbuffer_frag_shader :: proc(
     manager: ^resource.ResourceManager,
-    contains_tangent: bool,
+    generate_config: GBufferShaderGenerateConfig,
+    vertex_layout: ^resource.VertexLayout,
     allocator := context.allocator
 ) -> (id: resource.ResourceIdent, ok: bool) {
     dbg.log(.INFO, "Generating gbuffer frag shader")
 
-    single_shader: resource.Shader
-    if contains_tangent do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "gbuffer.frag", .FRAGMENT, allocator) or_return
-    // else do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr_no_tangent.frag", .FRAGMENT, allocator) or_return
-    id = resource.add_shader(manager, single_shader) or_return
-    ok = true
-    return
+    shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "gbuffer.frag", .FRAGMENT, allocator) or_return
+
+    defines := make([dynamic]string, allocator=allocator)
+    defer delete(defines)
+
+    for attribute in vertex_layout.infos do #partial switch attribute.type {
+    case .position: if .POSITION in generate_config.outputs do append_elem(&defines, "#define POSITION_INPUT")
+    case .normal: if .NORMAL in generate_config.outputs do append_elem(&defines, "#define NORMAL_INPUT")
+    }
+    old_src := shader.source.string_source
+    defer delete(old_src)
+    shader.source.string_source = resource.add_shader_defines(old_src, ..defines[:], allocator=allocator) or_return
+
+    return resource.add_shader(manager, shader)
 }
 
 

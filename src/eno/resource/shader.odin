@@ -114,14 +114,14 @@ ShaderInfo :: struct {
     functions: [dynamic]ShaderFunction
 }
 
-make_shader_info :: proc() -> ShaderInfo {
+make_shader_info :: proc(allocator := context.allocator) -> ShaderInfo {
     return {
-        ShaderBindings{ make([dynamic]ShaderBufferObject), make([dynamic]ShaderBufferObject) },
-        make([dynamic]GLSLPair),
-        make([dynamic]GLSLPair),
-        make([dynamic]GLSLPair),
-        make([dynamic]ShaderStruct),
-        make([dynamic]ShaderFunction)
+        ShaderBindings{ make([dynamic]ShaderBufferObject, allocator=allocator), make([dynamic]ShaderBufferObject, allocator=allocator) },
+        make([dynamic]GLSLPair, allocator=allocator),
+        make([dynamic]GLSLPair, allocator=allocator),
+        make([dynamic]GLSLPair, allocator=allocator),
+        make([dynamic]ShaderStruct, allocator=allocator),
+        make([dynamic]ShaderFunction, allocator=allocator)
     }
 }
 
@@ -951,6 +951,31 @@ handle_file_read_error :: proc(filepath: string, err: futils.FileReadError, loc 
 
     return
 }
+
+// Defines must be GLSL syntax correct, responsibility is on caller
+add_shader_defines :: proc(source: string, defines : ..string, allocator := context.allocator) -> (new_source: string, ok: bool) {
+    first_newline_idx := -1
+    for char, i in source {
+        if char == '\n' {
+            first_newline_idx = i
+            break
+        }
+    }
+    if first_newline_idx == -1 {
+        dbg.log(.ERROR, "Must be more than one line in source")
+        return
+    }
+
+    defines_str := strings.builder_make()
+    defer strings.builder_destroy(&defines_str)
+    for define in defines do fmt.sbprintf(&defines_str, "%s\n", define)
+    new_source = utils.concat(source[0:first_newline_idx+1], strings.to_string(defines_str), source[first_newline_idx+1:], allocator=allocator)
+
+    ok = true
+    return
+}
+
+// add_shader_includes :: proc()
 
 /* Old
 // Directory must end in a slash

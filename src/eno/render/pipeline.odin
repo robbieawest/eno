@@ -310,6 +310,9 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
         }
     }
 
+    attachments, _ := slice.map_keys(framebuffer.attachments, allocator=allocator); defer delete(attachments)
+    framebuffer_draw_attachments(framebuffer, ..attachments, allocator=allocator) or_return
+
     add_framebuffers(framebuffer, allocator=allocator)
     add_render_passes(
         make_render_pass(
@@ -400,6 +403,7 @@ make_render_pass :: proc(
         dbg.log(.ERROR, "Render pass shader gather must end in a RenderPassShaderGenerate enum")
         return
     }
+
 
     ok = true
     return
