@@ -105,7 +105,7 @@ render :: proc(
         }
 
         // Handle properties BEFORE 0 mesh check
-        handle_pass_properties(pass^) or_return
+        handle_pass_state(pass^) or_return
         check_framebuffer_status_raw() or_return
 
         update_camera_ubo(scene) or_return
@@ -298,8 +298,17 @@ group_meshes_by_shader :: proc(
                     render_shader_mapping = &shader_store.render_pass_mappings[gather]
             }
         case RenderPassShaderGenerate:
+            if render_pass not_in shader_store.render_pass_mappings {
+                dbg.log(.ERROR, "Render pass not in shader store")
+                return
+            }
             render_shader_mapping = &shader_store.render_pass_mappings[render_pass]
 
+    }
+
+    if render_shader_mapping == nil {
+        dbg.log(.ERROR, "Render shader mapping is nil")
+        return
     }
 
     shader_mappings := make([dynamic]ShaderMeshRenderMapping, allocator=temp_allocator)
@@ -334,6 +343,7 @@ group_meshes_by_shader :: proc(
         current_shader: resource.ResourceIdent
         for &mesh_data in meshes {
             mesh := mesh_data.mesh
+            dbg.log(.INFO, "mesh id: %v", mesh.mesh_id)
             if mesh.mesh_id == nil || mesh.mesh_id.? not_in render_shader_mapping {
                 dbg.log(.ERROR, "Shader pass not generated for mesh: %#v", mesh.material)
                 return
@@ -364,7 +374,7 @@ group_meshes_by_shader :: proc(
 
 // Handles binding of framebuffer along with enabling of certain settings/tests
 @(private)
-handle_pass_properties :: proc(pass: RenderPass) -> (ok: bool) {
+handle_pass_state :: proc(pass: RenderPass) -> (ok: bool) {
     if pass.frame_buffer == nil {
         bind_default_framebuffer()
         if pass.properties.viewport == nil {
@@ -1146,8 +1156,9 @@ populate_shaders :: proc(
     shader_generate_config, do_generate := render_pass.shader_gather.(RenderPassShaderGenerate)
     if !do_generate do return true  // If shader_gather points to a RenderPass then do nothing here
 
-    dbg.log(.INFO, "Populating shaders for render pass")
+    dbg.log(.INFO, "Populating shaders for render pass: %#v", render_pass)
 
+    // Bad, need to follow mesh gather
     for &mesh in meshes {
 
         shader_pass, generate_ok := generate_shader_pass_for_mesh(shader_store, manager, shader_generate_config, mesh, allocator)
