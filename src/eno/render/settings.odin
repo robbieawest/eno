@@ -73,7 +73,7 @@ apply_environment_settings :: proc(manager: ^resource.ResourceManager, allocator
     new_settings.environment_texture_uri = strings.clone(new_settings.environment_texture_uri, allocator=allocator)
     GlobalRenderSettings.environment_settings = new_settings
 
-    dbg.log(.INFO, "Applied settings: %#v", GlobalRenderSettings.environment_settings)
+    // dbg.log(.INFO, "Applied settings: %#v", GlobalRenderSettings.environment_settings)
     changed := exist_settings == nil || !compare_environment_settings(exist_settings.?, settings)
     if changed {
         destroy_image_environment(Context.image_environment)

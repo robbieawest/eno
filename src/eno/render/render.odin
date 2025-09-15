@@ -1136,21 +1136,13 @@ populate_all_shaders :: proc(
     allocator := context.allocator,
     temp_allocator := context.temp_allocator
 ) -> (ok: bool) {
-    isVisibleQueryData := true
-    query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
-        { label = resource.MODEL_COMPONENT.label, action = .QUERY_AND_INCLUDE },
-        { label = standards.VISIBLE_COMPONENT.label, action = .QUERY_NO_INCLUDE, data = &isVisibleQueryData }
-    }}
-    query_result := ecs.query_scene(scene, query, temp_allocator) or_return
+    mesh_data_map := make(map[^RenderPass][dynamic]MeshData, allocator=temp_allocator)
+    mesh_data_references := make(map[^RenderPass]^[dynamic]MeshData, allocator=temp_allocator)
 
-    models := ecs.get_component_from_query_result(query_result, resource.Model, resource.MODEL_COMPONENT.label, temp_allocator) or_return
-
-    meshes := make([dynamic]^resource.Mesh, temp_allocator)
-    for model_meshes, i in utils.extract_field(models, "meshes", [dynamic]resource.Mesh, allocator=temp_allocator) {
-        for &mesh in model_meshes do append(&meshes, &mesh)
+    for pass in Context.pipeline.passes {
+        meshes_data := meshes_from_gather(manager, scene, &mesh_data_map, &mesh_data_references, pass, temp_allocator) or_return
+        populate_shaders(&Context.pipeline.shader_store, manager, scene, pass, meshes_data, allocator) or_return
     }
-
-    for pass in Context.pipeline.passes do populate_shaders(&Context.pipeline.shader_store, manager, pass, allocator) or_return
 
     ok = true
     return
@@ -1162,7 +1154,9 @@ populate_all_shaders :: proc(
 populate_shaders :: proc(
     shader_store: ^RenderShaderStore,
     manager: ^resource.ResourceManager,
+    scene: ^ecs.Scene,
     render_pass: ^RenderPass,
+    meshes_data: []MeshData,
     allocator := context.allocator
 ) -> (ok: bool) {
 

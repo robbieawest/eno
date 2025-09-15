@@ -624,6 +624,7 @@ properties_from_texture_sampler :: proc(sampler: ^cgltf.sampler, allocator := co
         case .repeat: properties[.WRAP_S] = .REPEAT
     }
 
+
     switch sampler.wrap_t {
         case .clamp_to_edge: properties[.WRAP_T] = .CLAMP_EDGE
         case .mirrored_repeat: properties[.WRAP_T] = .MIRROR_REPEAT
