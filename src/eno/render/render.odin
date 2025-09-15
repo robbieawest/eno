@@ -78,31 +78,7 @@ render :: proc(
     for &pass in pipeline.passes {
 
         // Gather model data
-        mesh_data: ^[dynamic]MeshData
-        switch v in pass.mesh_gather {
-            case ^RenderPass:
-                if v not_in mesh_data_map {
-                    if v not_in mesh_data_references {
-                        dbg.log(.ERROR, "Render pass gather points to a render pass which has not yet been assigned model data, please order the render-passes to fix")
-                        return
-                    }
-
-                    mesh_data = mesh_data_references[v]
-                }
-                else do mesh_data = &mesh_data_map[v]
-                mesh_data_references[pass] = mesh_data
-            case RenderPassQuery:
-                mesh_data_map[pass] = query_scene(manager, scene, v, temp_allocator) or_return
-                mesh_data = &mesh_data_map[pass]
-            case nil:
-                mesh_data_map[pass] = query_scene(manager, scene, {}, temp_allocator) or_return
-                mesh_data = &mesh_data_map[pass]
-
-        }
-        if mesh_data == nil {
-            dbg.log(.ERROR, "Mesh data nil")
-            return
-        }
+        mesh_data := meshes_from_gather(manager, scene, &mesh_data_map, &mesh_data_references, pass, temp_allocator) or_return
 
         // Handle properties BEFORE 0 mesh check
         handle_pass_state(pass^) or_return
@@ -111,7 +87,7 @@ render :: proc(
         update_camera_ubo(scene) or_return
         update_lights_ssbo(scene) or_return
 
-        if len(mesh_data) != 0 do render_geometry(manager, scene, pipeline.shader_store, pass, mesh_data^, temp_allocator) or_return
+        if len(mesh_data) != 0 do render_geometry(manager, scene, pipeline.shader_store, pass, mesh_data, temp_allocator) or_return
         if pass.properties.render_skybox do render_skybox(manager, scene.viewpoint, allocator) or_return
     }
 
@@ -122,12 +98,50 @@ render :: proc(
 }
 
 @(private)
+meshes_from_gather :: proc(
+    manager: ^resource.ResourceManager,
+    scene: ^ecs.Scene,
+    mesh_data_map: ^map[^RenderPass][dynamic]MeshData,
+    mesh_data_references: ^map[^RenderPass]^[dynamic]MeshData,
+    pass: ^RenderPass,
+    temp_allocator: mem.Allocator
+) -> (res: []MeshData, ok: bool) {
+    mesh_data: ^[dynamic]MeshData
+    switch v in pass.mesh_gather {
+    case ^RenderPass:
+        if v not_in mesh_data_map {
+            if v not_in mesh_data_references {
+                dbg.log(.ERROR, "Render pass gather points to a render pass which has not yet been assigned model data, please order the render-passes to fix")
+                return
+            }
+
+            mesh_data = mesh_data_references[v]
+        }
+        else do mesh_data = &mesh_data_map[v]
+        mesh_data_references[pass] = mesh_data
+    case RenderPassQuery:
+        mesh_data_map[pass] = query_scene(manager, scene, v, temp_allocator) or_return
+        mesh_data = &mesh_data_map[pass]
+    case nil:
+        mesh_data_map[pass] = query_scene(manager, scene, {}, temp_allocator) or_return
+        mesh_data = &mesh_data_map[pass]
+
+    }
+    if mesh_data == nil {
+        dbg.log(.ERROR, "Mesh data returned nil")
+        return
+    }
+
+    return mesh_data[:], true
+}
+
+@(private)
 render_geometry :: proc(
     manager: ^resource.ResourceManager,
     scene: ^ecs.Scene,
     shader_store: RenderShaderStore,
     pass: ^RenderPass,
-    mesh_data: [dynamic]MeshData,
+    mesh_data: []MeshData,
     temp_allocator := context.temp_allocator
 ) -> (ok: bool) {
     sort_geom := pass.properties.geometry_z_sorting != .NO_SORT
@@ -273,7 +287,7 @@ ShaderMeshRenderMapping :: struct {
 group_meshes_by_shader :: proc(
     shader_store: RenderShaderStore,
     render_pass: ^RenderPass,
-    meshes: [dynamic]MeshData,
+    meshes: []MeshData,
     preserve_ordering: bool,
     temp_allocator := context.temp_allocator
 ) -> (result: []ShaderMeshRenderMapping, ok: bool) {
@@ -1136,7 +1150,7 @@ populate_all_shaders :: proc(
         for &mesh in model_meshes do append(&meshes, &mesh)
     }
 
-    for pass in Context.pipeline.passes do populate_shaders(&Context.pipeline.shader_store, manager, pass, meshes[:], allocator) or_return
+    for pass in Context.pipeline.passes do populate_shaders(&Context.pipeline.shader_store, manager, pass, allocator) or_return
 
     ok = true
     return
@@ -1149,7 +1163,6 @@ populate_shaders :: proc(
     shader_store: ^RenderShaderStore,
     manager: ^resource.ResourceManager,
     render_pass: ^RenderPass,
-    meshes: []^resource.Mesh,
     allocator := context.allocator
 ) -> (ok: bool) {
 
@@ -1158,9 +1171,9 @@ populate_shaders :: proc(
 
     dbg.log(.INFO, "Populating shaders for render pass: %#v", render_pass)
 
-    // Bad, need to follow mesh gather
-    for &mesh in meshes {
-
+    meshes_data := meshes_from_gather(render_pass.mesh_gather) or_return
+    for &mesh_data in meshes_data {
+        mesh := mesh_data.mesh
         shader_pass, generate_ok := generate_shader_pass_for_mesh(shader_store, manager, shader_generate_config, mesh, allocator)
         if !generate_ok {
             dbg.log(.ERROR, "Could not populate shaders for mesh")
