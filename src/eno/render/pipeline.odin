@@ -306,16 +306,18 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
 
             attachment_id := gl.COLOR_ATTACHMENT0 + u32(i)
             attachment := Attachment{ .COLOUR, attachment_id, tex }
-            framebuffer.attachments[attachment_id] = attachment
+            framebuffer_add_attachments(&framebuffer, attachment)
         }
     }
 
     attachments, _ := slice.map_keys(framebuffer.attachments, allocator=allocator); defer delete(attachments)
     framebuffer_draw_attachments(framebuffer, ..attachments, allocator=allocator) or_return
+    check_framebuffer_status(framebuffer) or_return
 
     add_framebuffers(framebuffer, allocator=allocator)
     add_render_passes(
         make_render_pass(
+            frame_buffer = Context.pipeline.frame_buffers[len(Context.pipeline.frame_buffers) - 1],
             shader_gather=RenderPassShaderGenerate(GBufferShaderGenerateConfig{ info }),
             mesh_gather=RenderPassQuery{ material_query =
                 proc(material: resource.Material, type: resource.MaterialType) -> bool {
@@ -333,6 +335,7 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
     )
     add_render_passes(
         make_render_pass(
+            frame_buffer = Context.pipeline.frame_buffers[len(Context.pipeline.frame_buffers) - 1],
             shader_gather=Context.pipeline.passes[len(Context.pipeline.passes) - 1],
             mesh_gather=RenderPassQuery{ material_query =
                 proc(material: resource.Material, type: resource.MaterialType) -> bool {
@@ -501,6 +504,25 @@ destroy_framebuffer :: proc(frame_buffer: ^FrameBuffer, release_attachments := t
     if release_attachments do for _, &attachment in frame_buffer.attachments do destroy_attachment(&attachment)
     delete(frame_buffer.attachments)
     if id, id_ok := frame_buffer.id.?; id_ok do release_framebuffer(frame_buffer^)
+}
+
+framebuffer_add_attachments :: proc(framebuffer: ^FrameBuffer, attachments: ..Attachment) -> (ok: bool) {
+    if framebuffer == nil {
+        dbg.log(.ERROR, "Framebuffer is nil")
+        return
+    }
+    fbo, fbo_ok := framebuffer.id.?
+    if !fbo_ok {
+        dbg.log(.ERROR, "Framebuffer is not yet transferred")
+        return
+    }
+
+    bind_framebuffer(framebuffer^) or_return
+    for attachment in attachments {
+        // bind_texture_to_frame_buffer(fbo, )
+        framebuffer.attachments[attachment.id] = attachment
+    }
+    return true
 }
 
 // Attachments are gl.COLOR_ATTACHMENT0 etc.

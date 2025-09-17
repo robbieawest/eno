@@ -135,7 +135,7 @@ before_frame :: proc() -> (ok: bool) {
 
     window_res := win.get_window_resolution(game.Game.window)
 
-    render.make_gbuffer_passes(window_res.w, window_res.h, render.GBufferInfo{ .NORMAL, .DEPTH }) or_return
+    // render.make_gbuffer_passes(window_res.w, window_res.h, render.GBufferInfo{ .NORMAL, .DEPTH }) or_return
 
     background_colour := [4]f32{ 1.0, 1.0, 1.0, 1.0 }
     background_colour_factor: f32 = 0.85

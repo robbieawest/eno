@@ -83,3 +83,33 @@ map_to_bytes :: proc(m: map[$K]$V, bytes: ^[dynamic]byte) {
 flip_bitset :: proc(bitset: $T/bit_set[$E; $B]) -> (flipped: T) {
     return transmute(T)(!(transmute(B)bitset))
 }
+
+map_keys :: proc(m: $M/map[$K]$V, allocator := context.allocator) -> (keys: []K, ok: bool) {
+    keys_s, err := make(type_of(keys), len(m), allocator)
+    if err != nil {
+        dbg.log(.ERROR, "Allocator error")
+        return
+    }
+
+    i := 0
+    for key in m {
+        keys_s[i] = key
+        i += 1
+    }
+    return keys_s, true
+}
+
+map_values :: proc(m: $M/map[$K]$V, allocator := context.allocator) -> (values: []V, ok: bool) {
+    values_s, err := make(type_of(values), len(m), allocator)
+    if err != nil {
+        dbg.log(.ERROR, "Allocator error")
+        return
+    }
+
+    i := 0
+    for _, value in m {
+        values_s[i] = value
+        i += 1
+    }
+    return values_s, true
+}

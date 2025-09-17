@@ -106,26 +106,26 @@ meshes_from_gather :: proc(
     pass: ^RenderPass,
     temp_allocator: mem.Allocator
 ) -> (res: []MeshData, ok: bool) {
+
     mesh_data: ^[dynamic]MeshData
     switch v in pass.mesh_gather {
-    case ^RenderPass:
-        if v not_in mesh_data_map {
-            if v not_in mesh_data_references {
-                dbg.log(.ERROR, "Render pass gather points to a render pass which has not yet been assigned model data, please order the render-passes to fix")
-                return
+        case ^RenderPass:
+            if v not_in mesh_data_map {
+                if v not_in mesh_data_references {
+                    dbg.log(.ERROR, "Render pass gather points to a render pass which has not yet been assigned model data, order the render-passes to fix")
+                    return
+                }
+
+                mesh_data = mesh_data_references[v]
             }
-
-            mesh_data = mesh_data_references[v]
-        }
-        else do mesh_data = &mesh_data_map[v]
-        mesh_data_references[pass] = mesh_data
-    case RenderPassQuery:
-        mesh_data_map[pass] = query_scene(manager, scene, v, temp_allocator) or_return
-        mesh_data = &mesh_data_map[pass]
-    case nil:
-        mesh_data_map[pass] = query_scene(manager, scene, {}, temp_allocator) or_return
-        mesh_data = &mesh_data_map[pass]
-
+            else do mesh_data = &mesh_data_map[v]
+            mesh_data_references[pass] = mesh_data
+        case RenderPassQuery:
+            mesh_data_map[pass] = query_scene(manager, scene, v, temp_allocator) or_return
+            mesh_data = &mesh_data_map[pass]
+        case nil:
+            mesh_data_map[pass] = query_scene(manager, scene, {}, temp_allocator) or_return
+            mesh_data = &mesh_data_map[pass]
     }
     if mesh_data == nil {
         dbg.log(.ERROR, "Mesh data returned nil")
@@ -297,31 +297,9 @@ group_meshes_by_shader :: proc(
     }
 
     // Get shader mapping from RenderShaderStore
-    render_shader_mapping: ^RenderShaderMapping
-    switch gather in render_pass.shader_gather {
-        case ^RenderPass:
-            switch inner_gather in gather.shader_gather {
-                case ^RenderPass:
-                    dbg.log(.ERROR, "If a render pass shader gather points to another render pass, that other render pass must not point to another pass")
-                    return
-                case RenderPassShaderGenerate :
-                    if gather not_in shader_store.render_pass_mappings {
-                        dbg.log(.ERROR, "Inner render pass not gathered data yet, please sort render passes by gathers")
-                        return
-                    }
-                    render_shader_mapping = &shader_store.render_pass_mappings[gather]
-            }
-        case RenderPassShaderGenerate:
-            if render_pass not_in shader_store.render_pass_mappings {
-                dbg.log(.ERROR, "Render pass not in shader store")
-                return
-            }
-            render_shader_mapping = &shader_store.render_pass_mappings[render_pass]
-
-    }
-
-    if render_shader_mapping == nil {
-        dbg.log(.ERROR, "Render shader mapping is nil")
+    render_shader_mapping, mapping_exists := shader_store.render_pass_mappings[render_pass]
+    if !mapping_exists {
+        dbg.log(.ERROR, "No shader mapping exists for render pass")
         return
     }
 
@@ -357,7 +335,6 @@ group_meshes_by_shader :: proc(
         current_shader: resource.ResourceIdent
         for &mesh_data in meshes {
             mesh := mesh_data.mesh
-            dbg.log(.INFO, "mesh id: %v", mesh.mesh_id)
             if mesh.mesh_id == nil || mesh.mesh_id.? not_in render_shader_mapping {
                 dbg.log(.ERROR, "Shader pass not generated for mesh: %#v", mesh.material)
                 return
@@ -1073,47 +1050,15 @@ PROJECTION_MATRIX_UNIFORM :: "m_Projection"
 ENV_MAP_UNIFORM :: "environmentMap"
 
 
-
+RenderPassMappings :: map[^RenderPass]RenderPassMapping
+RenderPassMapping :: map[resource.MeshIdent]resource.ResourceIdent
 RenderShaderStore :: struct {
-    // Index map to render pass, then MeshStoreID map to shader pass
-    // MeshStoreIDs are unique across all render pass mappings
-    // or just use a MeshID? We are just pointing to a resource.ResourceID
-    // Where does shader dynamic generation occur?
-    // Is it only for the typical lighting pass?
-    // Should a render pass have a type?
-    // If a render pass has a type it means we can match against it and generate the right shaders
-    // if not, how do we describe how to generate the shaders in the render pass structure?
-    // Solution: Mix
-    // Give render passes a "purpose" type, seperate from the properties
-    // Purposes:
-    // Depth only
-    // Lighting pass
-    // ... Could be related to AO, AA or anything
-    // Then in the shader generation step, populate the RenderShaderStore using Render passes, meshes, the purpose type
-    //  giving MeshIDs to meshes in series
-    // How to make multiple meshes point to the same Shader Pass? This is very bound to happen
-    // Of course we have hashed resource management, this means we can share a ShaderPass if the underlying shaders are the same
-    // todo check the hashing to see if this actually works, now I think it will just do a pointer comparison
-    // We leverage the resource manager such that after all vertex layout and material shaders are compiled, we go through
-    //  all the meshes, create a shader pass, and add it to the manager getting a shared ResourceIdent
-    // This shared ResourceIdent will be linked to the mesh in render_pass_mappings
-    // This means multiple meshes will use the same ResourceID, this is completely fine
-
-    // What about extendibiliy? What about if a mesh should be added/removed?
-    // Then just do the same thing
-    // The shader generator procdure just take a ^RenderShaderStore, and do the same as all meshes have done before
-    // With another. smaller probably, mesh slice
-    // If the vertex-material permutation exists, then no compilation needs to be done
-    // If not, then it would need to compile
-    // If this is a problem long term, a seperate procedure can be written to populate all needed vertex-material permutations before first frame
-
     last_mesh_id: resource.MeshIdent,
-    // Indexed for each render pass, if union is int then index render_pass_mappings again
-    render_pass_mappings: map[^RenderPass]RenderShaderMapping
+    render_pass_mappings: RenderPassMappings
 }
 
 init_shader_store :: proc(allocator := context.allocator) -> (shader_store: RenderShaderStore) {
-    shader_store.render_pass_mappings = make(map[^RenderPass]RenderShaderMapping, allocator)
+    shader_store.render_pass_mappings = make(RenderPassMappings, allocator)
     return
 }
 
@@ -1127,9 +1072,6 @@ destroy_shader_store :: proc(manager: ^resource.ResourceManager, shader_store: R
     return
 }
 
-
-RenderShaderMapping :: map[resource.MeshIdent]resource.ResourceIdent
-
 populate_all_shaders :: proc(
     manager: ^resource.ResourceManager,
     scene: ^ecs.Scene,
@@ -1139,9 +1081,10 @@ populate_all_shaders :: proc(
     mesh_data_map := make(map[^RenderPass][dynamic]MeshData, allocator=temp_allocator)
     mesh_data_references := make(map[^RenderPass]^[dynamic]MeshData, allocator=temp_allocator)
 
+
     for pass in Context.pipeline.passes {
         meshes_data := meshes_from_gather(manager, scene, &mesh_data_map, &mesh_data_references, pass, temp_allocator) or_return
-        populate_shaders(&Context.pipeline.shader_store, manager, scene, pass, meshes_data, allocator) or_return
+        populate_shaders(&Context.pipeline.shader_store, manager, scene, pass, meshes_data, allocator, temp_allocator) or_return
     }
 
     ok = true
@@ -1157,17 +1100,26 @@ populate_shaders :: proc(
     scene: ^ecs.Scene,
     render_pass: ^RenderPass,
     meshes_data: []MeshData,
-    allocator := context.allocator
+    allocator := context.allocator,
+    temp_allocator := context.temp_allocator
 ) -> (ok: bool) {
+    dbg.log(.INFO, "Populating render pass for %d meshes", len(meshes_data))
 
-    shader_generate_config, do_generate := render_pass.shader_gather.(RenderPassShaderGenerate)
-    if !do_generate do return true  // If shader_gather points to a RenderPass then do nothing here
-
-    dbg.log(.INFO, "Populating shaders for render pass: %#v", render_pass)
-
-    meshes_data := meshes_from_gather(render_pass.mesh_gather) or_return
+    shader_generate_config := get_render_pass_shader_generate(render_pass) or_return
     for &mesh_data in meshes_data {
         mesh := mesh_data.mesh
+        if mesh.mesh_id == nil {
+            mesh.mesh_id = shader_store.last_mesh_id
+            shader_store.last_mesh_id += 1
+        }
+
+        // Get mapping
+        if render_pass not_in shader_store.render_pass_mappings {
+            new_mapping := make(RenderPassMapping, allocator=shader_store.render_pass_mappings.allocator)
+            shader_store.render_pass_mappings[render_pass] = new_mapping
+        }
+        mapping: ^RenderPassMapping = &shader_store.render_pass_mappings[render_pass]
+
         shader_pass, generate_ok := generate_shader_pass_for_mesh(shader_store, manager, shader_generate_config, mesh, allocator)
         if !generate_ok {
             dbg.log(.ERROR, "Could not populate shaders for mesh")
@@ -1176,23 +1128,26 @@ populate_shaders :: proc(
 
         if shader_pass == nil do continue
 
-        mesh_id := shader_store.last_mesh_id
-        dbg.log(.INFO, "New mesh id: %d", mesh_id)
-        mesh.mesh_id = mesh_id
-        shader_store.last_mesh_id += 1
-
-        if render_pass not_in shader_store.render_pass_mappings {
-            new_mapping := make(RenderShaderMapping, shader_store.render_pass_mappings.allocator)
-            new_mapping[mesh_id] = shader_pass.?
-            shader_store.render_pass_mappings[render_pass] = new_mapping
-        }
-        else {
-            shader_mapping := &shader_store.render_pass_mappings[render_pass]
-            shader_mapping[mesh_id] = shader_pass.?
-        }
+        mapping[mesh.mesh_id.(resource.MeshIdent)] = shader_pass.(resource.ResourceIdent)
     }
 
     return true
+}
+
+get_render_pass_shader_generate :: proc(pass: ^RenderPass) -> (shader_generate: RenderPassShaderGenerate, ok: bool) {
+
+    switch v in pass.shader_gather {
+        case RenderPassShaderGenerate: shader_generate = v
+        case ^RenderPass: switch reference_v in v.shader_gather {
+            case RenderPassShaderGenerate: shader_generate = reference_v
+            case ^RenderPass:
+                dbg.log(.ERROR, "Shader gather reference must not reference another shader gather")
+                return
+            }
+    }
+
+    ok = true
+    return
 }
 
 @(private)
@@ -1204,7 +1159,7 @@ generate_shader_pass_for_mesh :: proc(
     allocator := context.allocator
 ) -> (shader_pass_id: resource.ResourceID, ok: bool) {
 
-    if mesh.mesh_id != nil || shader_generate_config == nil {
+    if shader_generate_config == nil {
         dbg.log(.INFO, "Skipping shader generation for mesh")
         return nil, true
     }
