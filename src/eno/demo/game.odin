@@ -154,12 +154,13 @@ before_frame :: proc() -> (ok: bool) {
                 clear = { .COLOUR_BIT, .DEPTH_BIT },
                 clear_colour = background_colour * background_colour_factor,
                 multisample = true
-            }
+            },
+             name = "Opaque Single Sided Pass"
         ) or_return,
     )
     render.add_render_passes(
         render.make_render_pass(
-            shader_gather=render.Context.pipeline.passes[0],
+            shader_gather=render.Context.pipeline.passes[2],
             mesh_gather=render.RenderPassQuery{ material_query =
                 proc(material: resource.Material, type: resource.MaterialType) -> bool {
                     return type.alpha_mode != .BLEND && type.double_sided
@@ -171,9 +172,10 @@ before_frame :: proc() -> (ok: bool) {
                 multisample = true,
                 render_skybox = true,  // Rendering skybox will set certain properties indepdendent of what is set in the pass properties, it will also be done last in the pass
             },
+            name = "Opaque Double Sided Pass"
         ) or_return,
         render.make_render_pass(
-            shader_gather=render.Context.pipeline.passes[0],
+            shader_gather=render.Context.pipeline.passes[2],
             mesh_gather=render.RenderPassQuery{ material_query =
                 proc(material: resource.Material, type: resource.MaterialType) -> bool {
                     return type.alpha_mode == .BLEND
@@ -186,6 +188,7 @@ before_frame :: proc() -> (ok: bool) {
                 multisample = true,
                 blend_func = render.BlendFunc{ .SOURCE_ALPHA, .ONE_MINUS_SOURCE_ALPHA },
             },
+            name = "Transparency Pass"
         ) or_return
     )
 
@@ -249,8 +252,8 @@ before_frame :: proc() -> (ok: bool) {
     // Use if you have pre render passes
     // render.pre_render(manager, game_data.render_pipeline, game.Game.scene) or_return
 
-    ui.add_ui_elements(render.render_settings_ui_element, render.render_pipeline_ui_element, demo_ui_element) or_return
-    ui.show_demo_window(true) or_return
+    ui.add_ui_elements(render.render_settings_ui_element, render.render_pipeline_ui_element, render.shader_store_ui_element, render.resource_manager_ui_element, demo_ui_element) or_return
+    ui.show_imgui_demo_window(true) or_return
 
     return true
 }

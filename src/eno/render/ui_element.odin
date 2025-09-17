@@ -1,6 +1,7 @@
 package render
 
 import im "../../../libs/dear-imgui/"
+
 import "../ui"
 import utils "../utils"
 import dbg "../debug"
@@ -217,6 +218,87 @@ render_pipeline_ui_element : ui.UIElement : proc() -> (ok: bool) {
         defer im.TreePop()
 
     }
+
+    return true
+}
+
+shader_store_ui_element : ui.UIElement : proc() -> (ok: bool) {
+    im.Begin("Resource Shader Store")
+    defer im.End()
+
+    shader_store := Context.pipeline.shader_store
+    im.Text("Render Passes:")
+    i := 0
+    for pass, mapping in shader_store.render_pass_mappings {
+        pass_name_cstr := strings.clone_to_cstring(pass.name, Context.allocator)
+        defer delete(pass_name_cstr)
+        if im.TreeNode(pass_name_cstr) {
+            defer im.TreePop()
+
+            if im.TreeNode("Meshes") {
+                defer im.TreePop()
+
+                for mesh_id, shader_resource_id in mapping {
+                    mesh_tree_name := fmt.caprintf("Mesh id '%d'", mesh_id, allocator=Context.allocator)
+                    defer delete(mesh_tree_name)
+                    if im.TreeNode(mesh_tree_name) {
+                        defer im.TreePop()
+
+                        resource_id_name := fmt.caprintf("Resource ident hash '%d' node '%p'", shader_resource_id.hash, rawptr(shader_resource_id.node), allocator=Context.allocator)
+                        defer delete(resource_id_name)
+                        if im.TreeNode(resource_id_name) {
+                            defer im.TreePop()
+
+                            shader_pass, shader_pass_found := resource.get_shader_pass(Context.manager, shader_resource_id)
+                            if shader_pass_found do shader_pass_ui(shader_pass) or_return
+                            else do im.Text("Shader pass unavailable")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return true
+}
+
+
+shader_pass_ui :: proc(pass: ^resource.ShaderProgram) -> (ok: bool) {
+
+    for type, shader in pass.shaders {
+        shader_tree_name := fmt.caprintf("Shader of type %v", type, allocator=Context.allocator)
+        defer delete(shader_tree_name)
+
+        if im.TreeNode(shader_tree_name) {
+            defer im.TreePop()
+            shader, shader_ok := resource.get_shader(Context.manager, shader)
+            if shader_ok do shader_ui(shader)
+            else do im.Text("Shader unavailable")
+        }
+    }
+
+    return true
+}
+
+shader_ui :: proc(shader: ^resource.Shader) -> (ok: bool) {
+
+    if im.Button("Open string source popup") {
+        im.OpenPopup("#shader_popup")
+    }
+
+    if im.BeginPopup("#shader_popup") {
+        defer im.EndPopup()
+        source_cstr := strings.clone_to_cstring(shader.source.string_source, Context.allocator)
+        defer delete(source_cstr)
+        im.Text("%s", source_cstr)
+    }
+
+    return true
+}
+
+resource_manager_ui_element : ui.UIElement : proc() -> (ok: bool) {
+    im.Begin("Resource Manager")
+    defer im.End()
 
     return true
 }

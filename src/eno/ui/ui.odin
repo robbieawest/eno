@@ -73,7 +73,7 @@ init_ui_context :: proc(show_demo_win := false, image_scale := [2]f32{ 0.25, 0.2
     Context = UIContext{ make([dynamic]UIElement, allocator=allocator), show_demo_win, make(map[cstring][]byte, allocator=allocator), image_scale, allocator }
 }
 
-show_demo_window :: proc(show: bool) -> (ok: bool) {
+show_imgui_demo_window :: proc(show: bool) -> (ok: bool) {
     (check_context() or_return).show_demo_window = show
     return true
 }

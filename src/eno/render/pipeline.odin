@@ -9,6 +9,7 @@ import "../utils"
 import "core:fmt"
 import "core:slice"
 import "base:intrinsics"
+import "core:strings"
 
 
 RenderPipeline :: struct {
@@ -363,7 +364,9 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
                 viewport = [4]i32{ 0, 0, w, h },
                 clear = { .COLOUR_BIT, .DEPTH_BIT },
                 clear_colour = [4]f32{ 0.0, 0.0, 0.0, 1.0 },
-            }
+            },
+            name  = "GBuffer Opaque Single Sided Pass",
+            allocator=allocator
         ) or_return
     )
     add_render_passes(
@@ -380,7 +383,9 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
                 viewport = [4]i32{ 0, 0, w, h },
                 clear = { .COLOUR_BIT, .DEPTH_BIT },
                 clear_colour = [4]f32{ 0.0, 0.0, 0.0, 1.0 },
-            }
+            },
+            name="GBuffer Opaque Double Sided Pass",
+            allocator=allocator
         ) or_return
     )
 
@@ -414,21 +419,27 @@ RenderPass :: struct {
     mesh_gather: RenderPassMeshGather,
     shader_gather: RenderPassShaderGather,  // Used only to generate shader passes with
     properties: RenderPassProperties,
+    name: string
 }
+
+// todo destroy_render_pass
 
 
 // Populate this when needed
 make_render_pass :: proc(
     shader_gather: RenderPassShaderGather,
+    name: string,
     frame_buffer: ^FrameBuffer = nil,  // Nil corresponds to default sdl framebuffer
     mesh_gather: RenderPassMeshGather = nil,  // Nil corresponds to default return all mesh query
-    properties: RenderPassProperties = {}
+    properties: RenderPassProperties = {},
+    allocator := context.allocator
 ) -> (pass: RenderPass, ok: bool) {
     dbg.log(.INFO, "Creating render pass")
     pass.frame_buffer = frame_buffer
     pass.mesh_gather = mesh_gather
     pass.shader_gather = shader_gather
     pass.properties = properties
+    pass.name = strings.clone(name, allocator)
 
     if pass.mesh_gather != nil && !check_render_pass_mesh_gather(&pass, 0, len(Context.pipeline.passes)) {
         dbg.log(.ERROR, "Render pass mesh gather must end in a RenderPassQuery")
