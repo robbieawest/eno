@@ -135,7 +135,7 @@ before_frame :: proc() -> (ok: bool) {
 
     window_res := win.get_window_resolution(game.Game.window)
 
-    // render.make_gbuffer_passes(window_res.w, window_res.h, render.GBufferInfo{ .NORMAL, .DEPTH }) or_return
+    render.make_gbuffer_passes(window_res.w, window_res.h, render.GBufferInfo{ .NORMAL, .DEPTH }) or_return
 
     background_colour := [4]f32{ 1.0, 1.0, 1.0, 1.0 }
     background_colour_factor: f32 = 0.85
@@ -249,7 +249,7 @@ before_frame :: proc() -> (ok: bool) {
     // Use if you have pre render passes
     // render.pre_render(manager, game_data.render_pipeline, game.Game.scene) or_return
 
-    ui.add_ui_elements(render.render_settings_ui_element, demo_ui_element) or_return
+    ui.add_ui_elements(render.render_settings_ui_element, render.render_pipeline_ui_element, demo_ui_element) or_return
     ui.show_demo_window(true) or_return
 
     return true

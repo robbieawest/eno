@@ -326,7 +326,7 @@ conv_tex_property_value :: proc(val: resource.TexturePropertyValue) -> i32 {
 }
 
 
-release_texture :: proc(texture: ^GPUTexture) {
+release_texture :: proc(texture: GPUTexture) {
     if id, id_ok := texture.?; id_ok do gl.DeleteTextures(1, &id)
 }
 
@@ -699,14 +699,17 @@ bind_texture_to_frame_buffer :: proc(
     type: AttachmentType,
     cube_face: u32 = 0,
     attachment_loc: u32 = 0,
+    attachment_id: u32 = 0,
     mip_level: i32 = 0,
     loc := #caller_location
 ) -> (ok: bool) {
     dbg.log()
     tid := utils.unwrap_maybe(texture.gpu_texture, loc) or_return
+    bind_texture_raw(texture.type, tid)
 
     gl_attachment_id: u32 = 0
-    switch type {
+    if attachment_id != 0 do gl_attachment_id = attachment_id
+    else do switch type {
         case .COLOUR: gl_attachment_id = gl.COLOR_ATTACHMENT0 + attachment_loc
         case .DEPTH: gl_attachment_id = gl.DEPTH_ATTACHMENT
         case .STENCIL: gl_attachment_id = gl.STENCIL_ATTACHMENT
@@ -722,6 +725,7 @@ bind_texture_to_frame_buffer :: proc(
 
     return true
 }
+
 
 detach_from_framebuffer :: proc(fbo: u32, texture_type: resource.TextureType, type: AttachmentType, cube_face: u32 = 0, attachment_loc: u32 = 0) {
     dbg.log()

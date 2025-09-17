@@ -1774,7 +1774,7 @@ create_ibl_prefilter_map :: proc(
 
         for i in 0..<6 {
             resource.set_uniform(&shader, "m_View", views[i])
-            bind_texture_to_frame_buffer(fbo, prefilter, .COLOUR, u32(i), 0, i32(mip))
+            bind_texture_to_frame_buffer(fbo, prefilter, .COLOUR, cube_face=u32(i), attachment_loc=0, mip_level=i32(mip))
             check_framebuffer_status_raw() or_return
 
             clear_mask({ .COLOUR_BIT, .DEPTH_BIT })

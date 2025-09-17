@@ -64,12 +64,13 @@ UIContext :: struct {
     // Persistent buffers for input fields
     // Uses cstring bc idgaf
     buffers: map[cstring][]byte,
+    image_scale: [2]f32,
     allocator: mem.Allocator
 }
 
 Context: Maybe(UIContext)
-init_ui_context :: proc(show_demo_win := false, allocator := context.allocator) {
-    Context = UIContext{ make([dynamic]UIElement, allocator=allocator), show_demo_win, make(map[cstring][]byte, allocator=allocator), allocator }
+init_ui_context :: proc(show_demo_win := false, image_scale := [2]f32{ 0.25, 0.25 }, allocator := context.allocator) {
+    Context = UIContext{ make([dynamic]UIElement, allocator=allocator), show_demo_win, make(map[cstring][]byte, allocator=allocator), image_scale, allocator }
 }
 
 show_demo_window :: proc(show: bool) -> (ok: bool) {
@@ -213,4 +214,9 @@ check_buffer :: proc(label: cstring, buf: []byte) -> (new_buf: [^]byte, ok: bool
 
     ok = true
     return
+}
+
+scale_image_dims :: proc(#any_int w, h: u32) -> (dims: im.Vec2, ok: bool) {
+    ctx := check_context() or_return
+    return [2]f32{ f32(w), f32(h) } * ctx.image_scale, true
 }

@@ -4,7 +4,9 @@ import gl "vendor:OpenGL"
 
 import dbg "../debug"
 import "../resource"
+import "../utils"
 
+import "core:fmt"
 import "core:slice"
 import "base:intrinsics"
 
@@ -290,6 +292,7 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
     }
 
     framebuffer := make_framebuffer(w, h, allocator)
+    bind_framebuffer(framebuffer) or_return
 
     tex_properties := make(resource.TextureProperties, allocator=allocator)
     defer delete(tex_properties)
@@ -299,16 +302,46 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
     // Allocates textures in order of the GBufferComponent enum
     // Attachment order is the same, multiple render targets are the same
     // Not doing any funny packing
-    for component, i in GBufferComponent {
+
+    // Stencil not supported yet
+    last_colour_loc: u32 = 0; depth_used := false; stencil_used := false
+    for component in GBufferComponent {
         if component in info {
             storage := GBufferComponentStorage[component]
-            tex := make_texture(w, h, internal_format=storage.internal_format, format=storage.format, type=storage.type, texture_properties=tex_properties)
+            texture := resource.Texture{
+                name = fmt.aprintf("GBuffer Texture Component %v", component),
+                image = resource.Image{ w=w, h=h },
+                type = .TWO_DIM,
+                properties = utils.copy_map(tex_properties)
+            }
+            texture.gpu_texture = make_texture(texture, internal_format=storage.internal_format, format=storage.format, type=storage.type)
 
-            attachment_id := gl.COLOR_ATTACHMENT0 + u32(i)
-            attachment := Attachment{ .COLOUR, attachment_id, tex }
+            attachment: Attachment
+            attachment.data = texture
+            switch component {
+                case .NORMAL, .POSITION:
+                    attachment.type = .COLOUR
+                    if last_colour_loc == 31 {
+                        dbg.log(.ERROR, "Max colour attachments reached")
+                        return
+                    }
+                    last_colour_loc += 1
+                    attachment.id = gl.COLOR_ATTACHMENT0 + last_colour_loc
+                case .DEPTH:
+                    if depth_used {  // Forward compat
+                        dbg.log(.ERROR, "Depth attachment already used")
+                        return
+                    }
+
+                    depth_used = true
+                    attachment.type = .DEPTH
+                    attachment.id = gl.DEPTH_ATTACHMENT
+            }
             framebuffer_add_attachments(&framebuffer, attachment)
+            check_framebuffer_status(framebuffer) or_return
         }
     }
+    check_framebuffer_status(framebuffer) or_return
 
     attachments, _ := slice.map_keys(framebuffer.attachments, allocator=allocator); defer delete(attachments)
     framebuffer_draw_attachments(framebuffer, ..attachments, allocator=allocator) or_return
@@ -471,14 +504,16 @@ Attachment :: struct {
 // Releases GPU memory
 destroy_attachment :: proc(attachment: ^Attachment) {
     switch &data in attachment.data {
-        case GPUTexture: release_texture(&data)
+        case resource.Texture:
+            release_texture(data.gpu_texture)
+            resource.destroy_texture(&data)
         case RenderBuffer: release_render_buffer(&data)
     }
 }
 
 
 AttachmentData :: union {
-    GPUTexture,
+    resource.Texture,
     RenderBuffer
 }
 
@@ -511,17 +546,32 @@ framebuffer_add_attachments :: proc(framebuffer: ^FrameBuffer, attachments: ..At
         dbg.log(.ERROR, "Framebuffer is nil")
         return
     }
-    fbo, fbo_ok := framebuffer.id.?
-    if !fbo_ok {
-        dbg.log(.ERROR, "Framebuffer is not yet transferred")
-        return
-    }
+
+    dbg.log(.INFO, "Adding attachments to framebuffer: %#v", framebuffer)
 
     bind_framebuffer(framebuffer^) or_return
     for attachment in attachments {
-        // bind_texture_to_frame_buffer(fbo, )
+        dbg.log(.INFO, "Adding attachment %#v", attachment)
+        bind_attachment_to_framebuffer(framebuffer^, attachment)
         framebuffer.attachments[attachment.id] = attachment
     }
+    return true
+}
+
+bind_attachment_to_framebuffer :: proc(framebuffer: FrameBuffer, attachment: Attachment) -> (ok: bool) {
+    switch attachment_data in attachment.data {
+        case RenderBuffer:
+            dbg.log(.ERROR, "Unimplemented")
+            return
+        case resource.Texture:
+            fbo, fbo_ok := framebuffer.id.?
+            if !fbo_ok {
+                dbg.log(.ERROR, "Framebuffer is not yet transferred")
+                return
+            }
+            bind_texture_to_frame_buffer(fbo, attachment_data, attachment.type, attachment_id=attachment.id)
+    }
+
     return true
 }
 

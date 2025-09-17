@@ -3,12 +3,14 @@ package render
 import im "../../../libs/dear-imgui/"
 import "../ui"
 import utils "../utils"
+import dbg "../debug"
+import "../resource"
 
 import "core:strings"
-import dbg "../debug"
 import slice "core:slice"
 import "core:strconv"
 import "base:intrinsics"
+import "core:fmt"
 
 UIRenderBuffer :: enum {
     ENV_FACE_SIZE,
@@ -151,6 +153,69 @@ render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
                 enable_direct_lighting()
             }
         }
+    }
+
+    return true
+}
+
+render_pipeline_ui_element : ui.UIElement : proc() -> (ok: bool) {
+    if Context.manager == nil {
+        dbg.log(.ERROR, "Render context manager is not yet set")
+        return
+    }
+
+    im.Begin("Render pipeline")
+    defer im.End()
+
+    if im.TreeNode("Framebuffers") {
+        defer im.TreePop()
+
+        framebuffers := Context.pipeline.frame_buffers[:]
+        for framebuffer in framebuffers {
+
+            // Stupid, use arena for ui allocations
+            tree_str := fmt.caprintf("Framebuffer id %d", framebuffer.id, allocator=Context.allocator)
+            defer delete(tree_str)
+            if im.TreeNode(tree_str) {
+                defer im.TreePop()
+
+                im.Text("Width: %d", framebuffer.w)
+                im.Text("Height: %d", framebuffer.h)
+
+                if im.TreeNode("Attachments") {
+                    defer im.TreePop()
+
+                    for _, attachment in framebuffer.attachments {
+                        attachment_data_type: string
+                        is_texture: bool
+                        switch _ in attachment.data {
+                            case resource.Texture:
+                                attachment_data_type = "Texture"
+                                is_texture = true
+
+                            case RenderBuffer: attachment_data_type = "Renderbuffer"
+                        }
+                        attachment_tree_str := fmt.caprintf("%s Attachment of type %v and id '%d'", attachment_data_type, attachment.type, attachment.id, allocator=Context.allocator)
+                        defer delete(attachment_tree_str)
+                        if im.TreeNode(attachment_tree_str) {
+                            defer im.TreePop()
+
+                            if is_texture {
+                                tex := attachment.data.(resource.Texture)
+                                if tex.gpu_texture != nil {
+                                    im.Image(im.TextureID(tex.gpu_texture.(u32)), ui.scale_image_dims(tex.image.w, tex.image.h) or_return )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if im.TreeNode("Render Passes") {
+        defer im.TreePop()
+
     }
 
     return true
