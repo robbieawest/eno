@@ -1103,7 +1103,7 @@ populate_shaders :: proc(
     allocator := context.allocator,
     temp_allocator := context.temp_allocator
 ) -> (ok: bool) {
-    dbg.log(.INFO, "Populating render pass for %d meshes", len(meshes_data))
+    dbg.log(.INFO, "Populating render pass '%s' for %d meshes", render_pass.name, len(meshes_data))
 
     shader_generate_config := get_render_pass_shader_generate(render_pass) or_return
     for &mesh_data in meshes_data {
@@ -1191,29 +1191,33 @@ generate_gbuffer_shader_pass :: proc(
     generate_config: GBufferShaderGenerateConfig,
     allocator: mem.Allocator
 ) -> (shader_pass: resource.ShaderProgram, ok: bool) {
-    if vertex_layout.shader == nil {
-        dbg.log(dbg.LogLevel.INFO, "Creating gbuffer vertex shader")
-        vertex_layout.shader = generate_gbuffer_vertex_shader(manager, generate_config, vertex_layout, allocator) or_return
-    }
 
-    if material_type.shader == nil {
-        dbg.log(dbg.LogLevel.INFO, "Creating gbuffer fragment shader")
-        material_type.shader = generate_gbuffer_frag_shader(manager, generate_config, vertex_layout, allocator) or_return
-    }
+    // todo figure out how to hash the gbuffer vertex shader. Previously we hash the vertex layout that contains the shader
+    //  todo  , but now we don't have a vertex layout, unless we make vertex layouts and material types index into
+    //  todo  the shader store, instead of meshes. This does kind of make sense since the shader store is super simple then, since
+    //  todo   not many vertex/material permutations, but lots of meshes
+
+    dbg.log(dbg.LogLevel.INFO, "Creating gbuffer vertex shader")
+    vert_id := generate_gbuffer_vertex_shader(manager, generate_config, vertex_layout, allocator) or_return
+
+    dbg.log(dbg.LogLevel.INFO, "Creating gbuffer fragment shader")
+    frag_id := generate_gbuffer_frag_shader(manager, generate_config, vertex_layout, allocator) or_return
 
     // Grabbing shaders here makes it impossible to compile a shader twice
-    vert := resource.get_shader(manager, vertex_layout.shader.?) or_return
-    frag := resource.get_shader(manager, material_type.shader.?) or_return
+    vert := resource.get_shader(manager, vert_id) or_return
+    frag := resource.get_shader(manager, frag_id) or_return
 
     if vert.id == nil do compile_shader(vert) or_return
+    else do dbg.log(.INFO, "Vertex shader already compiled")
     if frag.id == nil do compile_shader(frag) or_return
+    else do dbg.log(.INFO, "Fragment shader already compiled")
 
     shader_pass = resource.init_shader_program()
-    shader_pass.shaders[.VERTEX] = vertex_layout.shader.?
-    shader_pass.shaders[.FRAGMENT] = material_type.shader.?
+    shader_pass.shaders[.VERTEX] = vert_id
+    shader_pass.shaders[.FRAGMENT] = frag_id
 
-    dbg.log(.INFO, "Vert source: %#s", vert.source.string_source)
-    dbg.log(.INFO, "Frag source: %#s", frag.source.string_source)
+    // dbg.log(.INFO, "Vert source: %#s", vert.source.string_source)
+    // dbg.log(.INFO, "Frag source: %#s", frag.source.string_source)
 
     ok = true
     return
@@ -1240,11 +1244,13 @@ generate_lighting_shader_pass :: proc(
         dbg.log(dbg.LogLevel.INFO, "Creating lighting vertex shader for layout")
         vertex_layout.shader = generate_lighting_vertex_shader(manager, contains_tangent, allocator) or_return
     }
+    else do dbg.log(dbg.LogLevel.INFO, "Vertex layout already has shader")
 
     if material_type.shader == nil {
         dbg.log(dbg.LogLevel.INFO, "Creating lighting fragment shader for material type")
         material_type.shader = generate_lighting_frag_shader(manager, contains_tangent, allocator) or_return
     }
+    else do dbg.log(dbg.LogLevel.INFO, "Material type already has shader")
 
     // Grabbing shaders here makes it impossible to compile a shader twice
     vert := resource.get_shader(manager, vertex_layout.shader.?) or_return
