@@ -313,7 +313,7 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
                 name = fmt.aprintf("GBuffer Texture Component %v", component),
                 image = resource.Image{ w=w, h=h },
                 type = .TWO_DIM,
-                properties = utils.copy_map(tex_properties)
+                properties = utils.copy_map(tex_properties, allocator=allocator)
             }
             texture.gpu_texture = make_texture(texture, internal_format=storage.internal_format, format=storage.format, type=storage.type)
 
@@ -380,9 +380,6 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
             },
             properties=RenderPassProperties{
                 geometry_z_sorting = .ASC,
-                viewport = [4]i32{ 0, 0, w, h },
-                clear = { .COLOUR_BIT, .DEPTH_BIT },
-                clear_colour = [4]f32{ 0.0, 0.0, 0.0, 1.0 },
             },
             name="GBuffer Opaque Double Sided Pass",
             allocator=allocator

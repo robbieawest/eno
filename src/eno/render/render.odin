@@ -1316,9 +1316,10 @@ generate_gbuffer_vertex_shader :: proc(
     defines := make([dynamic]string, allocator=allocator)
     defer delete(defines)
 
+    // I guess two position/normals in the layout info is ub
     for attribute in vertex_layout.infos do #partial switch attribute.type {
-        case .position: if .POSITION in generate_config.outputs do append_elem(&defines, "#define POSITION_INPUT")
-        case .normal: if .NORMAL in generate_config.outputs do append_elem(&defines, "#define NORMAL_INPUT")
+        case .position: append_elem(&defines, "#define POSITION_INPUT")
+        case .normal: append_elem(&defines, "#define NORMAL_INPUT")
     }
     old_src := shader.source.string_source
     defer delete(old_src)

@@ -220,3 +220,8 @@ scale_image_dims :: proc(#any_int w, h: u32) -> (dims: im.Vec2, ok: bool) {
     ctx := check_context() or_return
     return [2]f32{ f32(w), f32(h) } * ctx.image_scale, true
 }
+
+// For opengl texture coords
+get_uvs :: proc() -> (uv0: [2]f32, uv1: [2]f32, ok: bool) {
+    return [2]f32{ 0, 1 }, [2]f32{ 1, 0 }, true
+}

@@ -9,7 +9,7 @@ layout (std140, binding = 0) uniform CameraInfo {
 
 #ifdef NORMAL_INPUT
 in vec3 aNormal;
-out vec3 normal;
+smooth out vec3 normal;
 #endif
 #ifdef POSITION_INPUT
 in vec3 aPosition;

@@ -204,7 +204,8 @@ render_pipeline_ui_element : ui.UIElement : proc() -> (ok: bool) {
                             if is_texture {
                                 tex := attachment.data.(resource.Texture)
                                 if tex.gpu_texture != nil {
-                                    im.Image(im.TextureID(tex.gpu_texture.(u32)), ui.scale_image_dims(tex.image.w, tex.image.h) or_return )
+                                    image_uv0, image_uv1 := ui.get_uvs() or_return
+                                    im.Image(im.TextureID(tex.gpu_texture.(u32)), ui.scale_image_dims(tex.image.w, tex.image.h) or_return, image_uv0, image_uv1)
                                 }
                             }
                         }
