@@ -21,10 +21,11 @@ load_renderdoc :: proc() -> (renderdoc: RenderDoc, ok: bool) {
     renderdoc.lib, renderdoc.api, ok = rdoc.load_api(RENDERDOC_API_LOC)
 
     if !ok {
-        dbg.log(.WARN, "Attempted to load rdoc api, failed")
+        dbg.log(.WARN, "Attempted to load renderdoc api, failed")
         return
     }
 
+    dbg.log(.INFO, "Loaded renderdoc api successfully")
     Context.renderdoc = renderdoc
 
     ok = true

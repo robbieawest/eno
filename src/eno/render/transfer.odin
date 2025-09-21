@@ -705,7 +705,6 @@ bind_texture_to_frame_buffer :: proc(
 ) -> (ok: bool) {
     dbg.log()
     tid := utils.unwrap_maybe(texture.gpu_texture, loc) or_return
-    bind_texture_raw(texture.type, tid)
 
     gl_attachment_id: u32 = 0
     if attachment_id != 0 do gl_attachment_id = attachment_id
