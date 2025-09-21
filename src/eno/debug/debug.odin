@@ -16,6 +16,8 @@ DebugMode :: enum {
     RELEASE, DEBUG
 }
 DEBUG_MODE : DebugMode : #config(ENO_DEBUG, DebugMode.DEBUG)
+LOG_DEBUG_STACK_FILE : string : #config(ENO_LOG_DEBUG_STACK_FILE, "./logs/eno_last_debug_stack.txt")
+LOG_FILE : string : #config(ENO_LOG_FILE, "./logs/eno_last_log.txt")
 
 init_debug :: proc() {
     when DEBUG_MODE == .RELEASE {
@@ -27,6 +29,27 @@ init_debug :: proc() {
         gl.Enable(gl.DEBUG_OUTPUT)
         gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
     }
+}
+
+init_logger :: proc(allocator := context.allocator) -> (logger: log.Logger, ok: bool) {
+    console_logger := log.create_console_logger(allocator=allocator)
+    if DEBUG_FLAGS.LOG_TO_FILE {
+        file, err := os.open(LOG_FILE, flags=os.O_RDWR)
+        if err != nil || file == os.INVALID_HANDLE {
+            fmt.print("Could not initialize file handle for logger")
+            return
+        }
+        file_logger := log.create_file_logger(file, allocator=allocator)
+        logger = log.create_multi_logger(console_logger, file_logger, allocator=allocator)
+        context.logger = logger
+        log.info("Created multi logger to file and console")
+    }
+    else do logger = console_logger
+
+    context.logger = logger
+    log.info("Successfully created logger")
+    ok = true
+    return
 }
 
 
@@ -45,17 +68,19 @@ DebugFlags :: bit_field u32 {  // Extend if needed
     PUSH_GL_LOG_TO_DEBUG_STACK: bool                    | 1,
     PANIC_ON_ERROR: bool                                | 1,
     PANIC_ON_GL_ERROR: bool                             | 1,
+    LOG_TO_FILE: bool                                   | 1,
     DEBUG_STACK_HEAD_SIZE: u8                           | 8
 }
 
 // Used in debug calls where specified as an optional parameter, can be overwritten
 // DEBUG_FLAGS.PANIC_ON_ERROR = true
 // ^ This enables error panicking
+
 DEBUG_FLAGS := DebugFlags{
     DISPLAY_INFO = true, DISPLAY_WARNING = true, DISPLAY_ERROR = true, DISPLAY_DEBUG_STACK_UNINITIALIZED = true,
     DISPLAY_DEBUG_STACK = true, DEBUG_STACK_HEAD_SIZE = 20, DISPLAY_DEBUG_STACK_SMALLER_THAN_HEAD_SIZE = true,
     PUSH_LOGS_TO_DEBUG_STACK = true, PUSH_INFOS_TO_DEBUG_STACK = true, PUSH_WARNINGS_TO_DEBUG_STACK = true,
-    PUSH_ERRORS_TO_DEBUG_STACK = true, PUSH_GL_LOG_TO_DEBUG_STACK = true
+    PUSH_ERRORS_TO_DEBUG_STACK = true, LOG_TO_FILE = true, PUSH_GL_LOG_TO_DEBUG_STACK = true
 }
 
 
@@ -303,9 +328,17 @@ PrintDebugStackFlag :: enum {
 }; PrintDebugStackFlags :: bit_set[PrintDebugStackFlag]
 DEFAULT_PRINT_DEBUG_STACK_FLAGS := PrintDebugStackFlags{ .LOG_INFO_ONLY, .OUT_INFO, .OUT_WARN, .OUT_ERROR }
 
-log_debug_stack :: proc(flags := DEFAULT_PRINT_DEBUG_STACK_FLAGS, debug_stack := DEBUG_STACK) {
+log_debug_stack :: proc(flags := DEFAULT_PRINT_DEBUG_STACK_FLAGS, debug_stack := DEBUG_STACK) -> (ok: bool) {
     debug_stack_out := aprint_debug_stack(flags, debug_stack); defer delete(debug_stack_out)
     log.infof("Debug stack: \n%#v", debug_stack_out)
+    log_to_file(debug_stack_out) or_return
+    return true
+}
+
+@(private)
+log_to_file :: proc(log: string, file := LOG_DEBUG_STACK_FILE) -> (ok: bool) {
+    if DEBUG_FLAGS.LOG_TO_FILE do os.write_entire_file(file, transmute([]byte)log) or_return
+    return true
 }
 
 print_debug_stack :: proc(flags := DEFAULT_PRINT_DEBUG_STACK_FLAGS, debug_stack := DEBUG_STACK) {

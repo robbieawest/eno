@@ -2,12 +2,16 @@ package demo
 
 import win "../window"
 import game "../game"
+import dbg "../debug"
 
 import "core:log"
 import "core:testing"
 
 main :: proc() {
-    context.logger = log.create_console_logger()
+    logger, logger_ok := dbg.init_logger()
+    if !logger_ok do return
+    context.logger = logger
+
     log.info("Starting Demo")
 
     window_target, win_ok := win.initialize_window(900, 900, "eno engine demo")

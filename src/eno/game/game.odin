@@ -9,10 +9,11 @@ import dbg "../debug"
 import "../control"
 import "../camera"
 import "../ui"
+import "../render"
 
 import glm "core:math/linalg/glsl"
 import "core:time"
-import render "../render"
+import "core:log"
 
 // Game structure is defined here, e.g. defining the game loop, polling events, etc.
 
@@ -121,13 +122,13 @@ destroy_game :: proc(allocator := context.allocator) {
     control.destroy_controller(&Game.controller)
     win.destroy_window(Game.window)
 
-    dbg.log_debug_stack()
-    dbg.destroy_debug_stack()
-
     if Game.renderdoc != nil {
         rdoc := Game.renderdoc.?
         render.unload_renderdoc(rdoc.lib)
     }
+
+    if !dbg.log_debug_stack() do log.error("Error in logging debug stack")
+    dbg.destroy_debug_stack()
 }
 
 

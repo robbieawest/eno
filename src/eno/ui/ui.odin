@@ -49,9 +49,9 @@ setup_imgui_style :: proc() {
 destroy_ui_context :: proc() {
     dbg.log(.INFO, "Destroying UI context")
     im.DestroyContext()
+    im.Shutdown()
     imgui_impl_sdl2.Shutdown()
     imgui_impl_opengl3.Shutdown()
-    im.Shutdown()
 }
 
 // A UIElement MUST begin with im.Begin() and end with im.End()
