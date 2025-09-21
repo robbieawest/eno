@@ -102,6 +102,9 @@ render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
             if im.TreeNode("IBL Settings") {
                 defer im.TreePop()
                 if env_settings.ibl_settings == nil {
+                    if Context.renderdoc != nil {
+                        im.Text("Renderdoc init, will capture on ibl")
+                    }
                     if im.Button("Enable IBL") {
                         env_settings.ibl_settings = make_ibl_settings()
                         // set_environment_settings(env_settings^)

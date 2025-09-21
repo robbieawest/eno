@@ -33,7 +33,8 @@ EnoGame :: struct {
     game_data: rawptr, // Use to store arbitrary information, for example render pipelines between before_frame and every_frame calls
     controller: control.Controller,
     resource_manager: resource.ResourceManager,
-    meta_data: GameMetaData
+    meta_data: GameMetaData,
+    renderdoc: Maybe(render.RenderDoc)
 }
 
 /*
@@ -101,6 +102,11 @@ init_game_with_scene :: proc(scene: ^ecs.Scene, window: win.WindowTarget, every_
     Game.controller = control.init_controller(allocator)
     Game.resource_manager = resource.init_resource_manager(allocator)
     Game.meta_data.time_started = time.now()._nsec
+
+    renderdoc, rdoc_ok := render.load_renderdoc()
+    if !rdoc_ok do dbg.log(.INFO, "Renderdoc did not load")
+    else do Game.renderdoc = renderdoc
+
     return true
 }
 
@@ -117,6 +123,11 @@ destroy_game :: proc(allocator := context.allocator) {
 
     dbg.log_debug_stack()
     dbg.destroy_debug_stack()
+
+    if Game.renderdoc != nil {
+        rdoc := Game.renderdoc.?
+        render.unload_renderdoc(rdoc.lib)
+    }
 }
 
 

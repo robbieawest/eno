@@ -2,7 +2,6 @@ package ui
 
 import SDL "vendor:sdl2"
 import gl "vendor:OpenGL"
-
 import im "../../../libs/dear-imgui"
 import "../../../libs/dear-imgui/imgui_impl_sdl2"
 import "../../../libs/dear-imgui/imgui_impl_opengl3"

@@ -1,6 +1,7 @@
 package render
 
 import gl "vendor:OpenGL"
+import rdoc "../../../libs/odin-renderdoc"
 
 import "../ecs"
 import "../resource"
@@ -30,6 +31,7 @@ RenderContext :: struct {
     image_environment: Maybe(ImageEnvironment),
     pipeline: RenderPipeline,
     manager: ^resource.ResourceManager,
+    renderdoc: Maybe(RenderDoc),
     allocator: mem.Allocator
 }
 
@@ -1450,6 +1452,14 @@ ibl_render_setup :: proc(
     loc := #caller_location
 ) -> (ok: bool) {
     dbg.log(.INFO, "IBL Pre render pass")
+    if Context.renderdoc != nil {
+        renderdoc := Context.renderdoc.?
+        rdoc.StartFrameCapture(renderdoc.api, nil, nil)
+    }
+    defer if Context.renderdoc != nil {
+        renderdoc := Context.renderdoc.?
+        rdoc.EndFrameCapture(renderdoc.api, nil, nil)
+    }
 
     ibl_framebuffer := make_ibl_framebuffer(allocator) or_return
     defer destroy_framebuffer(&ibl_framebuffer, release_attachments=false)
@@ -1706,9 +1716,10 @@ create_ibl_irradiance_map :: proc(
     bind_framebuffer_raw(fbo)
     for i in 0..<6 {
         resource.set_uniform(&shader, "m_View", views[i])
-        bind_texture_to_frame_buffer(fbo, irradiance, .COLOUR, u32(i), 0, 0)
+        bind_texture_to_frame_buffer(fbo, irradiance, .COLOUR, cube_face=u32(i), attachment_loc=0)
         clear_mask({ .COLOUR_BIT, .DEPTH_BIT })
 
+        draw_buffers(gl.COLOR_ATTACHMENT0)
         render_primitive_cube(cube_vao)
     }
 
@@ -1785,6 +1796,7 @@ create_ibl_prefilter_map :: proc(
             check_framebuffer_status_raw() or_return
 
             clear_mask({ .COLOUR_BIT, .DEPTH_BIT })
+            draw_buffers(gl.COLOR_ATTACHMENT0)
 
             render_primitive_cube(cube_vao)
         }
