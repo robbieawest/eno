@@ -5,11 +5,13 @@ import gl "vendor:OpenGL"
 import dbg "../debug"
 import "../resource"
 import "../utils"
+import "../standards"
 
 import "core:fmt"
 import "core:slice"
 import "base:intrinsics"
 import "core:strings"
+import "core:mem"
 
 
 RenderPipeline :: struct {
@@ -208,7 +210,23 @@ apply_material_query :: proc(
     return new_meshes_dyn[:], true
 }
 
-RenderPassMeshGather :: union { RenderPassQuery, ^RenderPass }
+RenderPassMeshGather :: union {
+    RenderPassQuery,
+    ^RenderPass,
+    SinglePrimitiveMesh
+ }
+
+SinglePrimitiveMeshType :: enum {
+    CUBE,
+    QUAD,
+    TRIANGLE
+}
+
+// These point to render context global meshes, the materials are completely blank.
+SinglePrimitiveMesh :: struct {
+    type: SinglePrimitiveMeshType,
+    world: standards.WorldComponent
+}
 
 RenderPassShaderGenerate :: union {
     LightingShaderGenerateConfig,
@@ -224,10 +242,21 @@ GBufferShaderGenerateConfig :: struct {
 }
 
 RenderPassShaderGather :: union #no_nil {
-    RenderPassShaderGenerate,
-    ^RenderPass
+    RenderPassShaderGenerate,  // Shader pass generator will be pre-defined
+    ^RenderPass,
+    GenericShaderPassGenerator
 }
 
+GenericShaderPassGenerator :: #type proc(
+    manager: ^resource.ResourceManager,
+    vertex_layout: ^resource.VertexLayout,
+    material_type: ^resource.MaterialType,
+    options: rawptr,
+    allocator: mem.Allocator,
+) -> (resource.ShaderProgram, bool)
+
+
+// todo delete mentions of post process pass
 // It's called post process but it doesn't need to be "post"
 // Just about taking texture(s) and returning another texture
 PostProcessPass :: struct {
@@ -416,6 +445,8 @@ RenderPass :: struct {
     mesh_gather: RenderPassMeshGather,
     shader_gather: RenderPassShaderGather,  // Used only to generate shader passes with
     properties: RenderPassProperties,
+    // todo bindables definitions, e.g. uniform (use camera data, light data) or what and specify binding location.
+    // todo ^ custom specification for gather of uniform data. e.g. from render pass output (a texture) or a generic function you can tune
     name: string
 }
 
@@ -456,7 +487,7 @@ make_render_pass :: proc(
 @(private)
 check_render_pass_mesh_gather :: proc(pass: ^RenderPass, iteration_curr: int, iteration_limit: int) -> (ok: bool) {
     switch v in pass.mesh_gather {
-        case RenderPassQuery: return true
+        case RenderPassQuery, SinglePrimitiveMesh: return true
         case ^RenderPass:
             if iteration_curr == iteration_limit do return false
             return check_render_pass_mesh_gather(v, iteration_curr + 1, iteration_limit)
@@ -471,7 +502,7 @@ check_render_pass_shader_gather :: proc(pass: ^RenderPass, iteration_curr: int, 
         case ^RenderPass:
             if iteration_curr == iteration_limit do return false
             return check_render_pass_shader_gather(v, iteration_curr + 1, iteration_limit)
-        case RenderPassShaderGenerate: return true
+        case RenderPassShaderGenerate, GenericShaderPassGenerator: return true
     }
     return // Impossible to reach but whatever
 }

@@ -32,8 +32,37 @@ RenderContext :: struct {
     pipeline: RenderPipeline,
     manager: ^resource.ResourceManager,
     renderdoc: Maybe(RenderDoc),
+    primitives: RenderPrimitives,
     allocator: mem.Allocator
 }
+
+RenderPrimitives :: struct {
+    cube: ^resource.Mesh,
+    quad: ^resource.Mesh,
+    triangle: ^resource.Mesh
+}
+
+create_render_primitives :: proc(allocator := context.allocator) -> (ok: bool) {
+    if Context.manager == nil {
+        dbg.log(.ERROR, "Manager must not be nil")
+        return
+    }
+
+    if Context.primitives.cube == nil {
+        mesh := create_primitive_cube_mesh(Context.manager) or_return
+        Context.primitives.cube = new(resource.Mesh, allocator)
+        Context.primitives.cube^ = mesh
+    }
+    if Context.primitives.quad == nil {
+        mesh := create_primitive_quad_mesh(Context.manager) or_return
+        Context.primitives.cube = new(resource.Mesh, allocator)
+        Context.primitives.cube^ = mesh
+    }
+    // if Context.primitives.triangle == nil do /* todo */ ;
+
+    return true
+}
+
 
 Context: RenderContext
 
@@ -110,20 +139,43 @@ meshes_from_gather :: proc(
 ) -> (res: []MeshData, ok: bool) {
 
     mesh_data: ^[dynamic]MeshData
-    switch v in pass.mesh_gather {
+    switch &mesh_gather_variant in pass.mesh_gather {
         case ^RenderPass:
-            if v not_in mesh_data_map {
-                if v not_in mesh_data_references {
+            if mesh_gather_variant not_in mesh_data_map {
+                if mesh_gather_variant not_in mesh_data_references {
                     dbg.log(.ERROR, "Render pass gather points to a render pass which has not yet been assigned model data, order the render-passes to fix")
                     return
                 }
 
-                mesh_data = mesh_data_references[v]
+                mesh_data = mesh_data_references[mesh_gather_variant]
             }
-            else do mesh_data = &mesh_data_map[v]
+            else do mesh_data = &mesh_data_map[mesh_gather_variant]
             mesh_data_references[pass] = mesh_data
+        case SinglePrimitiveMesh:
+            mesh: ^resource.Mesh
+            switch mesh_gather_variant.type {
+                case .CUBE:
+                    if Context.primitives.cube == nil {
+                        dbg.log(.ERROR, "Cube primitive must be available")
+                        return
+                    }
+                    mesh = Context.primitives.cube
+                case .QUAD:
+                    if Context.primitives.quad == nil {
+                        dbg.log(.ERROR, "Quad primitive must be available")
+                        return
+                    }
+                    mesh = Context.primitives.quad
+                case .TRIANGLE:
+                    if Context.primitives.triangle == nil {
+                        dbg.log(.ERROR, "Triangle primitive must be available")
+                        return
+                    }
+                    mesh = Context.primitives.triangle
+            }
+            mesh_data := MeshData{ mesh, &mesh_gather_variant.world, nil }
         case RenderPassQuery:
-            mesh_data_map[pass] = query_scene(manager, scene, v, temp_allocator) or_return
+            mesh_data_map[pass] = query_scene(manager, scene, mesh_gather_variant, temp_allocator) or_return
             mesh_data = &mesh_data_map[pass]
         case nil:
             mesh_data_map[pass] = query_scene(manager, scene, {}, temp_allocator) or_return
@@ -176,7 +228,7 @@ render_geometry :: proc(
             resource.set_uniform(shader_pass, standards.MODEL_MAT, model_mat)
             resource.set_uniform(shader_pass, standards.NORMAL_MAT, normal_mat)
 
-            issue_single_element_draw_call(mesh_data.mesh.indices_count)
+            issue_draw_call_for_mesh(mesh_data.mesh)
         }
     }
 
@@ -1107,7 +1159,7 @@ populate_shaders :: proc(
 ) -> (ok: bool) {
     dbg.log(.INFO, "Populating render pass '%s' for %d meshes", render_pass.name, len(meshes_data))
 
-    shader_generate_config := get_render_pass_shader_generate(render_pass) or_return
+    shader_generator, generator_options := get_shader_generator(render_pass) or_return
     for &mesh_data in meshes_data {
         mesh := mesh_data.mesh
         if mesh.mesh_id == nil {
@@ -1122,7 +1174,7 @@ populate_shaders :: proc(
         }
         mapping: ^RenderPassMapping = &shader_store.render_pass_mappings[render_pass]
 
-        shader_pass, generate_ok := generate_shader_pass_for_mesh(shader_store, manager, shader_generate_config, mesh, allocator)
+        shader_pass, generate_ok := generate_shader_pass_for_mesh(shader_store, manager, shader_generator, generator_options, mesh, allocator)
         if !generate_ok {
             dbg.log(.ERROR, "Could not populate shaders for mesh")
             return
@@ -1136,16 +1188,23 @@ populate_shaders :: proc(
     return true
 }
 
-get_render_pass_shader_generate :: proc(pass: ^RenderPass) -> (shader_generate: RenderPassShaderGenerate, ok: bool) {
 
-    switch v in pass.shader_gather {
-        case RenderPassShaderGenerate: shader_generate = v
-        case ^RenderPass: switch reference_v in v.shader_gather {
-            case RenderPassShaderGenerate: shader_generate = reference_v
+get_shader_generator :: proc(pass: ^RenderPass) -> (shader_generator: GenericShaderPassGenerator, generator_options: rawptr, ok: bool) {
+
+    switch &shader_gather_variant in pass.shader_gather {
+        case RenderPassShaderGenerate:
+            shader_generator, generator_options = get_generator_from_config(&shader_gather_variant)
+        case ^RenderPass: switch &reference_variant in shader_gather_variant.shader_gather {
+            case RenderPassShaderGenerate:
+                shader_generator, generator_options = get_generator_from_config(&reference_variant)
             case ^RenderPass:
                 dbg.log(.ERROR, "Shader gather reference must not reference another shader gather")
                 return
+            case GenericShaderPassGenerator:
+                shader_generator = reference_variant
             }
+        case GenericShaderPassGenerator:
+            shader_generator = shader_gather_variant
     }
 
     ok = true
@@ -1153,18 +1212,27 @@ get_render_pass_shader_generate :: proc(pass: ^RenderPass) -> (shader_generate: 
 }
 
 @(private)
+get_generator_from_config :: proc(config: ^RenderPassShaderGenerate) -> (shader_generator: GenericShaderPassGenerator, generator_options: rawptr) {
+    switch &generate_config in config {
+    case GBufferShaderGenerateConfig:
+        shader_generator = generate_gbuffer_shader_pass
+        generator_options = &generate_config
+    case LightingShaderGenerateConfig:
+        shader_generator = generate_lighting_shader_pass
+        generator_options = &generate_config
+    }
+    return
+}
+
+@(private)
 generate_shader_pass_for_mesh :: proc(
     shader_store: ^RenderShaderStore,
     manager: ^resource.ResourceManager,
-    shader_generate_config: RenderPassShaderGenerate,
+    shader_generator: GenericShaderPassGenerator,
+    generator_options: rawptr,
     mesh: ^resource.Mesh,
     allocator := context.allocator
 ) -> (shader_pass_id: resource.ResourceID, ok: bool) {
-
-    if shader_generate_config == nil {
-        dbg.log(.INFO, "Skipping shader generation for mesh")
-        return nil, true
-    }
 
     dbg.log(.INFO, "Generating shader pass for mesh")
 
@@ -1172,11 +1240,7 @@ generate_shader_pass_for_mesh :: proc(
     material_type := resource.get_material(manager, mesh.material.type) or_return
     log.infof("layout: %v, mat: %v", mesh.layout, mesh.material.type)
 
-    shader_pass: resource.ShaderProgram
-    switch v in shader_generate_config {
-        case LightingShaderGenerateConfig: shader_pass = generate_lighting_shader_pass(manager, vertex_layout, material_type, v, allocator) or_return
-        case GBufferShaderGenerateConfig: shader_pass = generate_gbuffer_shader_pass(manager, vertex_layout, material_type, v, allocator) or_return
-    }
+    shader_pass: resource.ShaderProgram = shader_generator(manager, vertex_layout, material_type, generator_options, allocator) or_return
 
     shader_pass_id = resource.add_shader_pass(manager, shader_pass) or_return
     e_shader_pass := resource.get_shader_pass(manager, shader_pass_id) or_return
@@ -1190,9 +1254,14 @@ generate_gbuffer_shader_pass :: proc(
     manager: ^resource.ResourceManager,
     vertex_layout: ^resource.VertexLayout,
     material_type: ^resource.MaterialType,
-    generate_config: GBufferShaderGenerateConfig,
-    allocator: mem.Allocator
+    options: rawptr,
+    allocator: mem.Allocator,
 ) -> (shader_pass: resource.ShaderProgram, ok: bool) {
+
+    if options == nil {
+        dbg.log(.ERROR, "Options is nil in gbuffer generate pass")
+        return
+    }
 
     // todo figure out how to hash the gbuffer vertex shader. Previously we hash the vertex layout that contains the shader
     //  todo  , but now we don't have a vertex layout, unless we make vertex layouts and material types index into
@@ -1200,10 +1269,11 @@ generate_gbuffer_shader_pass :: proc(
     //  todo   not many vertex/material permutations, but lots of meshes
 
     dbg.log(dbg.LogLevel.INFO, "Creating gbuffer vertex shader")
-    vert_id := generate_gbuffer_vertex_shader(manager, generate_config, vertex_layout, allocator) or_return
+    vert_id := generate_gbuffer_vertex_shader(manager, vertex_layout, allocator) or_return
 
     dbg.log(dbg.LogLevel.INFO, "Creating gbuffer fragment shader")
-    frag_id := generate_gbuffer_frag_shader(manager, generate_config, vertex_layout, allocator) or_return
+    config := cast(^GBufferShaderGenerateConfig)options
+    frag_id := generate_gbuffer_frag_shader(manager, config^, vertex_layout, allocator) or_return
 
     // Grabbing shaders here makes it impossible to compile a shader twice
     vert := resource.get_shader(manager, vert_id) or_return
@@ -1230,9 +1300,11 @@ generate_lighting_shader_pass :: proc(
     manager: ^resource.ResourceManager,
     vertex_layout: ^resource.VertexLayout,
     material_type: ^resource.MaterialType,
-    generate_config: LightingShaderGenerateConfig,
+    options: rawptr,
     allocator: mem.Allocator
 ) -> (shader_pass: resource.ShaderProgram, ok: bool) {
+
+    // config := cast(^LightingShaderGenerateConfig)options
 
     contains_tangent := false
     for info in vertex_layout.infos {
@@ -1307,7 +1379,6 @@ generate_lighting_frag_shader :: proc(
 @(private)
 generate_gbuffer_vertex_shader :: proc(
     manager: ^resource.ResourceManager,
-    generate_config: GBufferShaderGenerateConfig,
     vertex_layout: ^resource.VertexLayout,
     allocator := context.allocator
 ) -> (id: resource.ResourceIdent, ok: bool) {
@@ -1878,6 +1949,67 @@ make_ibl_framebuffer :: proc(allocator := context.allocator) -> (buffer: FrameBu
 }
 
 // Just using learnopengl here, obviously using indexed would be better, but marginally so
+create_primitive_cube_mesh :: proc(manager: ^resource.ResourceManager) -> (mesh: resource.Mesh, ok: bool) {
+    verts := [36 * 8]f32 {
+        -1.0, -1.0, -1.0,  0.0,  0.0, -1.0, 0.0, 0.0,
+        1.0,  1.0, -1.0,  0.0,  0.0, -1.0, 1.0, 1.0,
+        1.0, -1.0, -1.0,  0.0,  0.0, -1.0, 1.0, 0.0,
+        1.0,  1.0, -1.0,  0.0,  0.0, -1.0, 1.0, 1.0,
+        -1.0, -1.0, -1.0,  0.0,  0.0, -1.0, 0.0, 0.0,
+        -1.0,  1.0, -1.0,  0.0,  0.0, -1.0, 0.0, 1.0,
+        -1.0, -1.0,  1.0,  0.0,  0.0,  1.0, 0.0, 0.0,
+        1.0, -1.0,  1.0,  0.0,  0.0,  1.0, 1.0, 0.0,
+        1.0,  1.0,  1.0,  0.0,  0.0,  1.0, 1.0, 1.0,
+        1.0,  1.0,  1.0,  0.0,  0.0,  1.0, 1.0, 1.0,
+        -1.0,  1.0,  1.0,  0.0,  0.0,  1.0, 0.0, 1.0,
+        -1.0, -1.0,  1.0,  0.0,  0.0,  1.0, 0.0, 0.0,
+        -1.0,  1.0,  1.0, -1.0,  0.0,  0.0, 1.0, 0.0,
+        -1.0,  1.0, -1.0, -1.0,  0.0,  0.0, 1.0, 1.0,
+        -1.0, -1.0, -1.0, -1.0,  0.0,  0.0, 0.0, 1.0,
+        -1.0, -1.0, -1.0, -1.0,  0.0,  0.0, 0.0, 1.0,
+        -1.0, -1.0,  1.0, -1.0,  0.0,  0.0, 0.0, 0.0,
+        -1.0,  1.0,  1.0, -1.0,  0.0,  0.0, 1.0, 0.0,
+        1.0,  1.0,  1.0,  1.0,  0.0,  0.0, 1.0, 0.0,
+        1.0, -1.0, -1.0,  1.0,  0.0,  0.0, 0.0, 1.0,
+        1.0,  1.0, -1.0,  1.0,  0.0,  0.0, 1.0, 1.0,
+        1.0, -1.0, -1.0,  1.0,  0.0,  0.0, 0.0, 1.0,
+        1.0,  1.0,  1.0,  1.0,  0.0,  0.0, 1.0, 0.0,
+        1.0, -1.0,  1.0,  1.0,  0.0,  0.0, 0.0, 0.0,
+        -1.0, -1.0, -1.0,  0.0, -1.0,  0.0, 0.0, 1.0,
+        1.0, -1.0, -1.0,  0.0, -1.0,  0.0, 1.0, 1.0,
+        1.0, -1.0,  1.0,  0.0, -1.0,  0.0, 1.0, 0.0,
+        1.0, -1.0,  1.0,  0.0, -1.0,  0.0, 1.0, 0.0,
+        -1.0, -1.0,  1.0,  0.0, -1.0,  0.0, 0.0, 0.0,
+        -1.0, -1.0, -1.0,  0.0, -1.0,  0.0, 0.0, 1.0,
+        -1.0,  1.0, -1.0,  0.0,  1.0,  0.0, 0.0, 1.0,
+        1.0,  1.0 , 1.0,  0.0,  1.0,  0.0, 1.0, 0.0,
+        1.0,  1.0, -1.0,  0.0,  1.0,  0.0, 1.0, 1.0,
+        1.0,  1.0,  1.0,  0.0,  1.0,  0.0, 1.0, 0.0,
+        -1.0,  1.0, -1.0,  0.0,  1.0,  0.0, 0.0, 1.0,
+        -1.0,  1.0,  1.0,  0.0,  1.0,  0.0, 0.0, 0.0
+    }
+
+
+    comp: resource.GLComponent
+    create_and_transfer_vao(&comp.vao)
+    verts_dyn := transmute([dynamic]f32)runtime.Raw_Dynamic_Array{ &verts[0], len(verts), len(verts), context.allocator }
+    layout := []resource.MeshAttributeInfo{
+        resource.MeshAttributeInfo{ .position, .vec3, .f32, 12, 3, "" },
+        resource.MeshAttributeInfo{ .normal, .vec2, .f32, 12, 3, "" },
+        resource.MeshAttributeInfo{ .texcoord, .vec2, .f32, 8, 2, "" },
+    }
+    create_and_transfer_vbo_maybe(&comp.vbo, verts_dyn, layout)
+
+    mesh.gl_component = comp
+    mesh.centroid = resource.calculate_centroid(verts_dyn, layout) or_return
+    mesh.vertices_count = 36
+    mesh.layout = resource.add_vertex_layout(manager, resource.VertexLayout{ infos=layout }) or_return
+    mesh.material.type = resource.add_material(manager, resource.MaterialType{ unlit = true }) or_return
+    mesh.render_type = .TRIANGLES
+
+    return
+}
+
 create_primitive_cube :: proc() -> (comp: resource.GLComponent) {
     verts := [36 * 8]f32 {
         -1.0, -1.0, -1.0,  0.0,  0.0, -1.0, 0.0, 0.0,
@@ -1918,6 +2050,7 @@ create_primitive_cube :: proc() -> (comp: resource.GLComponent) {
         -1.0,  1.0,  1.0,  0.0,  1.0,  0.0, 0.0, 0.0
     }
 
+
     create_and_transfer_vao(&comp.vao)
     verts_dyn := transmute([dynamic]f32)runtime.Raw_Dynamic_Array{ &verts[0], len(verts), len(verts), context.allocator }
     layout := []resource.MeshAttributeInfo{
@@ -1945,6 +2078,7 @@ render_primitive_quad :: proc(vao: u32) {
 }
 
 
+// todo fix vertex layout
 create_primitive_quad :: proc() -> (comp: resource.GLComponent) {
     verts := [5 * 4]f32 {
         -1,  1, 0,  0, 1,
@@ -1968,6 +2102,34 @@ create_primitive_quad :: proc() -> (comp: resource.GLComponent) {
     gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 20, 0)
     gl.EnableVertexAttribArray(1)
     gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 20, 12)
+
+    return
+}
+
+// Position, texcoord are available
+create_primitive_quad_mesh :: proc(manager: ^resource.ResourceManager) -> (mesh: resource.Mesh, ok: bool) {
+    verts := [5 * 4]f32 {
+        -1,  1, 0,  0, 1,
+        1,  1, 0,  1, 1,
+        -1, -1, 0,  0, 0,
+        1, -1, 0,  1, 0,
+    }
+
+    comp: resource.GLComponent
+    create_and_transfer_vao(&comp.vao)
+    verts_dyn := transmute([dynamic]f32)runtime.Raw_Dynamic_Array{ &verts[0], len(verts), len(verts), context.allocator }
+    layout := []resource.MeshAttributeInfo{
+        resource.MeshAttributeInfo{ .position, .vec3, .f32, 12, 3, "" },
+        resource.MeshAttributeInfo{ .texcoord, .vec2, .f32, 8, 2, "" },
+    }
+    create_and_transfer_vbo_maybe(&comp.vbo, verts_dyn, layout)
+
+    mesh.gl_component = comp
+    mesh.centroid = resource.calculate_centroid(verts_dyn, layout) or_return
+    mesh.vertices_count = 4
+    mesh.layout = resource.add_vertex_layout(manager, resource.VertexLayout{ infos=layout }) or_return
+    mesh.material.type = resource.add_material(manager, resource.MaterialType{ unlit = true }) or_return
+    mesh.render_type = .TRIANGLE_STRIP
 
     return
 }

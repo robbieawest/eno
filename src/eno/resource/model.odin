@@ -103,6 +103,11 @@ MeshComponentType :: enum {
 VertexData :: [dynamic]f32
 IndexData :: [dynamic]u32
 
+MeshRenderType :: enum {
+    TRIANGLES,
+    TRIANGLE_STRIP
+}
+
 MeshID :: Maybe(MeshIdent)
 MeshIdent :: u32
 Mesh :: struct {
@@ -116,8 +121,11 @@ Mesh :: struct {
     gl_component: GLComponent,
     instance_to: Maybe(InstanceTo),  // Todo support EXT_mesh_gpu_instancing gltf extension for this
     centroid: [3]f32,  // Local centroid, used in occlusion/frustum culling (if I do them) and in z-sorting. Applied hierarchically via model world component
-    transpose_transformation: bool
+    transpose_transformation: bool,
+    render_type: MeshRenderType
 }
+
+
 
 // Regrettable to have this in resource
 GLComponent :: struct {  // If I ever move to glMultiDrawElementsIndirect and grouping VAOs by vertex attribute permutations then this will change

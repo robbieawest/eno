@@ -510,6 +510,25 @@ attach_program :: proc(program: resource.ShaderProgram, loc := #caller_location)
 }
 
 
+issue_draw_call_for_mesh :: proc(mesh: ^resource.Mesh) -> (ok: bool) {
+    if mesh == nil {
+        dbg.log(.ERROR, "Mesh must not be nil")
+        return
+    }
+
+    indexed := mesh.indices_count != 0
+    render_type: u32
+    switch mesh.render_type {
+        case .TRIANGLES: render_type = gl.TRIANGLES
+        case .TRIANGLE_STRIP: render_type = gl.TRIANGLE_STRIP
+    }
+
+    if indexed do gl.DrawElements(render_type, i32(mesh.indices_count), gl.UNSIGNED_INT, nil)
+    else do gl.DrawArrays(render_type, 0, i32(mesh.vertices_count))
+
+    return true
+}
+
 issue_single_element_draw_call :: proc(#any_int indices_count: i32) {
     gl.DrawElements(gl.TRIANGLES, indices_count, gl.UNSIGNED_INT, nil)
 }
