@@ -183,7 +183,7 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
         type = .TWO_DIM,
         properties = utils.copy_map(tex_properties, allocator=allocator)
     }
-    ssao_texture.gpu_texture = make_texture(ssao_texture, internal_format=gl.RED, format=gl.RED, type=gl.FLOAT) // todo fix formats, should be RED
+    ssao_texture.gpu_texture = make_texture(ssao_texture, internal_format=gl.R32F, format=gl.RED, type=gl.FLOAT)
     framebuffer_add_attachments(&framebuffer, Attachment{ data=ssao_texture, id = gl.COLOR_ATTACHMENT0, type = .COLOUR })
     check_framebuffer_status(framebuffer) or_return
 
@@ -193,8 +193,8 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
         type = .TWO_DIM,
         properties = utils.copy_map(tex_properties, allocator=allocator)
     }
-    ssao_blurred_texture.gpu_texture = make_texture(ssao_blurred_texture, internal_format=gl.RED, format=gl.RED, type=gl.FLOAT) // todo fix formats, should be RED
-    framebuffer_add_attachments(&framebuffer, Attachment{ data=ssao_texture, id = gl.COLOR_ATTACHMENT1, type = .COLOUR })
+    ssao_blurred_texture.gpu_texture = make_texture(ssao_blurred_texture, internal_format=gl.R32F, format=gl.RED, type=gl.FLOAT)
+    framebuffer_add_attachments(&framebuffer, Attachment{ data=ssao_blurred_texture, id = gl.COLOR_ATTACHMENT1, type = .COLOUR })
     check_framebuffer_status(framebuffer) or_return
 
     attachments, _ := slice.map_keys(framebuffer.attachments, allocator=allocator); defer delete(attachments)
@@ -211,10 +211,10 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
             frame_buffer = ssao_fbo,
             mesh_gather = SinglePrimitiveMesh{ type=.QUAD },  // doesn't need to care about transforms, since the SSAO shader does not care
             properties=RenderPassProperties{
-                face_culling = FaceCulling.BACK,
                 viewport = [4]i32{ 0, 0, w, h },
-                clear = { .COLOUR_BIT },
+                clear = { .COLOUR_BIT, .DEPTH_BIT },
                 clear_colour = [4]f32{ 0.0, 0.0, 0.0, 1.0 },
+                disable_depth_test=true,
             },
             inputs = []RenderPassIO {
                 gbuf_output,
@@ -236,8 +236,9 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
             properties=RenderPassProperties{
                 face_culling = FaceCulling.BACK,
                 viewport = [4]i32{ 0, 0, w, h },
-                clear = { .COLOUR_BIT },
+                clear = { .COLOUR_BIT, .DEPTH_BIT },
                 clear_colour = [4]f32{ 0.0, 0.0, 0.0, 1.0 },
+                disable_depth_test=true
             },
             inputs = []RenderPassIO{
                 { ssao_fbo, AttachmentID{ type=.COLOUR }, "SSAOColour" },

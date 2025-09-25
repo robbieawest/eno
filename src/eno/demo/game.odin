@@ -160,9 +160,10 @@ before_frame :: proc() -> (ok: bool) {
              name = "Opaque Single Sided Pass"
         ) or_return,
     )
+    opaque_single_pass := render.get_render_pass("Opaque Single Sided Pass") or_return
     render.add_render_passes(
         render.make_render_pass(
-            shader_gather=render.Context.pipeline.passes[2],
+            shader_gather=opaque_single_pass,
             mesh_gather=render.RenderPassQuery{ material_query =
                 proc(material: resource.Material, type: resource.MaterialType) -> bool {
                     return type.alpha_mode != .BLEND && type.double_sided
@@ -177,7 +178,7 @@ before_frame :: proc() -> (ok: bool) {
             name = "Opaque Double Sided Pass"
         ) or_return,
         render.make_render_pass(
-            shader_gather=render.Context.pipeline.passes[2],
+            shader_gather=opaque_single_pass,
             mesh_gather=render.RenderPassQuery{ material_query =
                 proc(material: resource.Material, type: resource.MaterialType) -> bool {
                     return type.alpha_mode == .BLEND
