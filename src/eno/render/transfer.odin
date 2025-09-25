@@ -42,6 +42,11 @@ transfer_mesh :: proc(manager: ^resource.ResourceManager, mesh: ^resource.Mesh, 
     if mesh.gl_component.vao == nil do create_and_transfer_vao(&mesh.gl_component.vao)
     else do bind_vao(mesh.gl_component.vao.?)
 
+    if mesh.vertices_count == 0 {
+        dbg.log(.ERROR, "Cannot transfer 0 vertices")
+        return
+    }
+
     if mesh.gl_component.vbo == nil {
         layout := resource.get_vertex_layout(manager, mesh.layout) or_return
         create_and_transfer_vbo(&mesh.gl_component.vbo, mesh.vertex_data, layout.infos) or_return
@@ -49,11 +54,13 @@ transfer_mesh :: proc(manager: ^resource.ResourceManager, mesh: ^resource.Mesh, 
     }
     else do bind_vbo(mesh.gl_component.vbo.?)
 
-    if mesh.gl_component.ebo == nil {
-        create_and_transfer_ebo(&mesh.gl_component.ebo, mesh) or_return
-        if destroy_after_transfer do delete(mesh.index_data)
+    if mesh.indices_count != 0 {
+        if mesh.gl_component.ebo == nil {
+            create_and_transfer_ebo(&mesh.gl_component.ebo, mesh) or_return
+            if destroy_after_transfer do delete(mesh.index_data)
+        }
+        else do bind_ebo(mesh.gl_component.ebo.?)
     }
-    else do bind_ebo(mesh.gl_component.ebo.?)
 
     return true
 }

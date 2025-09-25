@@ -55,8 +55,8 @@ create_render_primitives :: proc(allocator := context.allocator) -> (ok: bool) {
     }
     if Context.primitives.quad == nil {
         mesh := create_primitive_quad_mesh(Context.manager) or_return
-        Context.primitives.cube = new(resource.Mesh, allocator)
-        Context.primitives.cube^ = mesh
+        Context.primitives.quad = new(resource.Mesh, allocator)
+        Context.primitives.quad^ = mesh
     }
     // if Context.primitives.triangle == nil do /* todo */ ;
 
@@ -173,7 +173,10 @@ meshes_from_gather :: proc(
                     }
                     mesh = Context.primitives.triangle
             }
-            mesh_data := MeshData{ mesh, &mesh_gather_variant.world, nil }
+            new_data := make([dynamic]MeshData, 1, allocator=temp_allocator)
+            new_data[0] = MeshData{ mesh, &mesh_gather_variant.world, nil }
+            mesh_data_map[pass] = new_data
+            mesh_data = &mesh_data_map[pass]
         case RenderPassQuery:
             mesh_data_map[pass] = query_scene(manager, scene, mesh_gather_variant, temp_allocator) or_return
             mesh_data = &mesh_data_map[pass]
@@ -1127,7 +1130,6 @@ destroy_shader_store :: proc(manager: ^resource.ResourceManager, shader_store: R
 }
 
 populate_all_shaders :: proc(
-    manager: ^resource.ResourceManager,
     scene: ^ecs.Scene,
     allocator := context.allocator,
     temp_allocator := context.temp_allocator
@@ -1137,8 +1139,8 @@ populate_all_shaders :: proc(
 
 
     for pass in Context.pipeline.passes {
-        meshes_data := meshes_from_gather(manager, scene, &mesh_data_map, &mesh_data_references, pass, temp_allocator) or_return
-        populate_shaders(&Context.pipeline.shader_store, manager, scene, pass, meshes_data, allocator, temp_allocator) or_return
+        meshes_data := meshes_from_gather(Context.manager, scene, &mesh_data_map, &mesh_data_references, pass, temp_allocator) or_return
+        populate_shaders(&Context.pipeline.shader_store, Context.manager, scene, pass, meshes_data, allocator, temp_allocator) or_return
     }
 
     ok = true
@@ -2007,6 +2009,7 @@ create_primitive_cube_mesh :: proc(manager: ^resource.ResourceManager) -> (mesh:
     mesh.material.type = resource.add_material(manager, resource.MaterialType{ unlit = true }) or_return
     mesh.render_type = .TRIANGLES
 
+    ok = true
     return
 }
 
@@ -2131,5 +2134,6 @@ create_primitive_quad_mesh :: proc(manager: ^resource.ResourceManager) -> (mesh:
     mesh.material.type = resource.add_material(manager, resource.MaterialType{ unlit = true }) or_return
     mesh.render_type = .TRIANGLE_STRIP
 
+    ok = true
     return
 }

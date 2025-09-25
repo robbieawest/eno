@@ -131,11 +131,13 @@ before_frame :: proc() -> (ok: bool) {
     demo_arch = ecs.scene_get_archetype(game.Game.scene, "demo_entities") or_return
     load_helmet(arch) or_return
 
-    render.init_render_pipeline()
+    render.init_render_pipeline(&game.Game.resource_manager)
+    render.create_render_primitives() or_return
 
     window_res := win.get_window_resolution(game.Game.window)
 
-    render.make_gbuffer_passes(window_res.w, window_res.h, render.GBufferInfo{ .NORMAL, .DEPTH }) or_return
+    gbuf_normal_output := render.make_gbuffer_passes(window_res.w, window_res.h, render.GBufferInfo{ .NORMAL, .DEPTH }) or_return
+    render.make_ssao_passes(window_res.w, window_res.h, gbuf_normal_output) or_return
 
     background_colour := [4]f32{ 1.0, 1.0, 1.0, 1.0 }
     background_colour_factor: f32 = 0.85
@@ -244,8 +246,7 @@ before_frame :: proc() -> (ok: bool) {
         game.HOOK_TOGGLE_UI_MOUSE()
     )
 
-    manager := &game.Game.resource_manager
-    render.populate_all_shaders(manager, game.Game.scene) or_return
+    render.populate_all_shaders(game.Game.scene) or_return
 
     // render.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "park_music_stage_4k.hdr") or_return
 
@@ -254,6 +255,7 @@ before_frame :: proc() -> (ok: bool) {
 
     ui.add_ui_elements(render.render_settings_ui_element, render.render_pipeline_ui_element, render.shader_store_ui_element, render.resource_manager_ui_element, demo_ui_element) or_return
     ui.show_imgui_demo_window(true) or_return
+
 
     return true
 }
@@ -309,7 +311,7 @@ demo_ui_element : ui.UIElement : proc() -> (ok: bool) {
                     log.info("selected new preview model")
                     unload_current_preview_model(demo_arch) or_return
                     load_model_procs[i](demo_arch) or_return
-                    render.populate_all_shaders(&game.Game.resource_manager, game.Game.scene) or_return
+                    render.populate_all_shaders(game.Game.scene) or_return
                 }
                 selected_model_ind = i
             }
