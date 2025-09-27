@@ -851,8 +851,22 @@ set_default_depth_func :: proc() {
     gl.DepthFunc(gl.LESS)
 }
 
-draw_buffers :: proc(buffers: ..u32, allocator := context.allocator) {
+// Assumes correct framebuffer bound
+draw_buffers :: proc{ draw_buffers_direct, draw_buffers_pass_io }
+
+@(private)
+draw_buffers_direct :: proc(buffers: ..u32, allocator := context.allocator) {
     bufs := slice.filter(buffers, proc(a: u32) -> bool { return a >= gl.COLOR_ATTACHMENT0 && a <= gl.COLOR_ATTACHMENT31; }, allocator=allocator)
     defer delete(bufs, allocator=allocator)
     gl.DrawBuffers(i32(len(bufs)), raw_data(bufs))
 }
+
+@(private)
+draw_buffers_pass_io :: proc(io: []RenderPassIO, allocator := context.allocator) -> (ok: bool) {
+    bufs := make([dynamic]u32, allocator=allocator)
+    for output in io do append(&bufs, gl_conv_attachment_id(output.attachment) or_return)
+
+    draw_buffers_direct(..bufs[:], allocator=allocator)
+    return true
+}
+

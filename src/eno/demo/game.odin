@@ -157,6 +157,18 @@ before_frame :: proc() -> (ok: bool) {
                 clear_colour = background_colour * background_colour_factor,
                 multisample = true
             },
+            outputs = []render.RenderPassIO {
+                {
+                    nil,
+                    render.AttachmentID{ .COLOUR, 0 },
+                    "OpaqueSingleSidedColour"
+                },
+                {
+                    nil,
+                    render.AttachmentID{ type=.DEPTH },
+                    "OpaqueSingleSidedDepth"
+                }
+            },
              name = "Opaque Single Sided Pass"
         ) or_return,
     )
@@ -175,6 +187,18 @@ before_frame :: proc() -> (ok: bool) {
                 multisample = true,
                 render_skybox = true,  // Rendering skybox will set certain properties indepdendent of what is set in the pass properties, it will also be done last in the pass
             },
+            outputs = []render.RenderPassIO {
+                {
+                    nil,
+                    render.AttachmentID{ .COLOUR, 0 },
+                    "OpaqueDoubleSidedColour"
+                },
+                {
+                    nil,
+                    render.AttachmentID{ type=.DEPTH },
+                    "OpaqueDoubleSidedDepth"
+                }
+            },
             name = "Opaque Double Sided Pass"
         ) or_return,
         render.make_render_pass(
@@ -190,6 +214,18 @@ before_frame :: proc() -> (ok: bool) {
                 viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
                 multisample = true,
                 blend_func = render.BlendFunc{ .SOURCE_ALPHA, .ONE_MINUS_SOURCE_ALPHA },
+            },
+            outputs = []render.RenderPassIO {
+                {
+                    nil,
+                    render.AttachmentID{ .COLOUR, 0 },
+                    "TransparentColour"
+                },
+                {
+                    nil,
+                    render.AttachmentID{ type=.DEPTH },
+                    "TransparentDepth"
+                }
             },
             name = "Transparency Pass"
         ) or_return

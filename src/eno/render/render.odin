@@ -439,7 +439,13 @@ handle_pass_state :: proc(pass: RenderPass) -> (ok: bool) {
             set_render_viewport(viewport[0], viewport[1], viewport[2], viewport[3])
         }
         else do set_render_viewport(0, 0, pass.frame_buffer.w, pass.frame_buffer.h)
+        draw_buffers(pass.outputs)
     }
+    if len(pass.outputs) == 0 {
+        dbg.log(.ERROR, "Pass needs at least one output")
+        return
+    }
+
 
     properties := pass.properties
     set_front_face(properties.front_face)

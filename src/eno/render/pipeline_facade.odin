@@ -50,6 +50,11 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
     // Attachment order is the same, multiple render targets are the same
     // Not doing any funny packing
 
+    outputs := make([dynamic]RenderPassIO, allocator=allocator)
+
+    add_framebuffers(framebuffer, allocator=allocator)
+    gbuf_fbo := Context.pipeline.frame_buffers[len(Context.pipeline.frame_buffers) - 1]
+
     // Stencil not supported yet
     last_colour_loc: u32 = 0; depth_used := false; stencil_used := false
     for component in GBufferComponent {
@@ -63,6 +68,9 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
             }
             texture.gpu_texture = make_texture(texture, internal_format=storage.internal_format, format=storage.format, type=storage.type)
 
+            io: RenderPassIO
+            io.framebuffer = gbuf_fbo
+
             attachment: Attachment
             attachment.data = texture
             switch component {
@@ -74,6 +82,8 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
                 }
                 last_colour_loc += 1
                 attachment.id = gl.COLOR_ATTACHMENT0 + last_colour_loc
+                io.attachment = AttachmentID{ .COLOUR, last_colour_loc }
+                io.identifier = "gbNormal"
             case .DEPTH:
                 if depth_used {  // Forward compat
                     dbg.log(.ERROR, "Depth attachment already used")
@@ -83,19 +93,21 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
                 depth_used = true
                 attachment.type = .DEPTH
                 attachment.id = gl.DEPTH_ATTACHMENT
+                io.attachment = AttachmentID{ type=.DEPTH }
+                io.identifier = "gbDepth"
             }
-            framebuffer_add_attachments(&framebuffer, attachment)
-            check_framebuffer_status(framebuffer) or_return
+            framebuffer_add_attachments(gbuf_fbo, attachment)
+            check_framebuffer_status(gbuf_fbo^) or_return
+
+            append(&outputs, io)
         }
     }
-    check_framebuffer_status(framebuffer) or_return
+    check_framebuffer_status(gbuf_fbo^) or_return
 
-    attachments, _ := slice.map_keys(framebuffer.attachments, allocator=allocator); defer delete(attachments)
-    framebuffer_draw_attachments(framebuffer, ..attachments, allocator=allocator) or_return
-    check_framebuffer_status(framebuffer) or_return
+    attachments, _ := slice.map_keys(gbuf_fbo.attachments, allocator=allocator); defer delete(attachments)
+    framebuffer_draw_attachments(gbuf_fbo^, ..attachments, allocator=allocator) or_return
+    check_framebuffer_status(gbuf_fbo^) or_return
 
-    add_framebuffers(framebuffer, allocator=allocator)
-    gbuf_fbo := Context.pipeline.frame_buffers[len(Context.pipeline.frame_buffers) - 1]
     add_render_passes(
         make_render_pass(
             frame_buffer = gbuf_fbo,
@@ -113,11 +125,11 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
             clear_colour = [4]f32{ 0.0, 0.0, 0.0, 1.0 },
         },
         name  = "GBuffer Opaque Single Sided Pass",
+        outputs = outputs[:],
         allocator=allocator
         ) or_return
     )
 
-    normal_output = RenderPassIO{ framebuffer=gbuf_fbo, attachment=AttachmentID{ .COLOUR, 0 }, identifier="GBuffer Opaque Double Sided Pass" }
     add_render_passes(
         make_render_pass(
             frame_buffer = gbuf_fbo,
@@ -130,7 +142,8 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
             properties=RenderPassProperties{
                 geometry_z_sorting = .ASC,
             },
-            name=normal_output.identifier,
+            outputs = outputs[:],
+            name="GBuffer Opaque Double Sided Pass",
             allocator=allocator
         ) or_return
     )
