@@ -346,7 +346,7 @@ release_texture :: proc(texture: GPUTexture) {
 }
 
 bind_texture :: proc(#any_int texture_unit: u32, texture: GPUTexture, texture_type := resource.TextureType.TWO_DIM, loc := #caller_location) -> (ok: bool) {
-    dbg.log(.INFO, "Binding texture to unit %d", texture_unit, loc=loc)
+    // dbg.log(.INFO, "Binding texture to unit %d", texture_unit, loc=loc)
     if texture == nil {
         dbg.log(dbg.LogLevel.ERROR, "Texture to bind at unit %d is not transferred to gpu", texture_unit, loc=loc)
         return

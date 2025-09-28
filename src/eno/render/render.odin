@@ -44,7 +44,7 @@ RenderPrimitives :: struct {
     triangle: ^resource.Mesh,
 }
 
-MISSING_TEXTURE_NAME :: "missing-texture.svg"
+MISSING_TEXTURE_NAME :: "missing-texture.png"
 create_missing_placeholder_textures :: proc(allocator := context.allocator) -> (ok: bool) {
     if Context.manager == nil {
         dbg.log(.ERROR, "Manager must not be nil")
@@ -373,7 +373,7 @@ create_skybox_shader :: proc(manager: ^resource.ResourceManager, allocator := co
 }
 
 
-BRDF_LUT_UNIFORM :: "brdfLut"
+BRDF_LUT_UNIFORM :: "brdfLUT"
 PREFILTER_MAP_UNIFORM :: "prefilterMap"
 IRRADIANCE_MAP_UNIFORM :: "irradianceMap"
 @(private)
