@@ -20,8 +20,8 @@ cache_checked_uniform_get :: proc(program: ^ShaderProgram, label: string) -> (lo
 }
 
 
-get_uniform_location :: proc(program: ^ShaderProgram, label: string) -> (location: i32, ok: bool) {
-    dbg.log()
+get_uniform_location :: proc(program: ^ShaderProgram, label: string, loc := #caller_location) -> (location: i32, ok: bool) {
+    dbg.log(.INFO, "Getting uniform location of %s", label)
     if program.id == nil {
         dbg.log(.ERROR, "Could not get uniform, program is not yet expressed")
         return

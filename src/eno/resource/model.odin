@@ -157,16 +157,27 @@ texture_from_path :: proc(
     properties: TextureProperties = {},
     allocator := context.allocator
 ) -> (id: ResourceIdent, ok: bool) {
-    texture: Texture
+    return add_texture(manager, texture_from_path_raw(name, path, path_base, flip_image, type, properties, allocator) or_return)
+}
+
+texture_from_path_raw :: proc(
+    name: string,
+    path: string,
+    path_base: string = "",
+    flip_image := false,
+    type: TextureType = .TWO_DIM,
+    properties: TextureProperties = {},
+    allocator := context.allocator
+) -> (texture: Texture, ok: bool) {
     texture.image = load_image_from_uri(path, path_base, flip_image, allocator=allocator) or_return
     texture.name = strings.clone(name, allocator=allocator)
 
     if len(properties) == 0 do texture.properties = default_texture_properties(allocator)
     else do texture.properties = properties
     texture.type = type
-    return add_texture(manager, texture)
+    ok = true
+    return
 }
-
 
 
 // Primitive meshes

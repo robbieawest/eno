@@ -204,6 +204,7 @@ transfer_texture :: proc(
     format: u32 = gl.RGBA,
     type: u32 = gl.UNSIGNED_BYTE,
     generate_mipmap := false,
+    set_storage := false,
     destroy_after_transfer := true,
     loc := #caller_location
 ) -> (ok: bool) {
@@ -215,7 +216,7 @@ transfer_texture :: proc(
 
     if tex.gpu_texture != nil do return true
 
-    gpu_tex := make_texture(tex^, internal_format, lod, format, type, generate_mipmap, loc)
+    gpu_tex := make_texture(tex^, internal_format, lod, format, type, generate_mipmap, set_storage, loc)
     if gpu_tex == nil {
         dbg.log(dbg.LogLevel.ERROR, "make_texture returned nil texture")
         return
@@ -237,9 +238,10 @@ make_texture_ :: proc(
     format: u32 = gl.RGBA,
     type: u32 = gl.UNSIGNED_BYTE,
     generate_mipmap := false,
+    set_storage := false,
     loc := #caller_location
 ) -> (texture: GPUTexture) {
-    return make_texture_raw(tex.image.w, tex.image.h, tex.image.pixel_data, internal_format, lod, format, type, tex.type, tex.properties, generate_mipmap, loc)
+    return make_texture_raw(tex.image.w, tex.image.h, tex.image.pixel_data, internal_format, lod, format, type, tex.type, tex.properties, generate_mipmap, set_storage, loc)
 }
 
 make_texture_raw :: proc(
@@ -252,6 +254,7 @@ make_texture_raw :: proc(
     texture_type: resource.TextureType = .TWO_DIM,
     texture_properties: resource.TextureProperties = {},
     generate_mipmap := false,
+    set_storage := false,
     loc := #caller_location
 ) -> (texture: GPUTexture) {
     dbg.log(.INFO, "Making new texture, w: %d, h: %d", w, h, loc=loc)
@@ -286,7 +289,12 @@ make_texture_raw :: proc(
     generate_mipmap |= texture_properties[.MIN_FILTER] == .NEAREST_MIPMAP_NEAREST
     if generate_mipmap do gen_mipmap(texture_type)
 
+    if set_storage do set_tex_storage(w, h, texture_type, lod, internal_format)
     return
+}
+
+set_tex_storage :: proc(w, h: i32, texture_type: resource.TextureType, mips: i32, internal_format: i32) {
+    gl.TexStorage2D(conv_texture_type(texture_type), mips, u32(internal_format), w, h)
 }
 
 // Assumes bound texture at target type
@@ -338,6 +346,7 @@ release_texture :: proc(texture: GPUTexture) {
 }
 
 bind_texture :: proc(#any_int texture_unit: u32, texture: GPUTexture, texture_type := resource.TextureType.TWO_DIM, loc := #caller_location) -> (ok: bool) {
+    dbg.log(.INFO, "Binding texture to unit %d", texture_unit, loc=loc)
     if texture == nil {
         dbg.log(dbg.LogLevel.ERROR, "Texture to bind at unit %d is not transferred to gpu", texture_unit, loc=loc)
         return

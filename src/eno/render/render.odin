@@ -33,13 +33,38 @@ RenderContext :: struct {
     manager: ^resource.ResourceManager,
     renderdoc: Maybe(RenderDoc),
     primitives: RenderPrimitives,
+    missing_quad_texture: resource.Texture,
+    missing_cube_texture: resource.Texture,
     allocator: mem.Allocator
 }
 
 RenderPrimitives :: struct {
     cube: ^resource.Mesh,
     quad: ^resource.Mesh,
-    triangle: ^resource.Mesh
+    triangle: ^resource.Mesh,
+}
+
+MISSING_TEXTURE_NAME :: "missing-texture.svg"
+create_missing_placeholder_textures :: proc(allocator := context.allocator) -> (ok: bool) {
+    if Context.manager == nil {
+        dbg.log(.ERROR, "Manager must not be nil")
+        return
+    }
+
+    tex_properties := make(map[resource.TextureProperty]resource.TexturePropertyValue, allocator=allocator)
+    defer delete(tex_properties)
+    tex_properties[.WRAP_S] = .MIRROR_REPEAT
+    tex_properties[.WRAP_T] = .MIRROR_REPEAT
+    tex_properties[.WRAP_R] = .MIRROR_REPEAT
+    tex_properties[.MIN_FILTER] = .NEAREST
+    tex_properties[.MAG_FILTER] = .NEAREST
+
+    Context.missing_quad_texture = resource.texture_from_path_raw("MissingTeturePlaceHolder", MISSING_TEXTURE_NAME, standards.TEXTURE_RESOURCE_PATH, allocator=allocator) or_return
+    transfer_texture(&Context.missing_quad_texture) or_return
+
+    Context.missing_cube_texture = create_cubemap_from_2d(Context.missing_quad_texture, tex_properties) or_return
+
+    return true
 }
 
 create_render_primitives :: proc(allocator := context.allocator) -> (ok: bool) {
@@ -118,7 +143,7 @@ render :: proc(
         update_camera_ubo(scene) or_return
         update_lights_ssbo(scene) or_return
 
-        if len(mesh_data) != 0 do render_geometry(manager, scene, pipeline.shader_store, pass, mesh_data, temp_allocator) or_return
+        if len(mesh_data) != 0 do render_geometry(manager, scene, pipeline.shader_store, pass, mesh_data, allocator, temp_allocator) or_return
         if pass.properties.render_skybox do render_skybox(manager, scene.viewpoint, allocator) or_return
     }
 
@@ -199,6 +224,7 @@ render_geometry :: proc(
     shader_store: RenderShaderStore,
     pass: ^RenderPass,
     mesh_data: []MeshData,
+    allocator := context.allocator,
     temp_allocator := context.temp_allocator
 ) -> (ok: bool) {
     sort_geom := pass.properties.geometry_z_sorting != .NO_SORT
@@ -211,17 +237,22 @@ render_geometry :: proc(
     for mapping in shader_map {
         shader_pass := resource.get_shader_pass(manager, mapping.shader) or_return
         attach_program(shader_pass^)
+        bind_missing_textures(shader_pass, allocator) or_return
+
+        cur_tex_unit: i32 = 2  // Must start from 1, 0 is reserved for missing texture
 
         lighting_settings := get_lighting_settings()
         resource.set_uniform(shader_pass, LIGHTING_SETTINGS, transmute(u32)(lighting_settings))
-        if .IBL in lighting_settings do bind_ibl_uniforms(shader_pass)
+        if .IBL in lighting_settings do bind_ibl_uniforms(shader_pass, &cur_tex_unit)
+
+        // bind_render_pass_inputs(shader_pass, pass, &cur_tex_unit) or_return
 
         for mesh_data in mapping.meshes {
             model_mat, normal_mat := model_and_normal(mesh_data.mesh, mesh_data.world, scene.viewpoint)
             transfer_mesh(manager, mesh_data.mesh) or_return
 
             material_type := resource.get_material(manager, mesh_data.mesh.material.type) or_return
-            bind_material_uniforms(manager, mesh_data.mesh.material, material_type^, shader_pass) or_return
+            bind_material_uniforms(manager, mesh_data.mesh.material, material_type^, shader_pass, cur_tex_unit) or_return
 
             if pass.properties.face_culling == FaceCulling.ADAPTIVE {
                 if material_type.double_sided do set_face_culling(false)
@@ -236,6 +267,50 @@ render_geometry :: proc(
     }
 
     return true
+}
+
+@(private)
+bind_missing_textures :: proc(shader: ^resource.ShaderProgram, allocator := context.allocator) -> (ok: bool) {
+    attach_program(shader^) or_return
+    quad_gpu_tex, quad_tex_transferred := Context.missing_quad_texture.gpu_texture.(u32)
+    if !quad_tex_transferred do create_missing_placeholder_textures(allocator) or_return
+
+    bind_texture(0, Context.missing_quad_texture.gpu_texture) or_return
+
+    cube_gpu_tex, cube_tex_transferred := Context.missing_cube_texture.gpu_texture.(u32)
+    if !cube_tex_transferred {
+        dbg.log(.ERROR, "Missing cube texture is not transferred")
+        return
+    }
+
+    bind_texture(0, Context.missing_cube_texture.gpu_texture, .CUBEMAP) or_return
+    return true
+}
+
+@(private)
+bind_render_pass_inputs :: proc(shader: ^resource.ShaderProgram, pass: ^RenderPass, cur_tex_unit: ^u32) -> (ok: bool) {
+
+    for input in pass.inputs {
+        if input.framebuffer == nil {
+            dbg.log(.ERROR, "Input framebuffer is nil")
+        }
+
+        attachment, attachment_exists := input.framebuffer.attachments[gl_conv_attachment_id(input.attachment) or_return]
+        if !attachment_exists {
+            dbg.log(.ERROR, "Attachment does not exist in framebuffer")
+            return
+        }
+
+        tex, is_tex := attachment.data.(resource.Texture)
+        if !is_tex {
+            dbg.log(.ERROR, "Attachment is not a texture")
+            return
+        }
+
+    }
+
+    ok = true
+    return
 }
 
 // Allocator is perm content, not temp
@@ -302,7 +377,7 @@ BRDF_LUT_UNIFORM :: "brdfLut"
 PREFILTER_MAP_UNIFORM :: "prefilterMap"
 IRRADIANCE_MAP_UNIFORM :: "irradianceMap"
 @(private)
-bind_ibl_uniforms :: proc( shader: ^resource.ShaderProgram) -> (ok: bool) {
+bind_ibl_uniforms :: proc(shader: ^resource.ShaderProgram, cur_tex_unit: ^i32) -> (ok: bool) {
     m_env := Context.image_environment
     if m_env == nil {
         dbg.log(.ERROR, "Scene image environment for ibl not yet setup")
@@ -318,18 +393,22 @@ bind_ibl_uniforms :: proc( shader: ^resource.ShaderProgram) -> (ok: bool) {
     prefilter_map := env.prefilter_map.?
     brdf_lut := env.brdf_lookup.?
 
-    texture_unit: i32
-    texture_unit = i32(PBRSamplerBindingLocation.IRRADIANCE_MAP)
+    texture_unit := cur_tex_unit^
     bind_texture(texture_unit, irradiance_map.gpu_texture, irradiance_map.type) or_return
     resource.set_uniform(shader, IRRADIANCE_MAP_UNIFORM, texture_unit)
+    cur_tex_unit^ += 1
 
-    texture_unit = i32(PBRSamplerBindingLocation.BRDF_LUT)
+    texture_unit = cur_tex_unit^
     bind_texture(texture_unit, brdf_lut.gpu_texture, brdf_lut.type) or_return
     resource.set_uniform(shader, BRDF_LUT_UNIFORM, texture_unit)
+    cur_tex_unit^ += 1
 
-    texture_unit = i32(PBRSamplerBindingLocation.PREFILTER_MAP)
+    texture_unit = cur_tex_unit^
     bind_texture(texture_unit, prefilter_map.gpu_texture, prefilter_map.type) or_return
     resource.set_uniform(shader, PREFILTER_MAP_UNIFORM, texture_unit)
+    cur_tex_unit^ += 1
+
+    dbg.log(.INFO, "tex unit post ibl %d", cur_tex_unit^)
 
     ok = true
     return
@@ -683,11 +762,13 @@ PBRSamplerBindingLocation :: enum u32 {
 }
 
 @(private)
-bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material, type: resource.MaterialType, lighting_shader: ^resource.ShaderProgram) -> (ok: bool) {
+bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: resource.Material, type: resource.MaterialType, lighting_shader: ^resource.ShaderProgram, cur_tex_unit: i32) -> (ok: bool) {
     resource.set_uniform(lighting_shader, resource.ALPHA_CUTOFF, material.alpha_cutoff)
     resource.set_uniform(lighting_shader, resource.ENABLE_ALPHA_CUTOFF, i32(type.alpha_mode == .MASK))
     resource.set_uniform(lighting_shader, resource.UNLIT, i32(type.unlit))
     resource.set_uniform(lighting_shader, resource.EMISSIVE_FACTOR, material.emissive_factor[0], material.emissive_factor[1], material.emissive_factor[2])
+
+    texture_unit := cur_tex_unit
 
     usages: MaterialUsages
     usages += { .EmissiveFactor }
@@ -698,21 +779,21 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 if v.base_colour != nil {
                     usages += { .BaseColourTexture }
                     base_colour := resource.get_texture(manager, v.base_colour) or_return
-                    texture_unit := i32(PBRSamplerBindingLocation.BASE_COLOUR)
 
                     transfer_texture(base_colour)
                     bind_texture(texture_unit, base_colour.gpu_texture) or_return
                     resource.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, texture_unit)
+                    texture_unit += 1
                 }
 
                 if v.metallic_roughness != nil {
                     usages += { .PBRMetallicRoughnessTexture }
                     metallic_roughness := resource.get_texture(manager, v.metallic_roughness) or_return
-                    texture_unit := i32(PBRSamplerBindingLocation.PBR_METALLIC_ROUGHNESS)
 
                     transfer_texture(metallic_roughness)
                     bind_texture(texture_unit, metallic_roughness.gpu_texture) or_return
                     resource.set_uniform(lighting_shader, resource.PBR_METALLIC_ROUGHNESS, texture_unit)
+                    texture_unit += 1
                 }
 
                 resource.set_uniform(lighting_shader, resource.BASE_COLOUR_FACTOR, v.base_colour_factor[0], v.base_colour_factor[1], v.base_colour_factor[2], v.base_colour_factor[3])
@@ -727,59 +808,59 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
             case resource.EmissiveTexture:
                 usages += { .EmissiveTexture }
                 emissive_texture := resource.get_texture(manager, resource.ResourceIdent(v)) or_return
-                texture_unit := i32(PBRSamplerBindingLocation.EMISSIVE)
 
                 transfer_texture(emissive_texture)
                 bind_texture(texture_unit, emissive_texture.gpu_texture.?) or_return
                 resource.set_uniform(lighting_shader, resource.EMISSIVE_TEXTURE, texture_unit)
+                texture_unit += 1
 
             case resource.OcclusionTexture:
                 usages += { .OcclusionTexture }
                 occlusion_texture := resource.get_texture(manager, resource.ResourceIdent(v)) or_return
-                texture_unit := i32(PBRSamplerBindingLocation.OCCLUSION)
 
                 transfer_texture(occlusion_texture)
                 bind_texture(texture_unit, occlusion_texture.gpu_texture.?) or_return
                 resource.set_uniform(lighting_shader, resource.OCCLUSION_TEXTURE, texture_unit)
+                texture_unit += 1
 
             case resource.NormalTexture:
                 usages += { .NormalTexture }
                 normal_texture := resource.get_texture(manager, resource.ResourceIdent(v)) or_return
-                texture_unit := i32(PBRSamplerBindingLocation.NORMAL)
 
                 transfer_texture(normal_texture)
                 bind_texture(texture_unit, normal_texture.gpu_texture.?) or_return
                 resource.set_uniform(lighting_shader, resource.NORMAL_TEXTURE, texture_unit)
+                texture_unit += 1
             case resource.Clearcoat:
                 usages += { .ClearcoatFactor, .ClearcoatRoughnessFactor }
                 if v.clearcoat_texture != nil {
                     usages += { .ClearcoatTexture }
                     clearcoat := resource.get_texture(manager, v.clearcoat_texture) or_return
-                    texture_unit := i32(PBRSamplerBindingLocation.CLEARCOAT)
 
                     transfer_texture(clearcoat)
                     bind_texture(texture_unit, clearcoat.gpu_texture) or_return
                     resource.set_uniform(lighting_shader, resource.CLEARCOAT_TEXTURE, texture_unit)
+                    texture_unit += 1
                 }
 
                 if v.clearcoat_roughness_texture != nil {
                     usages += { .ClearcoatRoughnessTexture }
                     clearcoat_roughness := resource.get_texture(manager, v.clearcoat_roughness_texture) or_return
-                    texture_unit := i32(PBRSamplerBindingLocation.CLEARCOAT_ROUGHNESS)
 
                     transfer_texture(clearcoat_roughness)
                     bind_texture(texture_unit, clearcoat_roughness.gpu_texture) or_return
                     resource.set_uniform(lighting_shader, resource.CLEARCOAT_ROUGHNESS_TEXTURE, texture_unit)
+                    texture_unit += 1
                 }
 
                 if v.clearcoat_normal_texture != nil {
                     usages += { .ClearcoatNormalTexture }
                     clearcoat_normal := resource.get_texture(manager, v.clearcoat_normal_texture) or_return
-                    texture_unit := i32(PBRSamplerBindingLocation.CLEARCOAT_NORMAL)
 
                     transfer_texture(clearcoat_normal)
                     bind_texture(texture_unit, clearcoat_normal.gpu_texture) or_return
                     resource.set_uniform(lighting_shader, resource.CLEARCOAT_ROUGHNESS_TEXTURE, texture_unit)
+                    texture_unit += 1
                 }
 
                 resource.set_uniform(lighting_shader, resource.CLEARCOAT_FACTOR, v.clearcoat_factor)
@@ -789,21 +870,21 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 if v.specular_texture != nil {
                     usages += { .SpecularTexture }
                     specular := resource.get_texture(manager, v.specular_texture) or_return
-                    texture_unit := i32(PBRSamplerBindingLocation.SPECULAR)
 
                     transfer_texture(specular)
                     bind_texture(texture_unit, specular.gpu_texture) or_return
                     resource.set_uniform(lighting_shader, resource.SPECULAR_TEXTURE, texture_unit)
+                    texture_unit += 1
                 }
 
                 if v.specular_colour_texture != nil {
                     usages += { .SpecularColourTexture }
                     specular_colour := resource.get_texture(manager, v.specular_colour_texture) or_return
-                    texture_unit := i32(PBRSamplerBindingLocation.SPECULAR_COLOUR)
 
                     transfer_texture(specular_colour)
                     bind_texture(texture_unit, specular_colour.gpu_texture) or_return
                     resource.set_uniform(lighting_shader, resource.SPECULAR_COLOUR_TEXTURE, texture_unit)
+                    texture_unit += 1
                 }
 
                 resource.set_uniform(lighting_shader, resource.SPECULAR_FACTOR, v.specular_factor)
