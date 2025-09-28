@@ -289,7 +289,7 @@ make_texture_raw :: proc(
     generate_mipmap |= texture_properties[.MIN_FILTER] == .NEAREST_MIPMAP_NEAREST
     if generate_mipmap do gen_mipmap(texture_type)
 
-    if set_storage do set_tex_storage(w, h, texture_type, lod, internal_format)
+    if set_storage do set_tex_storage(w, h, texture_type, lod + 1, internal_format)  // Use lod + 1, idrc but this can be amended if that's not the purpose
     return
 }
 

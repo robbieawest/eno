@@ -31,7 +31,7 @@ GBufferComponentStorage := [GBufferComponent]TextureStorage {
 
 // Create's new framebuffer to house gbuffer
 // Defining a G-Buffer as a collection of one or more textures containing mesh data, not necessarily to be used for deferred rendering
-make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.allocator) -> (normal_output: RenderPassIO, ok: bool) {
+make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.allocator) -> (normal_output: Maybe(RenderPassIO), ok: bool) {
 
     if info == {} {
         dbg.log(.ERROR, "Attempting to create gbuffer with no components")
@@ -84,6 +84,7 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
                 attachment.id = gl.COLOR_ATTACHMENT0 + last_colour_loc
                 io.attachment = AttachmentID{ .COLOUR, last_colour_loc }
                 io.identifier = "gbNormal"
+                if component == .NORMAL do normal_output = io
             case .DEPTH:
                 if depth_used {  // Forward compat
                     dbg.log(.ERROR, "Depth attachment already used")
@@ -158,32 +159,6 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
     framebuffer := make_framebuffer(w, h, allocator)
     bind_framebuffer(framebuffer) or_return
 
-    /* todo add to render
-    normals_attachment_id := gl.COLOR_ATTACHMENT0 + normals_attachment_offset
-    normals_attachment, normals_ok := gbuffer_framebuffer.attachments[normals_attachment_id]
-    if !normals_ok {
-        dbg.log(.ERROR, "Normals attachment not found")
-        return
-    }
-    normals_texture, normals_is_tex := normals_attachment.data.(resource.Texture)
-    if !normals_is_tex {
-        dbg.log(.ERROR, "Normals attachment needs to be texture for SSAO")
-        return
-    }
-
-    depth_attachment, depth_ok := gbuffer_framebuffer.attachments[gl.DEPTH_ATTACHMENT]
-    if !depth_ok {
-        dbg.log(.ERROR, "Depth attachment not available in gbuffer framebuffer")
-        return
-    }
-    depth_texture, depth_is_tex := depth_attachment.data.(resource.Texture)
-    if !depth_is_tex {
-        dbg.log(.ERROR, "Depth attachment needs to be texture for SSAO")
-        return
-    }
-
-    */
-
     tex_properties := make(resource.TextureProperties, allocator=allocator)
     defer delete(tex_properties)
     tex_properties[.MIN_FILTER] = .NEAREST
@@ -247,14 +222,13 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
             frame_buffer = ssao_fbo,
             mesh_gather = SinglePrimitiveMesh{ type=.QUAD },  // doesn't need to care about transforms, since the SSAO shader does not care
             properties=RenderPassProperties{
-                face_culling = FaceCulling.BACK,
                 viewport = [4]i32{ 0, 0, w, h },
                 clear = { .COLOUR_BIT, .DEPTH_BIT },
                 clear_colour = [4]f32{ 0.0, 0.0, 0.0, 1.0 },
                 disable_depth_test=true
             },
             inputs = []RenderPassIO{
-                { ssao_fbo, AttachmentID{ type=.COLOUR }, "SSAOColour" },
+                  { ssao_fbo, AttachmentID{ type=.COLOUR }, "SSAOColour" },
             },
             outputs = []RenderPassIO {
                 {

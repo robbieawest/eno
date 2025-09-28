@@ -241,6 +241,8 @@ render_geometry :: proc(
 
         cur_tex_unit: i32 = 2  // Must start from 1, 0 is reserved for missing texture
 
+        bind_render_pass_inputs(shader_pass, pass, &cur_tex_unit)
+
         lighting_settings := get_lighting_settings()
         resource.set_uniform(shader_pass, LIGHTING_SETTINGS, transmute(u32)(lighting_settings))
         if .IBL in lighting_settings do bind_ibl_uniforms(shader_pass, &cur_tex_unit)
@@ -283,16 +285,16 @@ bind_missing_textures :: proc(shader: ^resource.ShaderProgram, allocator := cont
         return
     }
 
-    bind_texture(0, Context.missing_cube_texture.gpu_texture, .CUBEMAP) or_return
+    bind_texture(1, Context.missing_cube_texture.gpu_texture, .CUBEMAP) or_return
     return true
 }
 
 @(private)
-bind_render_pass_inputs :: proc(shader: ^resource.ShaderProgram, pass: ^RenderPass, cur_tex_unit: ^u32) -> (ok: bool) {
+bind_render_pass_inputs :: proc(shader: ^resource.ShaderProgram, pass: ^RenderPass, cur_tex_unit: ^i32) -> (ok: bool) {
 
     for input in pass.inputs {
         if input.framebuffer == nil {
-            dbg.log(.ERROR, "Input framebuffer is nil")
+            dbg.log(.ERROR, "Input framebuffer is nil, pass: '%s', input %#v", pass.name, input)
         }
 
         attachment, attachment_exists := input.framebuffer.attachments[gl_conv_attachment_id(input.attachment) or_return]
@@ -306,7 +308,15 @@ bind_render_pass_inputs :: proc(shader: ^resource.ShaderProgram, pass: ^RenderPa
             dbg.log(.ERROR, "Attachment is not a texture")
             return
         }
+        tex_gpu, tex_is_transferred := tex.gpu_texture.(u32)
+        if !tex_is_transferred {
+            dbg.log(.ERROR, "Input texture has not yet been transferred")
+            return
+        }
 
+        bind_texture(cur_tex_unit^, tex_gpu, tex.type) or_return
+        resource.set_uniform(shader, input.identifier, cur_tex_unit^)
+        cur_tex_unit^ += 1
     }
 
     ok = true
@@ -407,8 +417,6 @@ bind_ibl_uniforms :: proc(shader: ^resource.ShaderProgram, cur_tex_unit: ^i32) -
     bind_texture(texture_unit, prefilter_map.gpu_texture, prefilter_map.type) or_return
     resource.set_uniform(shader, PREFILTER_MAP_UNIFORM, texture_unit)
     cur_tex_unit^ += 1
-
-    dbg.log(.INFO, "tex unit post ibl %d", cur_tex_unit^)
 
     ok = true
     return
