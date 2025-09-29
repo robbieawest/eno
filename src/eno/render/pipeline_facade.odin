@@ -11,6 +11,9 @@ import "core:mem"
 import "core:fmt"
 import "core:slice"
 
+import "core:math/rand"
+import "core:math/linalg"
+
 
 GBufferComponent :: enum u32 {
     POSITION,
@@ -241,8 +244,38 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
         ) or_return
     )
 
+    // Setup sampler uniform
+    setup_ssao_uniforms(allocator=allocator) or_return
+
     ok = true
     return
+}
+
+DEFAULT_NUM_SSAO_SAMPLES : u32 : 64
+MAX_SSAO_SAMPLES: u32 : 128
+SSAO_KERNEL_UNIFORM :: "SSAOKernelSamples"
+SSAO_NUM_SAMPLES_UNIFORM :: "SSAONumSamplesInKernel"
+setup_ssao_uniforms :: proc(num_kernel_samples := DEFAULT_NUM_SSAO_SAMPLES, allocator := context.allocator) -> (ok: bool) {
+    if num_kernel_samples > MAX_SSAO_SAMPLES {
+        dbg.log(.ERROR, "Number of SSAO samples must not be greater than %d", MAX_SSAO_SAMPLES)
+        return
+    }
+
+    kernel := make([][3]f32, num_kernel_samples, allocator=allocator)
+    defer delete(kernel)
+    for i in 0..<num_kernel_samples {
+        sample: [3]f32 = { rand.float32() * 2 - 1, rand.float32() * 2 - 1, rand.float32() }
+        sample = linalg.normalize(sample)
+        sample *= rand.float32()
+
+        scale := f32(i) / 64
+
+        kernel[i] = sample * linalg.lerp(f32(0.1), 1.0, scale*scale)
+    }
+
+    store_uniform(SSAO_NUM_SAMPLES_UNIFORM, resource.GLSLDataType.uint, DEFAULT_NUM_SSAO_SAMPLES)
+    store_uniform(SSAO_KERNEL_UNIFORM, resource.GLSLFixedArray{ uint(MAX_SSAO_SAMPLES),  .vec3 }, kernel)
+    return true
 }
 
 generate_ssao_first_shader_pass : GenericShaderPassGenerator : proc(

@@ -85,9 +85,8 @@ copy_extended_glsl_pair :: proc(pair: ExtendedGLSLPair) -> ExtendedGLSLPair {
     return ExtendedGLSLPair{ pair.type, strings.clone(pair.name) }
 }
 
-@(private)
-destroy_glsl_pair_extended :: proc(pair: ExtendedGLSLPair) {
-    delete(pair.name)
+destroy_glsl_pair_extended :: proc(pair: ExtendedGLSLPair, allocator := context.allocator) {
+    delete(pair.name, allocator)
     // destroy_extended_glsl_type(pair.type)
 }
 

@@ -280,6 +280,3 @@ set_matrix_uniform :: proc(
             else do gl.UniformMatrix4dv(location, count, transpose, cast([^]f64)&mat[0, 0])
     }
 }
-
-
-//

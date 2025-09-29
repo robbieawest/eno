@@ -131,8 +131,8 @@ before_frame :: proc() -> (ok: bool) {
     demo_arch = ecs.scene_get_archetype(game.Game.scene, "demo_entities") or_return
     load_helmet(arch) or_return
 
-    render.init_render_pipeline(&game.Game.resource_manager)
-    render.create_render_primitives() or_return
+    render.init_render_context(&game.Game.resource_manager) or_return
+    render.init_render_pipeline()
 
     window_res := win.get_window_resolution(game.Game.window)
 

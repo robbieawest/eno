@@ -22,11 +22,10 @@ RenderPipeline :: struct {
 }
 
 // Default render pipeline has no passes
-init_render_pipeline :: proc(manager: ^resource.ResourceManager, buffers: ..FrameBuffer, allocator := context.allocator) {
+init_render_pipeline :: proc(buffers: ..FrameBuffer, allocator := context.allocator) {
     Context.pipeline.frame_buffers = make([dynamic]^FrameBuffer, allocator=allocator)
     add_framebuffers(..buffers, allocator=allocator)
 
-    Context.manager = manager
     Context.pipeline.passes = make([dynamic]^RenderPass, allocator=allocator)
     Context.pipeline.pre_passes = make([dynamic]^PreRenderPass, allocator=allocator)
     Context.pipeline.shader_store = init_shader_store(allocator)

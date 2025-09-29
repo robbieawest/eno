@@ -21,7 +21,7 @@ import "base:runtime"
 import glm "core:math/linalg/glsl"
 import "core:mem"
 import "core:log"
-
+import intrinsics "base:intrinsics"
 
 RenderContext :: struct {
     camera_ubo: ^ShaderBuffer,
@@ -35,6 +35,7 @@ RenderContext :: struct {
     primitives: RenderPrimitives,
     missing_quad_texture: resource.Texture,
     missing_cube_texture: resource.Texture,
+    global_uniform_store: GlobalUniformStore,
     allocator: mem.Allocator
 }
 
@@ -64,6 +65,14 @@ create_missing_placeholder_textures :: proc(allocator := context.allocator) -> (
 
     Context.missing_cube_texture = create_cubemap_from_2d(Context.missing_quad_texture, tex_properties) or_return
 
+    return true
+}
+
+
+init_render_context :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (ok: bool) {
+    Context.manager = manager
+    create_render_primitives(allocator) or_return
+    make_global_uniform_store(allocator)
     return true
 }
 
@@ -2231,4 +2240,59 @@ create_primitive_quad_mesh :: proc(manager: ^resource.ResourceManager) -> (mesh:
 
     ok = true
     return
+}
+
+
+// Stores uniforms globally in the render context, whatever the shader pass is every uniform in here will be used in an attempted binding
+// This means uniform names must be unique across shaders, as in if the same uniform name appears, they must expect the same data and type.
+// This is seperate from the render pass I/O which enforces sampler uniforms for textures, linking the output of certain renderpasses to input of other passes
+// Technically that system could also be included in this, but idrc, all of this is stupid until shader introspection is implemented
+GlobalUniformStore :: struct {
+    uniform_data: map[string]UniformData
+}
+
+make_global_uniform_store :: proc(allocator := context.allocator) {
+    Context.global_uniform_store = GlobalUniformStore{ make(map[string]UniformData, allocator=allocator) }
+}
+
+destroy_global_uniform_store :: proc(allocator := context.allocator) {
+    for k, v in Context.global_uniform_store.uniform_data {
+        delete(k, allocator)
+        destroy_uniform_data(v, allocator)
+    }
+}
+
+UniformData :: struct {
+    name: string,
+    glsl_type: resource.ExtendedGLSLType,
+    type: typeid,
+    data: []byte
+}
+
+destroy_uniform_data :: proc(data: UniformData, allocator := context.allocator) {
+    delete(data.name, allocator)
+    delete(data.data, allocator)
+}
+
+
+store_uniform :: proc{ store_uniform_comp, store_uniform_runt }
+
+store_uniform_comp :: proc(name: string, glsl_type: resource.ExtendedGLSLType, data: $T, allocator := context.allocator) {
+    data := data
+    byte_data: []byte
+    when intrinsics.type_is_slice(T) {
+        byte_data = slice.reinterpret([]byte, data)
+    }
+    else do byte_data = transmute([]byte)runtime.Raw_Slice{ &data, type_info_of(T).size }
+
+    store_uniform_runt(name, glsl_type, T, byte_data, allocator)
+}
+
+store_uniform_runt :: proc(name: string, glsl_type: resource.ExtendedGLSLType, type: typeid, data: []byte, allocator := context.allocator) {
+    uniform_data := &Context.global_uniform_store.uniform_data
+    if name in uniform_data {
+        destroy_uniform_data(uniform_data[name], allocator)
+    }
+
+    uniform_data[name] = UniformData{ strings.clone(name, allocator), glsl_type, type, slice.clone(data, allocator) }
 }
