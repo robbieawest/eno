@@ -4,6 +4,7 @@ import gl "vendor:OpenGL"
 
 import dbg "../debug"
 
+import "core:fmt"
 import "core:strings"
 import "../utils"
 
@@ -185,17 +186,18 @@ set_vector_uniform :: proc(
 ) -> (ok: bool)
     where  T == i32 || T == u32 || T == f32 || T == f64
 {
-    if len(args) % count != 0 {
+
+    n_args := i32(len(args))
+    if n_args % count != 0 {
         dbg.log(.ERROR, "Number of args must be divisible by count")
         return
     }
 
-    invalid :: proc() -> bool { dbg.log(.ERROR, "Combination of args and count is invalid. num_args: %d, count: %d", len(args), count); return }
-
+    invalid :: proc() -> bool { dbg.log(.ERROR, "Invalid count in array"); return false }
     location, uniform_found := get_uniform_location(program, label); if !uniform_found do return
-    switch T {
-    case u32:
-        switch len(args) / count {
+
+    when T == u32 {
+        switch n_args / count {
             case 1: gl.Uniform1uiv(location, count, raw_data(args))
             case 2: gl.Uniform2uiv(location, count, raw_data(args))
             case 3: gl.Uniform3uiv(location, count, raw_data(args))
@@ -203,8 +205,9 @@ set_vector_uniform :: proc(
             case :
                 return invalid()
         }
-    case i32:
-        switch len(args) / count {
+    }
+    else when T == i32 {
+        switch n_args / count {
             case 1: gl.Uniform1iv(location, count, raw_data(args))
             case 2: gl.Uniform2iv(location, count, raw_data(args))
             case 3: gl.Uniform3iv(location, count, raw_data(args))
@@ -212,8 +215,9 @@ set_vector_uniform :: proc(
             case :
                 return invalid()
         }
-    case f32:
-        switch len(args) / count {
+    }
+    else when T ==  f32 {
+        switch n_args / count {
             case 1: gl.Uniform1fv(location, count, raw_data(args))
             case 2: gl.Uniform2fv(location, count, raw_data(args))
             case 3: gl.Uniform3fv(location, count, raw_data(args))
@@ -221,8 +225,9 @@ set_vector_uniform :: proc(
             case :
                 return invalid()
         }
-    case f64:
-        switch len(args) / count {
+    }
+    else when T == f64 {
+        switch n_args / count {
             case 1: gl.Uniform1dv(location, count, raw_data(args))
             case 2: gl.Uniform2dv(location, count, raw_data(args))
             case 3: gl.Uniform3dv(location, count, raw_data(args))
@@ -279,4 +284,66 @@ set_matrix_uniform :: proc(
             if T == f32 do gl.UniformMatrix4fv(location, count, transpose, &mat[0, 0])
             else do gl.UniformMatrix4dv(location, count, transpose, cast([^]f64)&mat[0, 0])
     }
+}
+
+
+set_uniform_of_extended_type :: proc(program: ^ShaderProgram, label: string, type: ExtendedGLSLType, data: []u8, temp_allocator := context.temp_allocator) -> (ok: bool) {
+    _, uniform_found := get_uniform_location(program, label); if !uniform_found do return true
+
+    switch glsl_type_variant in type {
+        case GLSLDataType: set_uniform_of_type(program, label, glsl_type_variant, data)
+        case GLSLFixedArray:
+            uniform_type := get_uniform_type_from_glsl_type(glsl_type_variant.type)
+            uniform_type_size := type_info_of(uniform_type).size
+
+            data_idx := 0
+            next_data_idx: int
+            for i in 0..<len(data) / uniform_type_size {
+                inner_label := fmt.aprintf("%s[%d]", label, i, allocator=temp_allocator)
+                next_data_idx = data_idx + uniform_type_size
+                set_uniform_of_type(program, inner_label, glsl_type_variant.type, data[data_idx:next_data_idx]) or_return
+                data_idx = next_data_idx
+            }
+        case ShaderStructID, GLSLVariableArray: dbg.log(.WARN, "GLSL type variant not supported")
+    }
+
+
+    return true
+}
+
+set_uniform_of_type :: proc(program: ^ShaderProgram, label: string, type: GLSLType, data: []u8) -> (ok: bool) {
+    dbg.log(.INFO, "Setting uniform %s of type: %v", label, type)
+    switch type {
+        case .uint:
+            val: u32 = utils.cast_bytearr_to_type(u32, data) or_return
+            Uniform1ui(program, label, val)
+        case .float:
+            val: f32 =  utils.cast_bytearr_to_type(f32, data) or_return
+            Uniform1f(program, label, val)
+        case .vec2:
+            val: [2]f32 = utils.cast_bytearr_to_type([2]f32, data) or_return
+            Uniform2f(program, label, val[0], val[1])
+        case .vec3:
+            val: [3]f32 = utils.cast_bytearr_to_type([3]f32, data) or_return
+            Uniform3f(program, label, val[0], val[1],val[2])
+        case .vec4:
+            val: [4]f32 = utils.cast_bytearr_to_type([4]f32, data) or_return
+            Uniform4f(program, label, val[0], val[1], val[2], val[3])
+        // ..todo
+        case: dbg.log(.WARN, "GLSL type %v not yet supported", type)
+    }
+    return true
+}
+
+get_uniform_type_from_glsl_type :: proc(type: GLSLType) -> (ret: typeid) {
+    switch type {
+        case .uint: ret = u32
+        case .float: ret = f32
+        case .vec2: ret = [2]f32
+        case .vec3: ret =  [3]f32
+        case .vec4: ret = [4]f32
+        // ..todo
+        case: dbg.log(.WARN, "GLSL type %v not yet supported", type)
+    }
+    return
 }

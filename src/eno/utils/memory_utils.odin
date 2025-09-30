@@ -4,6 +4,7 @@ import dbg "../debug"
 
 import "core:mem"
 import "base:intrinsics"
+import "base:runtime"
 
 copy_map :: proc(m: map[$K]$V, allocator := context.allocator) -> (ret: map[K]V) {
     ret = make(map[K]V, len(m), allocator=allocator)
@@ -112,4 +113,14 @@ map_values :: proc(m: $M/map[$K]$V, allocator := context.allocator) -> (values: 
         i += 1
     }
     return values_s, true
+}
+
+
+cast_bytearr_to_type :: proc($T: typeid, dat: []u8) -> (ret: T, ok: bool) {
+    if type_info_of(T).size != len(dat) {
+        dbg.log(.ERROR, "Given byte arr does not have enough bytes to cast to T")
+        return
+    }
+
+    return (cast(^T)(transmute(runtime.Raw_Slice)dat).data)^, true
 }
