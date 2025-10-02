@@ -116,9 +116,9 @@ map_values :: proc(m: $M/map[$K]$V, allocator := context.allocator) -> (values: 
 }
 
 
-cast_bytearr_to_type :: proc($T: typeid, dat: []u8) -> (ret: T, ok: bool) {
+cast_bytearr_to_type :: proc($T: typeid, dat: []u8, loc := #caller_location) -> (ret: T, ok: bool) {
     if type_info_of(T).size != len(dat) {
-        dbg.log(.ERROR, "Given byte arr does not have enough bytes to cast to T")
+        dbg.log(.ERROR, "Given byte arr does not have enough bytes to cast to T", loc=loc)
         return
     }
 

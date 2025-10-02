@@ -124,6 +124,24 @@ load_dhelmet :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
     return true
 }
 
+load_sponza :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
+    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "../glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf") or_return
+
+    models := scene_res.models
+
+    for &model, i in models {
+        mod := &model.model
+        // delete(mod.name)
+        mod.name = fmt.aprintf("demo_entity %d", i)
+    }
+
+    for model in models do log.infof("model name: '%s'", model.model.name)
+
+    defer resource.destroy_model_scene_result(scene_res)
+    ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
+    return true
+}
+
 demo_arch: ^ecs.Archetype
 before_frame :: proc() -> (ok: bool) {
 
@@ -332,11 +350,11 @@ demo_ui_element : ui.UIElement : proc() -> (ok: bool) {
     im.Begin("Demo Settings")
     defer im.End()
 
-    @(static) preview_models: []cstring = { "SciFiHelmet", "DamagedHelmet", "Supra", "Clearcoat Test", "Fantasy Sword" }
+    @(static) preview_models: []cstring = { "SciFiHelmet", "DamagedHelmet", "Supra", "Clearcoat Test", "Fantasy Sword", "Sponza" }
 
     // Must be seperate ? compiler ;//
     @(static) load_model_procs: []load_proc
-    load_model_procs = []load_proc{ load_helmet, load_dhelmet, load_supra, load_clearcoat_test, load_sword }
+    load_model_procs = []load_proc{ load_helmet, load_dhelmet, load_supra, load_clearcoat_test, load_sword, load_sponza }
 
     @(static) selected_model_ind := 0
     if (im.BeginCombo("Preview model", preview_models[selected_model_ind])) {

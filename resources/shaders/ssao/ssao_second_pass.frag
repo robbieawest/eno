@@ -7,6 +7,15 @@ uniform sampler2D SSAOColour;
 out float Colour;
 
 void main() {
-    float SSAOCol = texture(SSAOColour, texCoords).r;
-    Colour = SSAOCol * 0.5;
+    vec2 texelSize = 1.0 / vec2(textureSize(SSAOColour, 0));
+    float result = 0.0;
+    for (int x = -2; x < 2; ++x)
+    {
+        for (int y = -2; y < 2; ++y)
+        {
+            vec2 offset = vec2(float(x), float(y)) * texelSize;
+            result += texture(SSAOColour, texCoords + offset).r;
+        }
+    }
+    Colour = result / (4.0 * 4.0);
 }

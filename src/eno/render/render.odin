@@ -247,10 +247,10 @@ render_geometry :: proc(
         shader_pass := resource.get_shader_pass(manager, mapping.shader) or_return
         attach_program(shader_pass^)
         bind_missing_textures(shader_pass, allocator) or_return
-        bind_global_uniforms(shader_pass) or_return
 
         cur_tex_unit: i32 = 2  // Must start from 1, 0 is reserved for missing texture
 
+        bind_global_uniforms(shader_pass, &cur_tex_unit) or_return
         bind_render_pass_inputs(shader_pass, pass, &cur_tex_unit)
 
         lighting_settings := get_lighting_settings()
@@ -282,10 +282,10 @@ render_geometry :: proc(
 }
 
 @(private)
-bind_global_uniforms :: proc(shader: ^resource.ShaderProgram, temp_allocator := context.temp_allocator) -> (ok: bool) {
+bind_global_uniforms :: proc(shader: ^resource.ShaderProgram, cur_tex_unit: ^i32, temp_allocator := context.temp_allocator) -> (ok: bool) {
     uniform_store := Context.global_uniform_store.uniform_data
     for uniform_name, uniform_data in uniform_store {
-        resource.set_uniform_of_extended_type(shader, uniform_name, uniform_data.glsl_type, uniform_data.data, temp_allocator) or_return
+        set_uniform_of_extended_type(shader, uniform_name, uniform_data.glsl_type, uniform_data.data, cur_tex_unit, temp_allocator) or_return
     }
 
     return true

@@ -245,7 +245,7 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
     )
 
     // Setup sampler uniform
-    setup_ssao_uniforms(allocator=allocator) or_return
+    setup_ssao_uniforms(w, h, allocator=allocator) or_return
 
     ok = true
     return
@@ -253,9 +253,14 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
 
 DEFAULT_NUM_SSAO_SAMPLES : u32 : 64
 MAX_SSAO_SAMPLES: u32 : 128
+SSAO_NOISE_W : u32 : 4
 SSAO_KERNEL_UNIFORM :: "SSAOKernelSamples"
 SSAO_NUM_SAMPLES_UNIFORM :: "SSAONumSamplesInKernel"
-setup_ssao_uniforms :: proc(num_kernel_samples := DEFAULT_NUM_SSAO_SAMPLES, allocator := context.allocator) -> (ok: bool) {
+SSAO_NOISE_TEX_UNIFORM :: "SSAONoiseTex"
+SSAO_W_UNIFORM :: "SSAOW"
+SSAO_H_UNIFORM :: "SSAOH"
+SSAO_NOISE_W_UNIFORM :: "SSAONoiseW"
+setup_ssao_uniforms :: proc(#any_int w, h: u32, num_kernel_samples := DEFAULT_NUM_SSAO_SAMPLES, allocator := context.allocator) -> (ok: bool) {
     if num_kernel_samples > MAX_SSAO_SAMPLES {
         dbg.log(.ERROR, "Number of SSAO samples must not be greater than %d", MAX_SSAO_SAMPLES)
         return
@@ -274,8 +279,34 @@ setup_ssao_uniforms :: proc(num_kernel_samples := DEFAULT_NUM_SSAO_SAMPLES, allo
     }
 
     store_uniform(SSAO_NUM_SAMPLES_UNIFORM, resource.GLSLDataType.uint, DEFAULT_NUM_SSAO_SAMPLES)
+    store_uniform(SSAO_W_UNIFORM, resource.GLSLDataType.uint, w)
+    store_uniform(SSAO_H_UNIFORM, resource.GLSLDataType.uint, h)
+    store_uniform(SSAO_NOISE_W_UNIFORM, resource.GLSLDataType.uint, SSAO_NOISE_W)
     store_uniform(SSAO_KERNEL_UNIFORM, resource.GLSLFixedArray{ uint(MAX_SSAO_SAMPLES),  .vec3 }, kernel)
+
+    noise_tex := make_ssao_noise_texture(allocator=allocator) or_return
+    store_uniform(SSAO_NOISE_TEX_UNIFORM, resource.GLSLDataType.sampler2D, noise_tex)
+
     return true
+}
+
+make_ssao_noise_texture :: proc(#any_int noise_w : u32 = SSAO_NOISE_W, allocator := context.allocator) -> (tex: resource.Texture, ok: bool) {
+    noise_size := noise_w * noise_w
+    ssao_noise := make([][3]f32, noise_size, allocator=allocator)
+    for i in 0..<noise_size do ssao_noise[i] = [3]f32{ rand.float32() * 2 - 1, rand.float32() * 2 - 1, 0.0 }
+
+    tex_properties := make(map[resource.TextureProperty]resource.TexturePropertyValue, allocator=allocator)
+    tex_properties[.WRAP_S] = .REPEAT
+    tex_properties[.WRAP_T] = .REPEAT
+    tex_properties[.MIN_FILTER] = .NEAREST
+    tex_properties[.MAG_FILTER] = .NEAREST
+    tex.properties = tex_properties
+    tex.image = resource.Image{ w=i32(noise_w), h=i32(noise_w), pixel_data=raw_data(ssao_noise) }
+    tex.gpu_texture = make_texture(tex, internal_format=gl.RGBA32F, format=gl.RGB, type=gl.FLOAT)
+
+
+    ok = true
+    return
 }
 
 generate_ssao_first_shader_pass : GenericShaderPassGenerator : proc(

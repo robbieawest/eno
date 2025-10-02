@@ -11,10 +11,54 @@ uniform sampler2D SSAONoiseTex;
 #endif
 uniform vec3 SSAOKernelSamples[MAX_SSAO_SAMPLES];
 uniform uint SSAONumSamplesInKernel;
+uniform uint SSAONoiseW;
+uniform uint SSAOW;
+uniform uint SSAOH;
 
 out float Colour;
 
+vec2 noiseScale = vec2(float(SSAOW) / float(SSAONoiseW), float(SSAOH) / float(SSAONoiseW));
+float radius = 0.5;
+float bias = 0.025;
+
+in mat4 m_Project;
+in mat4 m_ProjectInv;
+
+// Could be incorrect
+vec3 reconstructFragPos(float depth) {
+    vec3 ndc = vec3(texCoords, depth) * 2.0 - 1.0;
+    vec4 view = m_ProjectInv * vec4(ndc, 1.0);
+    view /= view.w;
+
+    return view.xyz;
+}
+
 void main() {
-    vec3 normal = texture(gbNormal, texCoords).rgb;
-    Colour = (normal.r + normal.g + normal.b) / SSAONumSamplesInKernel / 8 * length(SSAOKernelSamples[0]);
+    float depth = texture(gbDepth, texCoords).r;
+    vec3 fragPos = reconstructFragPos(depth);
+    vec3 normal = normalize(texture(gbNormal, texCoords).rgb);
+    vec3 noise = normalize(texture(SSAONoiseTex, texCoords * noiseScale).xyz);
+
+    vec3 tangent = normalize(noise - normal * dot(noise, normal));
+    vec3 bitangent = cross(normal, tangent);
+    mat3 TBN = mat3(tangent, bitangent, normal);
+
+    float occlusion = 0.0;
+    for(int i = 0; i < SSAONumSamplesInKernel; i++) {
+        vec3 samplePos = TBN * vec3(SSAOKernelSamples[i]);
+        samplePos = fragPos + samplePos * radius;
+
+        vec4 sampleNDC = vec4(samplePos, 1.0);
+        sampleNDC = m_Project * sampleNDC;
+        sampleNDC.xyz /= sampleNDC.w;
+        sampleNDC.xyz = sampleNDC.xyz * 0.5 + 0.5;
+
+        float sampleDepth = texture(gbDepth, sampleNDC.st).z;
+
+        float rangeCheck = smoothstep(0.0, 1.0, radius / abs(fragPos.z - sampleDepth));
+        occlusion += (sampleDepth >= samplePos.z + bias ? 1.0 : 0.0) * rangeCheck;
+    }
+    occlusion = 1.0 - (occlusion / SSAONumSamplesInKernel);
+
+    Colour = occlusion;
 }
