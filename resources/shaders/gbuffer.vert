@@ -26,14 +26,15 @@ in vec3 aTangent;
 */
 
 uniform mat4 m_Model;
-uniform mat3 m_Normal;
 
 void main() {
     #ifdef POSITION_INPUT
-    position = vec3(m_Model * vec4(aPosition, 1.0));
-    gl_Position = Camera.m_Project * Camera.m_View * vec4(position, 1.0);
+    vec4 viewPos = Camera.m_View * m_Model * vec4(aPosition, 1.0);
+    gl_Position = Camera.m_Project * viewPos;
+    position = viewPos.xyz;
     #endif
     #ifdef NORMAL_INPUT
-    normal = normalize(m_Normal * aNormal);
+    mat3 normalMatrix = transpose(inverse(mat3(Camera.m_View * m_Model)));
+    normal = normalMatrix * aNormal;
     #endif
 }

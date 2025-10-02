@@ -26,8 +26,8 @@ in mat4 m_ProjectInv;
 
 // Could be incorrect
 vec3 reconstructFragPos(float depth) {
-    vec3 ndc = vec3(texCoords, depth) * 2.0 - 1.0;
-    vec4 view = m_ProjectInv * vec4(ndc, 1.0);
+    vec4 clip = vec4(vec3(texCoords, depth) * 2.0 - 1.0, 1.0);
+    vec4 view = m_ProjectInv * clip;
     view /= view.w;
 
     return view.xyz;
@@ -52,8 +52,10 @@ void main() {
         sampleNDC = m_Project * sampleNDC;
         sampleNDC.xyz /= sampleNDC.w;
         sampleNDC.xyz = sampleNDC.xyz * 0.5 + 0.5;
+        if (sampleNDC.st != clamp(sampleNDC.st, vec2(0.0), vec2(1.0))) continue;
 
-        float sampleDepth = texture(gbDepth, sampleNDC.st).z;
+        float sampleDepth = texture(gbDepth, sampleNDC.st).r;
+        sampleDepth = reconstructFragPos(sampleDepth).z;
 
         float rangeCheck = smoothstep(0.0, 1.0, radius / abs(fragPos.z - sampleDepth));
         occlusion += (sampleDepth >= samplePos.z + bias ? 1.0 : 0.0) * rangeCheck;

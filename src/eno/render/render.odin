@@ -68,11 +68,12 @@ create_missing_placeholder_textures :: proc(allocator := context.allocator) -> (
     return true
 }
 
-
-init_render_context :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (ok: bool) {
+SCREEN_RES_UNIFORM :: "ScreenOutputResolution"
+init_render_context :: proc(manager: ^resource.ResourceManager, #any_int w, h: i32, allocator := context.allocator) -> (ok: bool) {
     Context.manager = manager
     create_render_primitives(allocator) or_return
     make_global_uniform_store(allocator)
+    store_uniform(SCREEN_RES_UNIFORM, resource.GLSLDataType.uvec2, [2]u32{ u32(w), u32(h) })
     return true
 }
 

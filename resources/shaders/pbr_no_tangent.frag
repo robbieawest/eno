@@ -79,18 +79,19 @@ in vec3 cameraPosition;
 out vec4 Colour;
 
 layout(binding = 0) uniform sampler2D baseColourTexture;
-layout(binding = 1) uniform sampler2D emissiveTexture;
-layout(binding = 2) uniform sampler2D occlusionTexture;
-layout(binding = 3) uniform sampler2D normalTexture;
-layout(binding = 4) uniform sampler2D pbrMetallicRoughness;
-layout(binding = 5) uniform sampler2D clearcoatTexture;
-layout(binding = 6) uniform sampler2D clearcoatRoughnessTexture;
-layout(binding = 7) uniform sampler2D clearcoatNormalTexture;
-layout(binding = 8) uniform sampler2D brdfLUT;
-layout(binding = 9) uniform samplerCube irradianceMap;
-layout(binding = 10) uniform samplerCube prefilterMap;
-layout(binding = 11) uniform sampler2D specularTexture;
-layout(binding = 12) uniform sampler2D specularColourTexture;
+layout(binding = 0) uniform sampler2D emissiveTexture;
+layout(binding = 0) uniform sampler2D occlusionTexture;
+layout(binding = 0) uniform sampler2D normalTexture;
+layout(binding = 0) uniform sampler2D pbrMetallicRoughness;
+layout(binding = 0) uniform sampler2D clearcoatTexture;
+layout(binding = 0) uniform sampler2D clearcoatRoughnessTexture;
+layout(binding = 0) uniform sampler2D clearcoatNormalTexture;
+layout(binding = 0) uniform sampler2D brdfLUT;
+layout(binding = 1) uniform samplerCube irradianceMap;
+layout(binding = 1) uniform samplerCube prefilterMap;
+layout(binding = 0) uniform sampler2D specularTexture;
+layout(binding = 0) uniform sampler2D specularColourTexture;
+layout(binding = 0) uniform sampler2D SSAOBlur;
 
 uniform vec4 baseColourFactor;
 uniform float metallicFactor;
@@ -108,6 +109,8 @@ uniform bool unlit;
 
 uniform uint materialUsages;
 uniform uint lightingSettings;
+
+uniform uvec2 ScreenOutputResolution;
 
 float PI = 3.14159265358979323;
 
@@ -372,11 +375,17 @@ vec3 getNormal(const bool worldSpace) {
     return normal;
 }
 
-float getOcclusion() {
+float getOcclusion(vec2 screenUV) {
     float occlusion = 1.0;
-    if (occlusionTextureSet) occlusion = texture(occlusionTexture, texCoords).r;
+    if (occlusionTextureSet) occlusion *= texture(occlusionTexture, texCoords).r;
+    if (checkBitMask(lightingSettings, 2)) occlusion *= texture(SSAOBlur, screenUV).r;
     return occlusion;
 }
+
+vec2 getScreenUV() {
+    return gl_FragCoord.xy / ScreenOutputResolution.xy;
+}
+
 
 struct Clearcoat {
     float clearcoat;
@@ -482,7 +491,8 @@ void main() {
     float specular = specularTotal.specular;
     vec3 specularColour = specularTotal.specularColour;
 
-    float occlusion = getOcclusion();
+    vec2 screenUV = getScreenUV();
+    float occlusion = getOcclusion(screenUV);
 
     // Clamp roughnesses, roughness at zero isn't great visually
     roughness = clamp(roughness, 0.089, 1.0);
@@ -546,8 +556,7 @@ void main() {
         }
     }
 
-    // Todo fix: Occlusion should be incorporated in the whole result in the case of direct lighting
-    vec3 colour = ambient * occlusion + lightOutputted;
+    vec3 colour = (ambient + lightOutputted) * occlusion;
     colour += emissive * (1.0 - clearcoat * Fc);
 
     // HDR

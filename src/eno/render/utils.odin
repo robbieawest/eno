@@ -73,6 +73,15 @@ set_uniform_of_type :: proc(shader: ^resource.ShaderProgram, label: string, type
     case .vec4:
         val: [4]f32 = utils.cast_bytearr_to_type([4]f32, data) or_return
         resource.Uniform4f(shader, label, val[0], val[1], val[2], val[3])
+    case .uvec2:
+        val: [2]u32 = utils.cast_bytearr_to_type([2]u32, data) or_return
+        resource.Uniform2ui(shader, label, val[0], val[1])
+    case .uvec3:
+        val: [3]u32 = utils.cast_bytearr_to_type([3]u32, data) or_return
+        resource.Uniform3ui(shader, label, val[0], val[1],val[2])
+    case .uvec4:
+        val: [4]u32 = utils.cast_bytearr_to_type([4]u32, data) or_return
+        resource.Uniform4ui(shader, label, val[0], val[1], val[2], val[3])
     case .sampler2D:
         if cur_tex_unit == nil {
             dbg.log(.ERROR, "Cur tex unit must be given when the glsl type is sampler2D")

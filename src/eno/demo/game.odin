@@ -149,13 +149,14 @@ before_frame :: proc() -> (ok: bool) {
     demo_arch = ecs.scene_get_archetype(game.Game.scene, "demo_entities") or_return
     load_helmet(arch) or_return
 
-    render.init_render_context(&game.Game.resource_manager) or_return
-    render.init_render_pipeline()
-
     window_res := win.get_window_resolution(game.Game.window)
 
+    render.init_render_context(&game.Game.resource_manager, window_res.w, window_res.h) or_return
+    render.init_render_pipeline()
+
+
     gbuf_normal_output := render.make_gbuffer_passes(window_res.w, window_res.h, render.GBufferInfo{ .NORMAL, .DEPTH }) or_return
-    render.make_ssao_passes(window_res.w, window_res.h, gbuf_normal_output.?) or_return
+    ssao_output := render.make_ssao_passes(window_res.w, window_res.h, gbuf_normal_output.?) or_return
 
     background_colour := [4]f32{ 1.0, 1.0, 1.0, 1.0 }
     background_colour_factor: f32 = 0.85
@@ -187,7 +188,8 @@ before_frame :: proc() -> (ok: bool) {
                     "OpaqueSingleSidedDepth"
                 }
             },
-             name = "Opaque Single Sided Pass"
+            inputs = []render.RenderPassIO{ ssao_output },
+            name = "Opaque Single Sided Pass"
         ) or_return,
     )
     opaque_single_pass := render.get_render_pass("Opaque Single Sided Pass") or_return
@@ -217,6 +219,7 @@ before_frame :: proc() -> (ok: bool) {
                     "OpaqueDoubleSidedDepth"
                 }
             },
+            inputs = []render.RenderPassIO{ ssao_output },
             name = "Opaque Double Sided Pass"
         ) or_return,
         render.make_render_pass(
@@ -245,6 +248,7 @@ before_frame :: proc() -> (ok: bool) {
                     "TransparentDepth"
                 }
             },
+            inputs = []render.RenderPassIO{ ssao_output },
             name = "Transparency Pass"
         ) or_return
     )
@@ -269,7 +273,6 @@ before_frame :: proc() -> (ok: bool) {
 
     lights := make([dynamic]resource.PointLight)
     defer delete(lights)
-    /*
     light_height: f32 = 5.0
     light_dist: f32 = 5.0
     intensity: f32 = 3.0
@@ -282,7 +285,6 @@ before_frame :: proc() -> (ok: bool) {
         resource.PointLight{ "demo_light5", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ light_dist, light_height, 0.0 } },
         resource.PointLight{ "demo_light6", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -light_dist, light_height, 0.0 } },
     )
-    */
 
     for light in lights {
         light_comp := standards.make_world_component(position=light.position)

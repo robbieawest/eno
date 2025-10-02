@@ -13,7 +13,7 @@ RenderSettings :: struct {
     environment_settings: Maybe(EnvironmentSettings),
     unapplied_environment_settings: Maybe(EnvironmentSettings),
     direct_lighting_settings: Maybe(DirectLightingSettings),
-    unapplied_direct_lighting_settings: Maybe(DirectLightingSettings), // Useless right now but alas
+    ssao_on: bool
 }
 GlobalRenderSettings: RenderSettings
 
@@ -29,7 +29,8 @@ DirectLightingSettings :: struct {
 
 LightingSetting :: enum {
     IBL = 0,
-    DIRECT_LIGHTING = 1
+    DIRECT_LIGHTING = 1,
+    SSAO = 2
 }
 LightingSettings :: bit_set[LightingSetting; u32]
 LIGHTING_SETTINGS :: "lightingSettings"
@@ -40,6 +41,7 @@ get_lighting_settings :: proc() -> (res: LightingSettings) {
         if env_settings.ibl_settings != nil do res |= { .IBL }
     }
     if GlobalRenderSettings.direct_lighting_settings != nil do res |= { .DIRECT_LIGHTING }
+    if GlobalRenderSettings.ssao_on do res |= { .SSAO }
     return
 }
 
@@ -117,10 +119,8 @@ disable_ibl_settings :: proc() {
 
 enable_direct_lighting :: proc() {
     GlobalRenderSettings.direct_lighting_settings = DirectLightingSettings{}
-    GlobalRenderSettings.unapplied_direct_lighting_settings = GlobalRenderSettings.direct_lighting_settings
 }
 
 disable_direct_lighting :: proc() {
     GlobalRenderSettings.direct_lighting_settings = nil
-    GlobalRenderSettings.unapplied_direct_lighting_settings = nil
 }

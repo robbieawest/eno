@@ -159,6 +159,20 @@ render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
         }
     }
 
+    if im.TreeNode("Ambient occlusion settings") {
+        defer im.TreePop()
+        if GlobalRenderSettings.ssao_on {
+            if im.Button("Disable SSAO") {
+                GlobalRenderSettings.ssao_on = false
+            }
+        }
+        else {
+            if im.Button("Enable SSAO") {
+                GlobalRenderSettings.ssao_on = true
+            }
+        }
+    }
+
     return true
 }
 
