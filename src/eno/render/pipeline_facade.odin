@@ -250,16 +250,21 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
     return
 }
 
-DEFAULT_NUM_SSAO_SAMPLES : u32 : 64
+
+SSAO_NUM_SAMPLES : u32 : 64
 MAX_SSAO_SAMPLES: u32 : 128
 SSAO_NOISE_W : u32 : 4
+SSAO_SAMPLE_RADIUS : f32 : 0.5
+SSAO_BIAS : f32 : 0.025
 SSAO_KERNEL_UNIFORM :: "SSAOKernelSamples"
 SSAO_NUM_SAMPLES_UNIFORM :: "SSAONumSamplesInKernel"
 SSAO_NOISE_TEX_UNIFORM :: "SSAONoiseTex"
 SSAO_W_UNIFORM :: "SSAOW"
 SSAO_H_UNIFORM :: "SSAOH"
 SSAO_NOISE_W_UNIFORM :: "SSAONoiseW"
-setup_ssao_uniforms :: proc(#any_int w, h: u32, num_kernel_samples := DEFAULT_NUM_SSAO_SAMPLES, allocator := context.allocator) -> (ok: bool) {
+SSAO_SAMPLE_RADIUS_UNIFORM :: "SSAOSampleRadius"
+SSAO_BIAS_UNIFORM :: "SSAOBias"
+setup_ssao_uniforms :: proc(#any_int w, h: u32, num_kernel_samples := SSAO_NUM_SAMPLES, allocator := context.allocator) -> (ok: bool) {
     if num_kernel_samples > MAX_SSAO_SAMPLES {
         dbg.log(.ERROR, "Number of SSAO samples must not be greater than %d", MAX_SSAO_SAMPLES)
         return
@@ -277,11 +282,13 @@ setup_ssao_uniforms :: proc(#any_int w, h: u32, num_kernel_samples := DEFAULT_NU
         kernel[i] = sample * linalg.lerp(f32(0.1), 1.0, scale*scale)
     }
 
-    store_uniform(SSAO_NUM_SAMPLES_UNIFORM, resource.GLSLDataType.uint, DEFAULT_NUM_SSAO_SAMPLES)
+    store_uniform(SSAO_NUM_SAMPLES_UNIFORM, resource.GLSLDataType.uint, SSAO_NUM_SAMPLES)
     store_uniform(SSAO_W_UNIFORM, resource.GLSLDataType.uint, w)
     store_uniform(SSAO_H_UNIFORM, resource.GLSLDataType.uint, h)
     store_uniform(SSAO_NOISE_W_UNIFORM, resource.GLSLDataType.uint, SSAO_NOISE_W)
     store_uniform(SSAO_KERNEL_UNIFORM, resource.GLSLFixedArray{ uint(MAX_SSAO_SAMPLES),  .vec3 }, kernel)
+    store_uniform(SSAO_SAMPLE_RADIUS_UNIFORM, resource.GLSLDataType.float, SSAO_SAMPLE_RADIUS)
+    store_uniform(SSAO_BIAS_UNIFORM, resource.GLSLDataType.float, SSAO_BIAS)
 
     noise_tex := make_ssao_noise_texture(allocator=allocator) or_return
     store_uniform(SSAO_NOISE_TEX_UNIFORM, resource.GLSLDataType.sampler2D, noise_tex)
@@ -302,7 +309,6 @@ make_ssao_noise_texture :: proc(#any_int noise_w : u32 = SSAO_NOISE_W, allocator
     tex.properties = tex_properties
     tex.image = resource.Image{ w=i32(noise_w), h=i32(noise_w), pixel_data=raw_data(ssao_noise) }
     tex.gpu_texture = make_texture(tex, internal_format=gl.RGBA32F, format=gl.RGB, type=gl.FLOAT)
-
 
     ok = true
     return

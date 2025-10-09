@@ -2291,7 +2291,7 @@ destroy_uniform_data :: proc(data: UniformData, allocator := context.allocator) 
 
 store_uniform :: proc{ store_uniform_comp, store_uniform_runt }
 
-store_uniform_comp :: proc(name: string, glsl_type: resource.ExtendedGLSLType, data: $T, allocator := context.allocator) {
+store_uniform_comp :: proc(name: string, glsl_type: resource.ExtendedGLSLType, data: $T) {
     data := data
     byte_data: []byte
     when intrinsics.type_is_slice(T) {
@@ -2299,14 +2299,13 @@ store_uniform_comp :: proc(name: string, glsl_type: resource.ExtendedGLSLType, d
     }
     else do byte_data = transmute([]byte)runtime.Raw_Slice{ &data, type_info_of(T).size }
 
-    store_uniform_runt(name, glsl_type, T, byte_data, allocator)
+    store_uniform_runt(name, glsl_type, T, byte_data)
 }
 
-store_uniform_runt :: proc(name: string, glsl_type: resource.ExtendedGLSLType, type: typeid, data: []byte, allocator := context.allocator) {
+store_uniform_runt :: proc(name: string, glsl_type: resource.ExtendedGLSLType, type: typeid, data: []byte) {
     uniform_data := &Context.global_uniform_store.uniform_data
     if name in uniform_data {
-        destroy_uniform_data(uniform_data[name], allocator)
+        destroy_uniform_data(uniform_data[name], uniform_data.allocator)
     }
-
-    uniform_data[name] = UniformData{ strings.clone(name, allocator), glsl_type, type, slice.clone(data, allocator) }
+    uniform_data[name] = UniformData{ strings.clone(name, uniform_data.allocator), glsl_type, type, slice.clone(data, uniform_data.allocator) }
 }

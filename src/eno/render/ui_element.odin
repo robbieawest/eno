@@ -18,56 +18,80 @@ UIRenderBuffer :: enum {
     ENV_TEX_URI,
     IRR_FACE_SIZE,
     PREFILTER_FACE_SIZE,
-    BRDF_LUT_SIZE
+    BRDF_LUT_SIZE,
+    SSAO_SAMPLE_RADIUS,
+    SSAO_BIAS
 }
 
 // Not declaring as constant because taking pointer of Buffers is needed for slice.enumerated_array
-Buffers := [UIRenderBuffer]cstring {
+Buffers := [UIRenderBuffer]string {
     .ENV_FACE_SIZE = "##env_face_size",
     .ENV_TEX_URI = "##env_tex_uri",
     .IRR_FACE_SIZE = "##irr_face_size",
     .PREFILTER_FACE_SIZE = "##pref_face_size",
-    .BRDF_LUT_SIZE = "##brdf_lut_size"
+    .BRDF_LUT_SIZE = "##brdf_lut_size",
+    .SSAO_SAMPLE_RADIUS = "##ssao_sample_radius",
+    .SSAO_BIAS = "##ssao_bias"
 }
 
 delete_bufs :: proc() -> (ok: bool) {
     return ui.delete_buffers(..slice.enumerated_array(&Buffers))
 }
 
-BUF_TEXT_CHAR_LIM :: ui.DEFAULT_TEXT_CHAR_LIMIT
-BUF_NUMERIC_CHAR_LIM :: ui.DEFAULT_NUMERIC_CHAR_LIMIT
 load_bufs :: proc() -> (ok: bool) {
-    settings, settings_ok := GlobalRenderSettings.unapplied_environment_settings.?
-    if !settings_ok {
-        dbg.log(.ERROR, "Settings must be available to load bufs")
-        return
-    }
 
-    ibl_settings, ibl_enabled := settings.ibl_settings.?
+    buffer_inits := make([dynamic]ui.BufferInit, allocator=Context.allocator)
+    defer delete(buffer_inits)
 
-    buf_infos: [len(UIRenderBuffer)]ui.BufferInit
-    buffers := slice.enumerated_array(&Buffers)
+    env_settings, env_enabled := GlobalRenderSettings.unapplied_environment_settings.?
+    if env_enabled {
+        ibl_settings, ibl_enabled := env_settings.ibl_settings.?
 
-    i := 0
-    for buf, buf_type in Buffers {
-        byte_buf: Maybe([]byte)
-        buf_type: UIRenderBuffer = buf_type  // Intellij doesn't know the type
 
-        switch buf_type {
-            case .ENV_FACE_SIZE: byte_buf = ui.int_to_buf(settings.environment_face_size, BUF_NUMERIC_CHAR_LIM, Context.allocator) or_return
-            case .ENV_TEX_URI: byte_buf = ui.str_to_buf(settings.environment_texture_uri, BUF_TEXT_CHAR_LIM, Context.allocator) or_return
-            case .IRR_FACE_SIZE: if ibl_enabled do byte_buf = ui.int_to_buf(ibl_settings.irradiance_map_face_size, BUF_NUMERIC_CHAR_LIM, Context.allocator) or_return
-            case .PREFILTER_FACE_SIZE: if ibl_enabled do byte_buf = ui.int_to_buf(ibl_settings.prefilter_map_face_size, BUF_NUMERIC_CHAR_LIM, Context.allocator) or_return
-            case .BRDF_LUT_SIZE: if ibl_enabled do byte_buf = ui.int_to_buf(ibl_settings.brdf_lut_size, BUF_NUMERIC_CHAR_LIM, Context.allocator) or_return
+        append_elems(&buffer_inits, ..[]ui.BufferInit{
+            {
+                label = Buffers[.ENV_FACE_SIZE],
+                val = env_settings.environment_face_size
+            },
+            {
+                label = Buffers[.ENV_TEX_URI],
+                val = env_settings.environment_texture_uri
+            }
+        })
+
+        if ibl_enabled {
+            append_elems(&buffer_inits, ..[]ui.BufferInit{
+                {
+                    label = Buffers[.BRDF_LUT_SIZE],
+                    val = ibl_settings.brdf_lut_size
+                },
+                {
+                    label = Buffers[.IRR_FACE_SIZE],
+                    val = ibl_settings.irradiance_map_face_size
+                },
+                {
+                    label = Buffers[.PREFILTER_FACE_SIZE],
+                    val = ibl_settings.prefilter_map_face_size
+                },
+            })
         }
-
-        if byte_buf != nil do buf_infos[i] = { buf, byte_buf.? }
-        i += 1
     }
 
-    ui.load_buffers(..buf_infos[:])
+    ssao_settings, ssao_enabled := GlobalRenderSettings.ssao_settings.?
+    if ssao_enabled {
+        append_elems(&buffer_inits, ..[]ui.BufferInit{
+            {
+                label = Buffers[.SSAO_SAMPLE_RADIUS],
+                val = ssao_settings.ssao_sample_radius
+            },
+            {
+                label = Buffers[.SSAO_BIAS],
+                val = ssao_settings.ssao_bias
+            }
+        })
+    }
 
-    for info in buf_infos do delete(info.buf, Context.allocator)
+    if len(buffer_inits) != 0 do ui.load_buffers(..buffer_inits[:])
 
     return true
 }
@@ -94,10 +118,11 @@ render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
             env_settings: ^EnvironmentSettings = &GlobalRenderSettings.unapplied_environment_settings.?
 
             im.Text("Environment face size:")
-            env_settings.environment_face_size = i32(ui.int_text_input(Buffers[.ENV_FACE_SIZE]) or_return)
+            env_face_size, _ := ui.int_text_input(Buffers[.ENV_FACE_SIZE]) or_return
+            env_settings.environment_face_size = i32(env_face_size)
 
             im.Text("Environment texture uri")
-            env_settings.environment_texture_uri = ui.text_input(Buffers[.ENV_TEX_URI]) or_return
+            env_settings.environment_texture_uri, _ = ui.text_input(Buffers[.ENV_TEX_URI]) or_return
 
             if im.TreeNode("IBL Settings") {
                 defer im.TreePop()
@@ -116,17 +141,20 @@ render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
                 else {
                     ibl_settings: ^IBLSettings = &env_settings.ibl_settings.?
                     im.Text("Irradiance map face size:")
-                    ibl_settings.irradiance_map_face_size = i32(ui.int_text_input(Buffers[.IRR_FACE_SIZE]) or_return)
+                    irr_face_size, _ := ui.int_text_input(Buffers[.IRR_FACE_SIZE]) or_return
+                    ibl_settings.irradiance_map_face_size = i32(irr_face_size)
 
                     im.Text("Prefilter map face size:")
-                    ibl_settings.prefilter_map_face_size = i32(ui.int_text_input(Buffers[.PREFILTER_FACE_SIZE]) or_return)
+                    pref_face_size, _ := ui.int_text_input(Buffers[.PREFILTER_FACE_SIZE]) or_return
+                    ibl_settings.prefilter_map_face_size = i32(pref_face_size)
 
                     im.Text("BRDF LUT size:")
-                    ibl_settings.brdf_lut_size = i32(ui.int_text_input(Buffers[.BRDF_LUT_SIZE]) or_return)
+                    brdf_lut_size, _ := ui.int_text_input(Buffers[.BRDF_LUT_SIZE]) or_return
+                    ibl_settings.brdf_lut_size = i32(brdf_lut_size)
 
                     if im.Button("Disable IBL") {
                         disable_ibl_settings()
-                        ui.delete_buffers(Buffers[.IRR_FACE_SIZE], Buffers[.PREFILTER_FACE_SIZE], Buffers[.BRDF_LUT_SIZE])
+                        ui.delete_buffers(Buffers[.IRR_FACE_SIZE], Buffers[.PREFILTER_FACE_SIZE], Buffers[.BRDF_LUT_SIZE]) or_return
                         return true
                     }
                 }
@@ -161,14 +189,25 @@ render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
 
     if im.TreeNode("Ambient occlusion settings") {
         defer im.TreePop()
-        if GlobalRenderSettings.ssao_on {
+        if GlobalRenderSettings.ssao_settings != nil {
+
+            im.Text("SSAO sample radius size:")
+            rad, rad_changed := ui.float_text_input(Buffers[.SSAO_SAMPLE_RADIUS]) or_return
+
+            im.Text("SSAO bias:")
+            bias, bias_changed := ui.float_text_input(Buffers[.SSAO_BIAS]) or_return
+
+            if rad_changed || bias_changed do set_ssao_settings(rad, bias)
+
             if im.Button("Disable SSAO") {
-                GlobalRenderSettings.ssao_on = false
+                disable_ssao_settings()
+                ui.delete_buffers(Buffers[.SSAO_BIAS], Buffers[.SSAO_SAMPLE_RADIUS]) or_return
             }
         }
         else {
             if im.Button("Enable SSAO") {
-                GlobalRenderSettings.ssao_on = true
+                set_ssao_settings()
+                load_bufs() or_return
             }
         }
     }

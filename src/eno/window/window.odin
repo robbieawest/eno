@@ -94,7 +94,7 @@ sdl_setup_gl_multisamples :: proc() {
 destroy_window :: proc(window_target: WindowTarget) {
     dbg.log(.INFO, "Destroying SDL window")
     SDL.DestroyWindow(window_target)
-    // ui.destroy_ui_context()
+    ui.destroy_ui_context()
 }
 
 

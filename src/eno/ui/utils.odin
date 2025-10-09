@@ -2,30 +2,37 @@ package ui
 
 import dbg "../debug"
 
+import "core:fmt"
 import "core:mem"
 import "core:strconv"
+import "core:strings"
+import utils "../utils"
 
 int_to_buf :: proc(#any_int num: int, #any_int lim: int, allocator: mem.Allocator, loc := #caller_location) -> (byte_buf: []byte, ok: bool) {
-    if num % 10 > lim {
-        dbg.log(.ERROR, "Integer needs to many characters for ui buffer", loc=loc)
+    str := fmt.caprintf("%d", num, allocator=allocator)
+    if len(str) > lim {
+        dbg.log(.ERROR, "Integer needs to many characters for ui buffer: '%s'", str, loc=loc)
         return
     }
-    byte_buf = make([]byte, lim, allocator)
-    strconv.itoa(byte_buf, num)
 
-    ok = true
-    return
+    return utils.to_bytes(str), true
+}
+
+float_to_buf :: proc(num: f32, #any_int lim: int, allocator: mem.Allocator, loc := #caller_location) -> (byte_buf: []byte, ok: bool) {
+    str := fmt.caprintf("%f", num, allocator=allocator)
+    if len(str) > lim {
+        dbg.log(.ERROR, "Float needs too many characters for ui buffer: '%s'", str, loc=loc)
+        return
+    }
+
+    return utils.to_bytes(str), true
 }
 
 str_to_buf :: proc(str: string, #any_int lim: int, allocator: mem.Allocator, loc := #caller_location) -> (byte_buf: []byte, ok: bool) {
     if len(str) > lim {
-        dbg.log(.ERROR, "Environment texture uri is greater than the ui buffer char limit", loc=loc)
+        dbg.log(.ERROR, "String needs too many characters for ui buffer: '%s'", str, loc=loc)
         return
     }
 
-    byte_buf = make([]byte, lim, allocator)
-    copy(byte_buf, transmute([]byte)str)
-
-    ok = true
-    return
+    return utils.to_bytes(strings.clone_to_cstring(str, allocator)), true
 }

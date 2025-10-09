@@ -6,12 +6,16 @@ import im "../../../libs/dear-imgui"
 import "../../../libs/dear-imgui/imgui_impl_sdl2"
 import "../../../libs/dear-imgui/imgui_impl_opengl3"
 
+import dbg "../debug"
+import "../utils"
+
+import "core:strings"
+import "base:runtime"
 import "core:slice"
 import "core:strconv"
 import "core:mem"
-import dbg "../debug"
 
-setup_ui :: proc(window: ^SDL.Window, sdl_gl_context: rawptr, allocator := context.allocator) -> (ok: bool) {
+setup_ui :: proc(window: ^SDL.Window, sdl_gl_context: rawptr, allocator := context.allocator, temp_allocator := context.temp_allocator) -> (ok: bool) {
     im.CHECKVERSION()
     im.CreateContext()
 
@@ -31,7 +35,7 @@ setup_ui :: proc(window: ^SDL.Window, sdl_gl_context: rawptr, allocator := conte
         return
     }
 
-    init_ui_context(allocator=allocator)
+    init_ui_context(allocator=allocator, temp_allocator=temp_allocator)
 
     return true
 }
@@ -46,12 +50,23 @@ setup_imgui_style :: proc() {
     im.StyleColorsDark()
 }
 
-destroy_ui_context :: proc() {
+destroy_ui_context :: proc() -> (ok: bool) {
     dbg.log(.INFO, "Destroying UI context")
+    /*  Always shouts at me, doesn't matter nearly enough to me to validate fixing
     im.DestroyContext()
     im.Shutdown()
     imgui_impl_sdl2.Shutdown()
     imgui_impl_opengl3.Shutdown()
+    */
+
+    ctx := check_context() or_return
+    delete(ctx.elements)
+    for str, byte_buf in ctx.buffers {
+        delete(str, ctx.allocator)
+        delete(byte_buf, ctx.allocator)
+    }
+
+    return true
 }
 
 // A UIElement MUST begin with im.Begin() and end with im.End()
@@ -61,15 +76,15 @@ UIContext :: struct {
     show_demo_window: bool,
 
     // Persistent buffers for input fields
-    // Uses cstring bc idgaf
-    buffers: map[cstring][]byte,
+    buffers: map[string][]byte,
     image_scale: [2]f32,
-    allocator: mem.Allocator
+    allocator: mem.Allocator,
+    temp_allocator: mem.Allocator
 }
 
 Context: Maybe(UIContext)
-init_ui_context :: proc(show_demo_win := false, image_scale := [2]f32{ 0.25, 0.25 }, allocator := context.allocator) {
-    Context = UIContext{ make([dynamic]UIElement, allocator=allocator), show_demo_win, make(map[cstring][]byte, allocator=allocator), image_scale, allocator }
+init_ui_context :: proc(show_demo_win := false, image_scale := [2]f32{ 0.25, 0.25 }, allocator := context.allocator, temp_allocator := context.temp_allocator) {
+    Context = UIContext{ make([dynamic]UIElement, allocator=allocator), show_demo_win, make(map[string][]byte, allocator=allocator), image_scale, allocator, temp_allocator }
 }
 
 show_imgui_demo_window :: proc(show: bool) -> (ok: bool) {
@@ -128,11 +143,15 @@ toggle_mouse_usage :: proc() {
 // Includes null character
 DEFAULT_NUMERIC_CHAR_LIMIT: uint : 10
 DEFAULT_TEXT_CHAR_LIMIT: uint : 75
+DEFAULT_FLOAT_CHAR_LIMIT : uint : 20
 
-text_input :: proc(label: cstring, #any_int char_limit: uint = DEFAULT_TEXT_CHAR_LIMIT, flags: im.InputTextFlags = {}) -> (result: string, ok: bool) {
+text_input :: proc(label: string, #any_int char_limit: uint = DEFAULT_TEXT_CHAR_LIMIT, flags: im.InputTextFlags = {}) -> (result: string, changed: bool, ok: bool) {
     ctx := check_context() or_return
     buf := get_buffer(ctx, label, char_limit)
-    im.InputText(label, cstring(raw_data(buf)), len(buf), flags)
+    // dbg.log(.INFO, "Buf of label '%s': %v", label, buf)
+    assert(buf[len(buf) - 1] == 0)
+    c_label := strings.clone_to_cstring(label, ctx.temp_allocator)
+    changed = im.InputText(c_label, cstring(raw_data(buf)), len(buf), flags)
     if buf == nil {
         dbg.log(.ERROR, "Buf is nil")
         return
@@ -143,15 +162,22 @@ text_input :: proc(label: cstring, #any_int char_limit: uint = DEFAULT_TEXT_CHAR
     if res == nil do return
     else do return transmute(string)buf, ok
     */
-    return transmute(string)buf, true
+    return transmute(string)buf, changed, true
 }
 
-int_text_input :: proc(label: cstring, #any_int char_limit: uint = DEFAULT_NUMERIC_CHAR_LIMIT) -> (result: int, ok: bool) {
-    str := text_input(label, char_limit, { .CharsDecimal }) or_return
-    return strconv.atoi(str), true
+int_text_input :: proc(label: string, #any_int char_limit: uint = DEFAULT_NUMERIC_CHAR_LIMIT) -> (result: int, changed: bool, ok: bool) {
+    str: string
+    str, changed = text_input(label, char_limit, { .CharsDecimal }) or_return
+    return strconv.atoi(str), changed, true
 }
 
-get_buffer :: proc(ctx: ^UIContext, label: cstring, size: uint) -> (buf: []byte) {
+float_text_input :: proc(label: string, #any_int char_limit: uint = DEFAULT_FLOAT_CHAR_LIMIT) -> (result: f32, changed: bool, ok: bool) {
+    str: string
+    str, changed = text_input(label, char_limit, { .CharsDecimal }) or_return
+    return f32(strconv.atof(str)), changed, true
+}
+
+get_buffer :: proc(ctx: ^UIContext, label: string, size: uint) -> (buf: []byte) {
     if label in ctx.buffers {
         return ctx.buffers[label]
     }
@@ -163,19 +189,44 @@ get_buffer :: proc(ctx: ^UIContext, label: cstring, size: uint) -> (buf: []byte)
     return
 }
 
-BufferInit :: struct { label: cstring, buf: []byte }
-load_buffers :: proc(buffers: ..BufferInit) -> (ok: bool) {
+BufferInit :: struct { label: string, limit: uint, val: any }
+load_buffers :: proc(buffer_inits: ..BufferInit) -> (ok: bool) {
     ctx := check_context() or_return
 
-    for buffer in buffers {
-        if buffer.label == nil || buffer.label in ctx.buffers do continue
-        ctx.buffers[buffer.label] = slice.clone(buffer.buf, ctx.allocator)
+    for buffer_init in buffer_inits {
+        if len(buffer_init.label) == 0 || buffer_init.label in ctx.buffers do continue
+        if buffer_init.val.data == nil {
+            dbg.log(.ERROR, "Buffer init value must contain data")
+            return
+        }
+
+        limit := buffer_init.limit
+        byte_buf: []byte
+        switch buffer_init.val.id {
+            case int, i32:
+                limit = limit == 0 ? DEFAULT_NUMERIC_CHAR_LIMIT : limit
+                ptr := transmute(^int)(buffer_init.val.data)
+                byte_buf = int_to_buf(ptr^, limit, ctx.allocator) or_return
+            case string:
+                limit = limit == 0 ? DEFAULT_TEXT_CHAR_LIMIT : limit
+                ptr := transmute(^string)(buffer_init.val.data)
+                byte_buf = str_to_buf(ptr^, limit, ctx.allocator) or_return
+            case f32:
+                limit = limit == 0 ? DEFAULT_FLOAT_CHAR_LIMIT : limit
+                ptr := transmute(^f32)buffer_init.val.data
+                byte_buf = float_to_buf(ptr^, limit, ctx.allocator) or_return
+            case:
+                dbg.log(.ERROR, "Type not yet supported %v", buffer_init.val.id)
+                return
+        }
+
+        ctx.buffers[strings.clone(buffer_init.label, ctx.allocator)] = byte_buf
     }
 
     return true
 }
 
-delete_buffers :: proc(buffers: ..cstring) -> (ok: bool) {
+delete_buffers :: proc(buffers: ..string) -> (ok: bool) {
     ctx := check_context() or_return
 
     for buffer in buffers {
@@ -194,7 +245,7 @@ delete_buffers :: proc(buffers: ..cstring) -> (ok: bool) {
 
 // Copies buf if new label
 // Returns new_buf if the buffer has changed, nil if not
-check_buffer :: proc(label: cstring, buf: []byte) -> (new_buf: [^]byte, ok: bool) {
+check_buffer :: proc(label: string, buf: []byte) -> (new_buf: [^]byte, ok: bool) {
     ctx := check_context() or_return
 
     if label not_in ctx.buffers {

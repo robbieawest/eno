@@ -18,8 +18,8 @@ uniform uint SSAOH;
 out float Colour;
 
 vec2 noiseScale = vec2(float(SSAOW) / float(SSAONoiseW), float(SSAOH) / float(SSAONoiseW));
-float radius = 0.5;
-float bias = 0.025;
+uniform float SSAOSampleRadius;
+uniform float SSAOBias;
 
 in mat4 m_Project;
 in mat4 m_ProjectInv;
@@ -46,7 +46,7 @@ void main() {
     float occlusion = 0.0;
     for(int i = 0; i < SSAONumSamplesInKernel; i++) {
         vec3 samplePos = TBN * vec3(SSAOKernelSamples[i]);
-        samplePos = fragPos + samplePos * radius;
+        samplePos = fragPos + samplePos * SSAOSampleRadius;
 
         vec4 sampleNDC = vec4(samplePos, 1.0);
         sampleNDC = m_Project * sampleNDC;
@@ -57,8 +57,8 @@ void main() {
         float sampleDepth = texture(gbDepth, sampleNDC.st).r;
         sampleDepth = reconstructFragPos(sampleDepth).z;
 
-        float rangeCheck = smoothstep(0.0, 1.0, radius / abs(fragPos.z - sampleDepth));
-        occlusion += (sampleDepth >= samplePos.z + bias ? 1.0 : 0.0) * rangeCheck;
+        float rangeCheck = smoothstep(0.0, 1.0, SSAOSampleRadius / abs(fragPos.z - sampleDepth));
+        occlusion += (sampleDepth >= samplePos.z + SSAOBias ? 1.0 : 0.0) * rangeCheck;
     }
     occlusion = 1.0 - (occlusion / SSAONumSamplesInKernel);
 

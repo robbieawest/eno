@@ -69,9 +69,20 @@ get_field :: proc(a: ^$T, $field: string, $field_type: typeid) -> ^field_type
 }
 
 
-to_bytes :: proc(ptr: ^$T) -> []byte {
+to_bytes :: proc{ to_bytes_comp, to_bytes_any, to_bytes_cstr }
+
+to_bytes_comp :: proc(ptr: ^$T) -> []byte {
     return (cast([^]byte)ptr)[:type_info_of(T).size]
 }
+
+to_bytes_cstr :: proc(cstr: cstring) -> []byte {
+    return transmute([]byte)(runtime.Raw_Slice{ transmute([^]byte)cstr, len(cstr) + 1 })
+}
+
+to_bytes_any :: proc(val: any) -> []byte {
+    return transmute([]byte)(runtime.Raw_Slice{ val.data, type_info_of(val.id).size })
+}
+
 
 map_to_bytes :: proc(m: map[$K]$V, bytes: ^[dynamic]byte) {
     for k, v in m {

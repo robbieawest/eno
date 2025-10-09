@@ -13,7 +13,7 @@ RenderSettings :: struct {
     environment_settings: Maybe(EnvironmentSettings),
     unapplied_environment_settings: Maybe(EnvironmentSettings),
     direct_lighting_settings: Maybe(DirectLightingSettings),
-    ssao_on: bool
+    ssao_settings: Maybe(SSAOSettings)
 }
 GlobalRenderSettings: RenderSettings
 
@@ -41,7 +41,7 @@ get_lighting_settings :: proc() -> (res: LightingSettings) {
         if env_settings.ibl_settings != nil do res |= { .IBL }
     }
     if GlobalRenderSettings.direct_lighting_settings != nil do res |= { .DIRECT_LIGHTING }
-    if GlobalRenderSettings.ssao_on do res |= { .SSAO }
+    if GlobalRenderSettings.ssao_settings != nil do res |= { .SSAO }
     return
 }
 
@@ -123,4 +123,33 @@ enable_direct_lighting :: proc() {
 
 disable_direct_lighting :: proc() {
     GlobalRenderSettings.direct_lighting_settings = nil
+}
+
+
+SSAOSettings :: struct {
+    ssao_sample_radius: f32,
+    ssao_bias: f32
+}
+
+set_ssao_settings :: proc(radius: f32 = SSAO_SAMPLE_RADIUS, bias : f32 = SSAO_BIAS) {
+    dbg.log(.INFO, "Setting SSAO settings rad: '%f', bias: '%f'", radius, bias)
+    if GlobalRenderSettings.ssao_settings == nil do GlobalRenderSettings.ssao_settings = SSAOSettings{ radius, bias }
+    else {
+        settings : ^SSAOSettings = &GlobalRenderSettings.ssao_settings.?
+        settings.ssao_sample_radius = radius
+        settings.ssao_bias = bias
+    }
+    update_ssao_uniforms()
+}
+
+update_ssao_uniforms :: proc() {
+    settings, settings_ok := GlobalRenderSettings.ssao_settings.?
+    if !settings_ok do return
+
+    store_uniform(SSAO_BIAS_UNIFORM, resource.GLSLDataType.float, settings.ssao_bias)
+    store_uniform(SSAO_SAMPLE_RADIUS_UNIFORM, resource.GLSLDataType.float, settings.ssao_sample_radius)
+}
+
+disable_ssao_settings :: proc() {
+    GlobalRenderSettings.ssao_settings = nil
 }
