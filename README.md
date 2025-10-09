@@ -51,14 +51,11 @@ A list of features detailing what eno currently implements:
 - Central resource manager with hashing and reference counting to share/store shaders, material permutations, vertex layout permuations etc. ( `resource` package )
 - Liberal render pass interface with a general `render` procedure
 - Image based indirect lighting via environment cubemap, precalculated irradiance, prefilter and brdf lut.
+- SSAO
 
 Shortly upcoming features:
 - Billboarding improvements via instancing
-- Dynamic vertex/lighting shader generation, (comptime generation: vertex layouts, material types,  runtime branching: lighting settings)
-- Imgui :O
-- MSAA
 - A shadow mapping technique (cascaded shadow mapping likely)
-- An AO technique (looking at GTAO)
 
 Things I'd like to implement if I have the time:
 
