@@ -191,13 +191,18 @@ render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
         defer im.TreePop()
         if GlobalRenderSettings.ssao_settings != nil {
 
+            ssao_settings := GlobalRenderSettings.ssao_settings.?
+
             im.Text("SSAO sample radius size:")
             rad, rad_changed := ui.float_text_input(Buffers[.SSAO_SAMPLE_RADIUS]) or_return
 
             im.Text("SSAO bias:")
             bias, bias_changed := ui.float_text_input(Buffers[.SSAO_BIAS]) or_return
 
-            if rad_changed || bias_changed do set_ssao_settings(rad, bias)
+            bn_eval := ssao_settings.evaluate_bent_normals
+            im.Checkbox("Bent normal evaluation", &bn_eval)
+
+            if bn_eval != ssao_settings.evaluate_bent_normals || rad_changed || bias_changed do set_ssao_settings(rad, bias, bn_eval)
 
             if im.Button("Disable SSAO") {
                 disable_ssao_settings()

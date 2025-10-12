@@ -164,28 +164,47 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
 
     tex_properties := make(resource.TextureProperties, allocator=allocator)
     defer delete(tex_properties)
-    tex_properties[.MIN_FILTER] = .NEAREST
-    tex_properties[.MAG_FILTER] = .NEAREST
+    tex_properties[.MIN_FILTER] = .LINEAR
+    tex_properties[.MAG_FILTER] = .LINEAR
 
-
-    ssao_texture := resource.Texture{
+    ssao_colour_texture := resource.Texture{
         name = fmt.aprintf("SSAO first pass texture", allocator=allocator),
         image = resource.Image{ w=w, h=h },
         type = .TWO_DIM,
         properties = utils.copy_map(tex_properties, allocator=allocator)
     }
-    ssao_texture.gpu_texture = make_texture(ssao_texture, internal_format=gl.R32F, format=gl.RED, type=gl.FLOAT)
-    framebuffer_add_attachments(&framebuffer, Attachment{ data=ssao_texture, id = gl.COLOR_ATTACHMENT0, type = .COLOUR })
+    ssao_colour_texture.gpu_texture = make_texture(ssao_colour_texture, internal_format=gl.R32F, format=gl.RED, type=gl.FLOAT)
+    framebuffer_add_attachments(&framebuffer, Attachment{ data=ssao_colour_texture, id = gl.COLOR_ATTACHMENT0, type = .COLOUR })
     check_framebuffer_status(framebuffer) or_return
 
-    ssao_blurred_texture := resource.Texture{
+    ssao_bent_normal_texture := resource.Texture{
+        name = fmt.aprintf("SSAO bent normal first pass texture", allocator=allocator),
+        image = resource.Image{ w=w, h=h },
+        type = .TWO_DIM,
+        properties = utils.copy_map(tex_properties, allocator=allocator)
+    }
+    ssao_bent_normal_texture.gpu_texture = make_texture(ssao_bent_normal_texture, internal_format=gl.RGB32F, format=gl.RGB, type=gl.FLOAT)
+    framebuffer_add_attachments(&framebuffer, Attachment{ data=ssao_bent_normal_texture, id = gl.COLOR_ATTACHMENT1, type = .COLOUR })
+    check_framebuffer_status(framebuffer) or_return
+
+    ssao_blurred_colour_texture := resource.Texture{
         name = fmt.aprintf("SSAO second pass texture", allocator=allocator),
         image = resource.Image{ w=w, h=h },
         type = .TWO_DIM,
         properties = utils.copy_map(tex_properties, allocator=allocator)
     }
-    ssao_blurred_texture.gpu_texture = make_texture(ssao_blurred_texture, internal_format=gl.R32F, format=gl.RED, type=gl.FLOAT)
-    framebuffer_add_attachments(&framebuffer, Attachment{ data=ssao_blurred_texture, id = gl.COLOR_ATTACHMENT1, type = .COLOUR })
+    ssao_blurred_colour_texture.gpu_texture = make_texture(ssao_blurred_colour_texture, internal_format=gl.R32F, format=gl.RED, type=gl.FLOAT)
+    framebuffer_add_attachments(&framebuffer, Attachment{ data=ssao_blurred_colour_texture, id = gl.COLOR_ATTACHMENT2, type = .COLOUR })
+    check_framebuffer_status(framebuffer) or_return
+
+    ssao_blurred_bent_normal_texture := resource.Texture{
+        name = fmt.aprintf("SSAO blurred bent normal texture", allocator=allocator),
+        image = resource.Image{ w=w, h=h },
+        type = .TWO_DIM,
+        properties = utils.copy_map(tex_properties, allocator=allocator)
+    }
+    ssao_blurred_bent_normal_texture.gpu_texture = make_texture(ssao_blurred_bent_normal_texture, internal_format=gl.RGB32F, format=gl.RGB, type=gl.FLOAT)
+    framebuffer_add_attachments(&framebuffer, Attachment{ data=ssao_blurred_bent_normal_texture, id = gl.COLOR_ATTACHMENT3, type = .COLOUR })
     check_framebuffer_status(framebuffer) or_return
 
     attachments, _ := slice.map_keys(framebuffer.attachments, allocator=allocator); defer delete(attachments)
@@ -197,7 +216,7 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
     ssao_fbo := Context.pipeline.frame_buffers[len(Context.pipeline.frame_buffers) - 1]
     ssao_output = RenderPassIO {
         ssao_fbo,
-        AttachmentID{ .COLOUR, 1 },
+        AttachmentID{ .COLOUR, 2 },
         "SSAOBlur"
     }
 
@@ -206,7 +225,7 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
             shader_gather = generate_ssao_first_shader_pass,
             name = "SSAO first pass",
             frame_buffer = ssao_fbo,
-            mesh_gather = SinglePrimitiveMesh{ type=.QUAD },  // doesn't need to care about transforms, since the SSAO shader does not care
+            mesh_gather = SinglePrimitiveMesh{ type=.QUAD },
             properties=RenderPassProperties{
                 viewport = [4]i32{ 0, 0, w, h },
                 clear = { .COLOUR_BIT, .DEPTH_BIT },
@@ -222,14 +241,19 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
                     ssao_fbo,
                     AttachmentID{ .COLOUR, 0 },
                     "SSAOColour"
-                }
+                },
+                {
+                    ssao_fbo,
+                    AttachmentID{ .COLOUR, 1 },
+                    "SSAOBentNormal"
+                },
             }
         ) or_return,
         make_render_pass(
             shader_gather = generate_ssao_second_shader_pass,
             name = "SSAO second pass",
             frame_buffer = ssao_fbo,
-            mesh_gather = SinglePrimitiveMesh{ type=.QUAD },  // doesn't need to care about transforms, since the SSAO shader does not care
+            mesh_gather = SinglePrimitiveMesh{ type=.QUAD },
             properties=RenderPassProperties{
                 viewport = [4]i32{ 0, 0, w, h },
                 clear = { .COLOUR_BIT, .DEPTH_BIT },
@@ -240,6 +264,29 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
                   { ssao_fbo, AttachmentID{ type=.COLOUR }, "SSAOColour" },
             },
             outputs = []RenderPassIO { ssao_output }
+        ) or_return,
+        make_render_pass(
+            shader_gather = generate_ssao_second_shader_pass,
+            name = "SSAO third pass",
+            frame_buffer = ssao_fbo,
+            mesh_gather = SinglePrimitiveMesh{ type=.QUAD },
+            properties=RenderPassProperties{
+                viewport = [4]i32{ 0, 0, w, h },
+                clear = { .COLOUR_BIT, .DEPTH_BIT },
+                clear_colour = [4]f32{ 0.0, 0.0, 0.0, 1.0 },
+                disable_depth_test=true
+            },
+            inputs = []RenderPassIO{
+                { ssao_fbo, AttachmentID{ .COLOUR, 1 }, "SSAOBentNormal" },
+            },
+            outputs = []RenderPassIO {
+                {
+                    ssao_fbo,
+                    AttachmentID{ .COLOUR, 3 },
+                    "SSAOBentNormalBlurred"
+                },
+            }
+
         ) or_return
     )
 
@@ -264,6 +311,7 @@ SSAO_H_UNIFORM :: "SSAOH"
 SSAO_NOISE_W_UNIFORM :: "SSAONoiseW"
 SSAO_SAMPLE_RADIUS_UNIFORM :: "SSAOSampleRadius"
 SSAO_BIAS_UNIFORM :: "SSAOBias"
+SSAO_EVALUATE_BENT_NORM_UNIFORM :: "SSAOEvaluateBentNormal"
 setup_ssao_uniforms :: proc(#any_int w, h: u32, num_kernel_samples := SSAO_NUM_SAMPLES, allocator := context.allocator) -> (ok: bool) {
     if num_kernel_samples > MAX_SSAO_SAMPLES {
         dbg.log(.ERROR, "Number of SSAO samples must not be greater than %d", MAX_SSAO_SAMPLES)

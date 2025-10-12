@@ -128,16 +128,18 @@ disable_direct_lighting :: proc() {
 
 SSAOSettings :: struct {
     ssao_sample_radius: f32,
-    ssao_bias: f32
+    ssao_bias: f32,
+    evaluate_bent_normals: bool
 }
 
-set_ssao_settings :: proc(radius: f32 = SSAO_SAMPLE_RADIUS, bias : f32 = SSAO_BIAS) {
-    dbg.log(.INFO, "Setting SSAO settings rad: '%f', bias: '%f'", radius, bias)
-    if GlobalRenderSettings.ssao_settings == nil do GlobalRenderSettings.ssao_settings = SSAOSettings{ radius, bias }
+set_ssao_settings :: proc(radius: f32 = SSAO_SAMPLE_RADIUS, bias : f32 = SSAO_BIAS, evaluate_bent_normals := false) {
+    dbg.log(.INFO, "Setting SSAO settings rad: '%f', bias: '%f', bn eval: '%v'", radius, bias, evaluate_bent_normals)
+    if GlobalRenderSettings.ssao_settings == nil do GlobalRenderSettings.ssao_settings = SSAOSettings{ radius, bias, evaluate_bent_normals }
     else {
         settings : ^SSAOSettings = &GlobalRenderSettings.ssao_settings.?
         settings.ssao_sample_radius = radius
         settings.ssao_bias = bias
+        settings.evaluate_bent_normals = evaluate_bent_normals
     }
     update_ssao_uniforms()
 }
@@ -148,6 +150,7 @@ update_ssao_uniforms :: proc() {
 
     store_uniform(SSAO_BIAS_UNIFORM, resource.GLSLDataType.float, settings.ssao_bias)
     store_uniform(SSAO_SAMPLE_RADIUS_UNIFORM, resource.GLSLDataType.float, settings.ssao_sample_radius)
+    store_uniform(SSAO_EVALUATE_BENT_NORM_UNIFORM, resource.GLSLDataType.bool, settings.evaluate_bent_normals)
 }
 
 disable_ssao_settings :: proc() {

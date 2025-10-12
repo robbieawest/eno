@@ -98,6 +98,10 @@ set_uniform_of_type :: proc(shader: ^resource.ShaderProgram, label: string, type
         bind_texture(cur_tex_unit^, gpu_tex, val.type) or_return
         resource.Uniform1i(shader, label, cur_tex_unit^)
         cur_tex_unit^ += 1
+    case .bool:
+        val: bool = utils.cast_bytearr_to_type(bool, data) or_return
+        resource.Uniform1ui(shader, label, u32(val))
+
     // ..todo
     case: dbg.log(.WARN, "GLSL type %v not yet supported", type)
     }
