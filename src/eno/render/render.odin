@@ -157,6 +157,7 @@ render :: proc(
         if pass.properties.render_skybox do render_skybox(manager, scene.viewpoint, allocator) or_return
     }
 
+    reset_texture_bindings()
 
     ui.render_ui(window.WINDOW_WIDTH, window.WINDOW_HEIGHT) or_return
 
@@ -316,6 +317,8 @@ bind_missing_textures :: proc(shader: ^resource.ShaderProgram, allocator := cont
 bind_render_pass_inputs :: proc(shader: ^resource.ShaderProgram, pass: ^RenderPass, cur_tex_unit: ^i32) -> (ok: bool) {
 
     for input in pass.inputs {
+        if _, loc_ok := resource.get_uniform_location(shader, input.identifier); !loc_ok do continue
+
         if input.framebuffer == nil {
             dbg.log(.ERROR, "Input framebuffer is nil, pass: '%s', input %#v", pass.name, input)
         }
@@ -811,7 +814,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                     usages += { .BaseColourTexture }
                     base_colour := resource.get_texture(manager, v.base_colour) or_return
 
-                    transfer_texture(base_colour)
+                    transfer_texture(base_colour) or_return
                     bind_texture(texture_unit, base_colour.gpu_texture) or_return
                     resource.set_uniform(lighting_shader, resource.BASE_COLOUR_TEXTURE, texture_unit)
                     texture_unit += 1
@@ -821,7 +824,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                     usages += { .PBRMetallicRoughnessTexture }
                     metallic_roughness := resource.get_texture(manager, v.metallic_roughness) or_return
 
-                    transfer_texture(metallic_roughness)
+                    transfer_texture(metallic_roughness) or_return
                     bind_texture(texture_unit, metallic_roughness.gpu_texture) or_return
                     resource.set_uniform(lighting_shader, resource.PBR_METALLIC_ROUGHNESS, texture_unit)
                     texture_unit += 1
@@ -840,7 +843,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 usages += { .EmissiveTexture }
                 emissive_texture := resource.get_texture(manager, resource.ResourceIdent(v)) or_return
 
-                transfer_texture(emissive_texture)
+                transfer_texture(emissive_texture) or_return
                 bind_texture(texture_unit, emissive_texture.gpu_texture.?) or_return
                 resource.set_uniform(lighting_shader, resource.EMISSIVE_TEXTURE, texture_unit)
                 texture_unit += 1
@@ -849,7 +852,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 usages += { .OcclusionTexture }
                 occlusion_texture := resource.get_texture(manager, resource.ResourceIdent(v)) or_return
 
-                transfer_texture(occlusion_texture)
+                transfer_texture(occlusion_texture) or_return
                 bind_texture(texture_unit, occlusion_texture.gpu_texture.?) or_return
                 resource.set_uniform(lighting_shader, resource.OCCLUSION_TEXTURE, texture_unit)
                 texture_unit += 1
@@ -858,7 +861,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                 usages += { .NormalTexture }
                 normal_texture := resource.get_texture(manager, resource.ResourceIdent(v)) or_return
 
-                transfer_texture(normal_texture)
+                transfer_texture(normal_texture) or_return
                 bind_texture(texture_unit, normal_texture.gpu_texture.?) or_return
                 resource.set_uniform(lighting_shader, resource.NORMAL_TEXTURE, texture_unit)
                 texture_unit += 1
@@ -868,7 +871,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                     usages += { .ClearcoatTexture }
                     clearcoat := resource.get_texture(manager, v.clearcoat_texture) or_return
 
-                    transfer_texture(clearcoat)
+                    transfer_texture(clearcoat) or_return
                     bind_texture(texture_unit, clearcoat.gpu_texture) or_return
                     resource.set_uniform(lighting_shader, resource.CLEARCOAT_TEXTURE, texture_unit)
                     texture_unit += 1
@@ -878,7 +881,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                     usages += { .ClearcoatRoughnessTexture }
                     clearcoat_roughness := resource.get_texture(manager, v.clearcoat_roughness_texture) or_return
 
-                    transfer_texture(clearcoat_roughness)
+                    transfer_texture(clearcoat_roughness) or_return
                     bind_texture(texture_unit, clearcoat_roughness.gpu_texture) or_return
                     resource.set_uniform(lighting_shader, resource.CLEARCOAT_ROUGHNESS_TEXTURE, texture_unit)
                     texture_unit += 1
@@ -888,7 +891,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                     usages += { .ClearcoatNormalTexture }
                     clearcoat_normal := resource.get_texture(manager, v.clearcoat_normal_texture) or_return
 
-                    transfer_texture(clearcoat_normal)
+                    transfer_texture(clearcoat_normal) or_return
                     bind_texture(texture_unit, clearcoat_normal.gpu_texture) or_return
                     resource.set_uniform(lighting_shader, resource.CLEARCOAT_ROUGHNESS_TEXTURE, texture_unit)
                     texture_unit += 1
@@ -902,7 +905,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                     usages += { .SpecularTexture }
                     specular := resource.get_texture(manager, v.specular_texture) or_return
 
-                    transfer_texture(specular)
+                    transfer_texture(specular) or_return
                     bind_texture(texture_unit, specular.gpu_texture) or_return
                     resource.set_uniform(lighting_shader, resource.SPECULAR_TEXTURE, texture_unit)
                     texture_unit += 1
@@ -912,7 +915,7 @@ bind_material_uniforms :: proc(manager: ^resource.ResourceManager, material: res
                     usages += { .SpecularColourTexture }
                     specular_colour := resource.get_texture(manager, v.specular_colour_texture) or_return
 
-                    transfer_texture(specular_colour)
+                    transfer_texture(specular_colour) or_return
                     bind_texture(texture_unit, specular_colour.gpu_texture) or_return
                     resource.set_uniform(lighting_shader, resource.SPECULAR_COLOUR_TEXTURE, texture_unit)
                     texture_unit += 1

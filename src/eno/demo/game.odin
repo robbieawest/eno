@@ -192,7 +192,6 @@ before_frame :: proc() -> (ok: bool) {
     render.init_render_context(&game.Game.resource_manager, window_res.w, window_res.h) or_return
     render.init_render_pipeline()
 
-
     gbuf_normal_output := render.make_gbuffer_passes(window_res.w, window_res.h, render.GBufferInfo{ .NORMAL, .DEPTH }) or_return
     ssao_colour_output, ssao_bn_output := render.make_ssao_passes(window_res.w, window_res.h, gbuf_normal_output.?) or_return
 

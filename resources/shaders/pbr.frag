@@ -94,7 +94,7 @@ layout(binding = 1) uniform samplerCube prefilterMap;
 layout(binding = 0) uniform sampler2D specularTexture;
 layout(binding = 0) uniform sampler2D specularColourTexture;
 layout(binding = 0) uniform sampler2D SSAOBlur;
-layout(binding = 0) uniform sampler2D SSAOBentNormal;
+layout(binding = 0) uniform sampler2D SSAOBlurredBentNormal;
 
 uniform vec4 baseColourFactor;
 uniform float metallicFactor;
@@ -357,16 +357,20 @@ MetallicRoughness getMetallicRoughness() {
 
 vec3 getNormal(vec2 screenUV) {
     vec3 normal = vec3(1.0);
-    if (checkBitMask(lightingSettings, 3)) {
-        normal = texture(SSAOBentNormal, screenUV).rgb * 2.0 - 1.0;  // View space
+    bool bentNormal = checkBitMask(lightingSettings, 3);
+    if (bentNormal) {
+        normal = texture(SSAOBlurredBentNormal, screenUV).rgb * 2.0 - 1.0;  // View space
         normal = transView * normal;
     }
-    else if (normalTextureSet) {
-        normal = texture(normalTexture, texCoords).rgb * 2.0 - 1.0;
-        normal = TBN * normal;
+    if (normalTextureSet) {
+        vec3 mappedNormal = texture(normalTexture, texCoords).rgb * 2.0 - 1.0;
+        mappedNormal = TBN * mappedNormal;
+        if (bentNormal) normal += mappedNormal;
+        else normal = mappedNormal;
     }
     else normal = geomNormal;
     normal = normalize(normal);
+
 
     if (!gl_FrontFacing) {
         normal = -normal;

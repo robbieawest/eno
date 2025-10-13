@@ -879,3 +879,12 @@ draw_buffers_pass_io :: proc(io: []RenderPassIO, allocator := context.allocator)
     return true
 }
 
+reset_texture_bindings :: proc() {
+    for unit in u32(gl.TEXTURE0)..=u32(gl.TEXTURE31) {
+        gl.ActiveTexture(unit)
+        gl.BindTexture(gl.TEXTURE_2D, 0);
+        gl.BindTexture(gl.TEXTURE_3D, 0);
+        gl.BindTexture(gl.TEXTURE_CUBE_MAP, 0);
+    }
+    gl.ActiveTexture(gl.TEXTURE0)
+}

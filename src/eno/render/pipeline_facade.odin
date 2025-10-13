@@ -222,8 +222,8 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
 
     ssao_bn_output = RenderPassIO {
         ssao_fbo,
-        AttachmentID{ .COLOUR, 1 },
-        "SSAOBentNormal"
+        AttachmentID{ .COLOUR, 3 },
+        "SSAOBlurredBentNormal"
     }
 
     add_render_passes(
@@ -248,7 +248,11 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
                     AttachmentID{ .COLOUR, 0 },
                     "SSAOColour"
                 },
-                ssao_bn_output
+                {
+                    ssao_fbo,
+                    AttachmentID{ .COLOUR, 1 },
+                    "SSAOBentNormal"
+                }
             }
         ) or_return,
         make_render_pass(
@@ -279,16 +283,9 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
                 disable_depth_test=true
             },
             inputs = []RenderPassIO{
-                { ssao_fbo, AttachmentID{ .COLOUR, 1 }, "SSAOBentNormal" },
+                { ssao_fbo, AttachmentID{ .COLOUR, 1 }, "SSAOColour" },
             },
-            outputs = []RenderPassIO {
-                {
-                    ssao_fbo,
-                    AttachmentID{ .COLOUR, 3 },
-                    "SSAOBentNormalBlurred"
-                },
-            }
-
+            outputs = []RenderPassIO { ssao_bn_output }
         ) or_return
     )
 
@@ -442,6 +439,3 @@ generate_ssao_second_pass_frag_shader :: proc(manager: ^resource.ResourceManager
     shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "ssao/ssao_second_pass.frag", .FRAGMENT, allocator) or_return
     return resource.add_shader(manager, shader)
 }
-
-
-
