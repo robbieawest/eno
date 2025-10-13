@@ -157,7 +157,7 @@ make_gbuffer_passes :: proc(w, h: i32, info: GBufferInfo, allocator := context.a
 }
 
 
-make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := context.allocator) -> (ssao_output: RenderPassIO, ok: bool) {
+make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := context.allocator) -> (ssao_colour_output: RenderPassIO, ssao_bn_output: RenderPassIO, ok: bool) {
 
     framebuffer := make_framebuffer(w, h, allocator)
     bind_framebuffer(framebuffer) or_return
@@ -214,10 +214,16 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
     add_framebuffers(framebuffer, allocator=allocator)
 
     ssao_fbo := Context.pipeline.frame_buffers[len(Context.pipeline.frame_buffers) - 1]
-    ssao_output = RenderPassIO {
+    ssao_colour_output = RenderPassIO {
         ssao_fbo,
         AttachmentID{ .COLOUR, 2 },
         "SSAOBlur"
+    }
+
+    ssao_bn_output = RenderPassIO {
+        ssao_fbo,
+        AttachmentID{ .COLOUR, 1 },
+        "SSAOBentNormal"
     }
 
     add_render_passes(
@@ -242,11 +248,7 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
                     AttachmentID{ .COLOUR, 0 },
                     "SSAOColour"
                 },
-                {
-                    ssao_fbo,
-                    AttachmentID{ .COLOUR, 1 },
-                    "SSAOBentNormal"
-                },
+                ssao_bn_output
             }
         ) or_return,
         make_render_pass(
@@ -263,7 +265,7 @@ make_ssao_passes :: proc(w, h: i32, gbuf_output: RenderPassIO, allocator := cont
             inputs = []RenderPassIO{
                   { ssao_fbo, AttachmentID{ type=.COLOUR }, "SSAOColour" },
             },
-            outputs = []RenderPassIO { ssao_output }
+            outputs = []RenderPassIO { ssao_colour_output }
         ) or_return,
         make_render_pass(
             shader_gather = generate_ssao_second_shader_pass,

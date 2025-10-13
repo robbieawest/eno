@@ -72,11 +72,12 @@ PointLight getPointLight(uint index) {
 }
 
 
-in vec3 position;  // Tangent space
-in vec3 geomNormal;  // Tangent space
+in vec3 position;
+in vec3 geomNormal;
 in vec2 texCoords;
-in vec3 cameraPosition;  // Tangent space
+in vec3 cameraPosition;
 in mat3 TBN;
+in mat3 transView;
 out vec4 Colour;
 
 layout(binding = 0) uniform sampler2D baseColourTexture;
@@ -93,6 +94,7 @@ layout(binding = 1) uniform samplerCube prefilterMap;
 layout(binding = 0) uniform sampler2D specularTexture;
 layout(binding = 0) uniform sampler2D specularColourTexture;
 layout(binding = 0) uniform sampler2D SSAOBlur;
+layout(binding = 0) uniform sampler2D SSAOBentNormal;
 
 uniform vec4 baseColourFactor;
 uniform float metallicFactor;
@@ -138,10 +140,6 @@ vec3 KhronosNeutralTonemapping(vec3 colour) {
 
     float g = 1. - 1. / (desaturation * (peak - newPeak) + 1.);
     return mix(colour, newPeak * vec3(1, 1, 1), g);
-}
-
-vec3 convertToTangentSpace(vec3 v) {
-    return TBN * v;
 }
 
 float DistributionGGX(vec3 N, vec3 H, float roughness) {
@@ -244,9 +242,9 @@ vec3 IBLMultiScatterBRDF(vec3 N, vec3 V, vec3 radiance, vec3 irradiance, vec3 al
 
 vec3 IBLAmbientTerm(vec3 N, vec3 V, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat, float specular, vec3 specularColour) {
     const float MAX_REFLECTION_LOD = 4.0;
-    vec3 R = reflect(-V, N);  // Tangent space
-    vec3 RWorld = normalize(transpose(TBN) * R);  // Since tbn is orthogonal it is transitive across the reflect operation
-    vec3 radiance = textureLod(prefilterMap, RWorld, roughness * MAX_REFLECTION_LOD).rgb;
+    vec3 R = reflect(-V, N);  // World space
+    // vec3 RWorld = normalize(transpose(TBN) * R);  // Since tbn is orthogonal it is transitive across the reflect operation *from when R was tangent space
+    vec3 radiance = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
     vec3 irradiance = texture(irradianceMap, N).rgb;
 
     vec2 f_ab = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
@@ -357,10 +355,15 @@ MetallicRoughness getMetallicRoughness() {
     return metallicRoughness;
 }
 
-vec3 getNormal() {
+vec3 getNormal(vec2 screenUV) {
     vec3 normal = vec3(1.0);
-    if (normalTextureSet) {
+    if (checkBitMask(lightingSettings, 3)) {
+        normal = texture(SSAOBentNormal, screenUV).rgb * 2.0 - 1.0;  // View space
+        normal = transView * normal;
+    }
+    else if (normalTextureSet) {
         normal = texture(normalTexture, texCoords).rgb * 2.0 - 1.0;
+        normal = TBN * normal;
     }
     else normal = geomNormal;
     normal = normalize(normal);
@@ -472,21 +475,21 @@ void main() {
     float metallic = metallicRoughness.metallic;
     float roughness = metallicRoughness.roughness;
 
-    vec3 normal = getNormal();
+    vec2 screenUV = getScreenUV();
+    vec3 normal = getNormal(screenUV);
 
     Clearcoat clearcoatResult = getClearcoat(normal);
     float clearcoat = clearcoatResult.clearcoat;
     float clearcoatRoughness = clearcoatResult.clearcoatRoughness;
     vec3 clearcoatNormal = clearcoatResult.clearcoatNormal;
 
-    bool clearcoatActive = clearcoat != 0.0;
+    bool clearcoatActive = bool(clearcoat != 0.0);
 
     vec3 emissive = getEmissive();
     Specular specularTotal = getSpecular();
     float specular = specularTotal.specular;
     vec3 specularColour = specularTotal.specularColour;
 
-    vec2 screenUV = getScreenUV();
     float occlusion = getOcclusion(screenUV);
 
     // Clamp roughnesses, roughness at zero isn't great visually
@@ -514,7 +517,7 @@ void main() {
         uint bufIndex = Lights.numSpotLights * spotLightSize + Lights.numDirectionalLights * directionalLightSize;
         for (uint i = 0; i < Lights.numPointLights; i++) {
             PointLight light = getPointLight(bufIndex);
-            vec3 lightPos = convertToTangentSpace(light.lightInformation.position);
+            vec3 lightPos = light.lightInformation.position;
             vec3 lightDir = normalize(lightPos - position);
             float lightDist = length(lightDir);
 

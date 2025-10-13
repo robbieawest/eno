@@ -142,6 +142,44 @@ load_sponza :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
     return true
 }
 
+load_stupid :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
+    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/maxwell_the_cat_dingus/scene.gltf") or_return
+
+    models := scene_res.models
+
+    for &model, i in models {
+        mod := &model.model
+        // delete(mod.name)
+        mod.name = fmt.aprintf("demo_entity %d", i)
+        model.world_comp.scale = [3]f32{ 0.1, 0.1, 0.1 }
+    }
+
+    for model in models do log.infof("model name: '%s'", model.model.name)
+
+    defer resource.destroy_model_scene_result(scene_res)
+    ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
+    return true
+}
+
+load_ak:: proc(arch: ^ecs.Archetype) -> (ok: bool) {
+    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/rainier_ak_-_3d/scene.gltf") or_return
+
+    models := scene_res.models
+
+    for &model, i in models {
+        mod := &model.model
+        // delete(mod.name)
+        mod.name = fmt.aprintf("demo_entity %d", i)
+        model.world_comp.scale = [3]f32{ 0.1, 0.1, 0.1 }
+    }
+
+    for model in models do log.infof("model name: '%s'", model.model.name)
+
+    defer resource.destroy_model_scene_result(scene_res)
+    ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
+    return true
+}
+
 demo_arch: ^ecs.Archetype
 before_frame :: proc() -> (ok: bool) {
 
@@ -156,7 +194,7 @@ before_frame :: proc() -> (ok: bool) {
 
 
     gbuf_normal_output := render.make_gbuffer_passes(window_res.w, window_res.h, render.GBufferInfo{ .NORMAL, .DEPTH }) or_return
-    ssao_output := render.make_ssao_passes(window_res.w, window_res.h, gbuf_normal_output.?) or_return
+    ssao_colour_output, ssao_bn_output := render.make_ssao_passes(window_res.w, window_res.h, gbuf_normal_output.?) or_return
 
     background_colour := [4]f32{ 1.0, 1.0, 1.0, 1.0 }
     background_colour_factor: f32 = 0.85
@@ -188,7 +226,7 @@ before_frame :: proc() -> (ok: bool) {
                     "OpaqueSingleSidedDepth"
                 }
             },
-            inputs = []render.RenderPassIO{ ssao_output },
+            inputs = []render.RenderPassIO{ ssao_colour_output, ssao_bn_output },
             name = "Opaque Single Sided Pass"
         ) or_return,
     )
@@ -219,7 +257,7 @@ before_frame :: proc() -> (ok: bool) {
                     "OpaqueDoubleSidedDepth"
                 }
             },
-            inputs = []render.RenderPassIO{ ssao_output },
+            inputs = []render.RenderPassIO{ ssao_colour_output, ssao_bn_output },
             name = "Opaque Double Sided Pass"
         ) or_return,
         render.make_render_pass(
@@ -248,7 +286,7 @@ before_frame :: proc() -> (ok: bool) {
                     "TransparentDepth"
                 }
             },
-            inputs = []render.RenderPassIO{ ssao_output },
+            inputs = []render.RenderPassIO{ ssao_colour_output, ssao_bn_output },
             name = "Transparency Pass"
         ) or_return
     )
@@ -352,11 +390,11 @@ demo_ui_element : ui.UIElement : proc() -> (ok: bool) {
     im.Begin("Demo Settings")
     defer im.End()
 
-    @(static) preview_models: []cstring = { "SciFiHelmet", "DamagedHelmet", "Supra", "Clearcoat Test", "Fantasy Sword", "Sponza" }
+    @(static) preview_models: []cstring = { "SciFiHelmet", "DamagedHelmet", "Supra", "Clearcoat Test", "Fantasy Sword", "Sponza", "Stupid", "AK" }
 
     // Must be seperate ? compiler ;//
     @(static) load_model_procs: []load_proc
-    load_model_procs = []load_proc{ load_helmet, load_dhelmet, load_supra, load_clearcoat_test, load_sword, load_sponza }
+    load_model_procs = []load_proc{ load_helmet, load_dhelmet, load_supra, load_clearcoat_test, load_sword, load_sponza, load_stupid, load_ak }
 
     @(static) selected_model_ind := 0
     if (im.BeginCombo("Preview model", preview_models[selected_model_ind])) {

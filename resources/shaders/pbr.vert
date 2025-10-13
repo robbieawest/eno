@@ -20,6 +20,7 @@ out vec3 geomNormal;
 out vec2 texCoords;
 out vec3 cameraPosition;
 out mat3 TBN;
+out mat3 transView;
 
 void main() {
     texCoords = aTexCoords;
@@ -36,12 +37,14 @@ void main() {
     // Orthogonalize tangent to normal
     tangent = normalize(tangent - dot(tangent, geomNormal) * geomNormal);
     vec3 bitangent = cross(geomNormal, tangent) * bitangentSign;
-    TBN = transpose(mat3(tangent, bitangent, geomNormal));
+    TBN = mat3(tangent, bitangent, geomNormal);
 
     // Apply TBN to outgoing values
-    position = TBN * position;
-    cameraPosition = TBN * Camera.position;
-    geomNormal = TBN * geomNormal;
+    // position = TBN * position;
+    // cameraPosition = TBN * Camera.position;
+    // geomNormal = TBN * geomNormal;
+    cameraPosition = Camera.position;
+    transView = transpose(mat3(Camera.m_View));
 
     // TBN will be used to translate light positions to tangent space in fragment shader
     // - this is biting the bullet, sending a fixed buffer of tangent light positions from vertex -> fragment is more complex and the performance benefit is

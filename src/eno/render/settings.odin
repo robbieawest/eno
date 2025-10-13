@@ -30,7 +30,8 @@ DirectLightingSettings :: struct {
 LightingSetting :: enum {
     IBL = 0,
     DIRECT_LIGHTING = 1,
-    SSAO = 2
+    SSAO = 2,
+    BENT_NORMALS = 3
 }
 LightingSettings :: bit_set[LightingSetting; u32]
 LIGHTING_SETTINGS :: "lightingSettings"
@@ -41,7 +42,11 @@ get_lighting_settings :: proc() -> (res: LightingSettings) {
         if env_settings.ibl_settings != nil do res |= { .IBL }
     }
     if GlobalRenderSettings.direct_lighting_settings != nil do res |= { .DIRECT_LIGHTING }
-    if GlobalRenderSettings.ssao_settings != nil do res |= { .SSAO }
+    if GlobalRenderSettings.ssao_settings != nil {
+        res |= { .SSAO }
+        ssao_settings := GlobalRenderSettings.ssao_settings.?
+        if ssao_settings.evaluate_bent_normals do res |= { .BENT_NORMALS }
+    }
     return
 }
 

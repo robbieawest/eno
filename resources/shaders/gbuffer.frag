@@ -20,7 +20,8 @@ in vec3 aTangent;
 
 void main() {
     #ifdef NORMAL_INPUT
-    outNormal = vec4(normalize(gl_FrontFacing ? normal : -normal), 1.0);
+    vec3 posNormal = (normal + 1.0) * 0.5;
+    outNormal = vec4(normalize(gl_FrontFacing ? posNormal: -posNormal), 1.0);
     #endif
     #ifdef POSITION_INPUT
     outPosition = vec4(position, 1.0);

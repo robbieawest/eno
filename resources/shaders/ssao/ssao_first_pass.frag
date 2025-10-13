@@ -40,7 +40,7 @@ vec3 reconstructFragPos(vec2 UV, float depth) {
 void main() {
     float depth = texture(gbDepth, texCoords).r;
     vec3 fragPos = reconstructFragPos(texCoords, depth);
-    vec3 normal = normalize(texture(gbNormal, texCoords).rgb);
+    vec3 normal = normalize(texture(gbNormal, texCoords).rgb * 2.0 - 1.0);
     BentNormal = normal;
 
     vec3 noise = normalize(texture(SSAONoiseTex, texCoords * noiseScale).xyz);
@@ -79,6 +79,7 @@ void main() {
         if (SSAOEvaluateBentNormal) bentNormal += sampleV * unoccluded;
     }
     if (SSAOEvaluateBentNormal) BentNormal = normalize(bentNormal);
+    BentNormal = (BentNormal + 1.0) * 0.5;
 
     Colour = 1.0 - (occlusion / SSAONumSamplesInKernel);
 }
