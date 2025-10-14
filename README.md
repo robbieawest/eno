@@ -59,6 +59,8 @@ Things I'd like to implement if I have the time:
 - Shader introspection and shader defines for more clean render managemnet
 - Pre-render geometry processing for tangent approximations with `mikkt`; an unweld -> `mikkt` tangent generation -> weld process
 - Forward+
+- Animation
+- Scene graph and proper resource ui elements
 - Order independent transparency with integration into SSAO/Bent normals
 
 Far reaching:
