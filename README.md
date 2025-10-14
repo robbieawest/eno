@@ -56,6 +56,7 @@ A list of features detailing what eno currently implements:
   ^ I currently average the normal and the bent normal together getting better results, but it isn't there, need to study up a little bit more
 
 Things I'd like to implement if I have the time:
+- Shader introspection and shader defines for more clean render managemnet
 - Pre-render geometry processing for tangent approximations with `mikkt`; an unweld -> `mikkt` tangent generation -> weld process
 - Forward+
 - Order independent transparency with integration into SSAO/Bent normals
