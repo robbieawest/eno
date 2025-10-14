@@ -355,22 +355,15 @@ MetallicRoughness getMetallicRoughness() {
     return metallicRoughness;
 }
 
-vec3 getNormal(vec2 screenUV) {
-    vec3 normal = vec3(1.0);
-    bool bentNormal = checkBitMask(lightingSettings, 3);
-    if (bentNormal) {
-        normal = texture(SSAOBlurredBentNormal, screenUV).rgb * 2.0 - 1.0;  // View space
-        normal = transView * normal;
-    }
+vec3 getNormal() {
+    vec3 normal;
+
     if (normalTextureSet) {
-        vec3 mappedNormal = texture(normalTexture, texCoords).rgb * 2.0 - 1.0;
-        mappedNormal = TBN * mappedNormal;
-        if (bentNormal) normal += mappedNormal;
-        else normal = mappedNormal;
+        normal = texture(normalTexture, texCoords).rgb * 2.0 - 1.0;
+        normal = TBN * normal;
     }
     else normal = geomNormal;
     normal = normalize(normal);
-
 
     if (!gl_FrontFacing) {
         normal = -normal;
@@ -379,9 +372,26 @@ vec3 getNormal(vec2 screenUV) {
     return normal;
 }
 
-float getOcclusion(vec2 screenUV) {
+// Averages with the usual normal if normal mapping is set
+vec3 getBentNormal(vec2 screenUV, vec3 normal) {
+    vec3 bentNormal = vec3(0.0);
+    if (checkBitMask(lightingSettings, 3)) {
+        bentNormal = texture(SSAOBlurredBentNormal, screenUV).rgb * 2.0 - 1.0;  // View space
+        bentNormal = transView * bentNormal;
+    }
+    if (normalTextureSet) bentNormal += normal;
+    bentNormal = normalize(bentNormal);
+    return bentNormal;
+}
+
+float getOcclusion() {
     float occlusion = 1.0;
     if (occlusionTextureSet) occlusion *= texture(occlusionTexture, texCoords).r;
+    return occlusion;
+}
+
+float getAmbientOcclusion(vec2 screenUV) {
+    float occlusion = 1.0;
     if (checkBitMask(lightingSettings, 2)) occlusion *= texture(SSAOBlur, screenUV).r;
     return occlusion;
 }
@@ -480,7 +490,8 @@ void main() {
     float roughness = metallicRoughness.roughness;
 
     vec2 screenUV = getScreenUV();
-    vec3 normal = getNormal(screenUV);
+    vec3 normal = getNormal();
+    vec3 bentNormal = getBentNormal(screenUV, normal);
 
     Clearcoat clearcoatResult = getClearcoat(normal);
     float clearcoat = clearcoatResult.clearcoat;
@@ -494,7 +505,8 @@ void main() {
     float specular = specularTotal.specular;
     vec3 specularColour = specularTotal.specularColour;
 
-    float occlusion = getOcclusion(screenUV);
+    float occlusion = getOcclusion();
+    float ambientOcclusion = getAmbientOcclusion(screenUV);
 
     // Clamp roughnesses, roughness at zero isn't great visually
     roughness = clamp(roughness, 0.089, 1.0);
@@ -545,9 +557,12 @@ void main() {
 
     vec3 ambient = vec3(0.0);
     vec3 Fc = vec3(0.0);
+    vec3 ambientNormal = normal;
+    if (checkBitMask(lightingSettings, 3)) ambientNormal = bentNormal;
+
     if (checkBitMask(lightingSettings, 0)) {
-        vec3 F = FresnelSchlickRoughness(normal, viewDir, baseFresnelIncidence, roughness);
-        ambient = IBLAmbientTerm(normal, viewDir, F, albedo, roughness, metallic, false, specular, specularColour);
+        vec3 F = FresnelSchlickRoughness(ambientNormal, viewDir, baseFresnelIncidence, roughness);
+        ambient = IBLAmbientTerm(ambientNormal, viewDir, F, albedo, roughness, metallic, false, specular, specularColour);
 
         if (clearcoatActive) {
             // Fresnel at incidence for clearcoat is 0.04/4% at IOR=1.5
@@ -557,7 +572,7 @@ void main() {
         }
     }
 
-    vec3 colour = (ambient + lightOutputted) * occlusion;
+    vec3 colour = (ambient * ambientOcclusion + lightOutputted) * occlusion;
     colour += emissive * (1.0 - clearcoat * Fc);
 
     // HDR
