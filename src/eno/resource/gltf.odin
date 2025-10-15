@@ -126,11 +126,12 @@ extract_node :: proc(
 
     // todo matrix/TRS vectors here are relative to parent.
 
-
+    /*
     if node.has_matrix {
         model_arr := node.matrix_
         model_mat := utils.arr_to_matrix(matrix[4, 4]f32, model_arr)
         world_comp.position, world_comp.scale, world_comp.rotation = utils.decompose_transform(model_mat)
+        cgltf.node_transform_local()
     }
     else {
         if node.has_translation do world_comp.position = node.translation
@@ -138,7 +139,16 @@ extract_node :: proc(
         if node.has_scale do world_comp.scale = node.scale
         else do world_comp.scale = [3]f32{ 1.0, 1.0, 1.0 }
     }
-    if parent_world_comp != nil do world_comp = utils.combine_world_components(parent_world_comp.?, world_comp)
+    */
+    // if parent_world_comp != nil do world_comp = utils.combine_world_components(parent_world_comp.?, world_comp)
+
+
+    transform: matrix[4, 4]f32
+    cgltf.node_transform_world(node, raw_data(&transform))
+    // world_comp.position, world_comp.scale, world_comp.rotation = utils.decompose_transform(transform)
+    world_comp = standards.make_world_component(transformation=transform)
+
+    dbg.log(.INFO, "Extracting gltf node with transform: %#v", world_comp.transformation.?)
 
     if node.mesh != nil {
         model := extract_cgltf_mesh(manager, node.mesh^, gltf_folder_path) or_return
@@ -146,6 +156,7 @@ extract_node :: proc(
         append(&result_dyn, ModelWorldPair{ model, world_comp })
     }
 
+    // Todo add recursion limit
     for child in node.children {
         new_model_pairs := extract_node(manager, child, gltf_folder_path, world_comp, allocator=allocator) or_return
         defer delete(new_model_pairs, allocator=allocator)
@@ -224,6 +235,9 @@ extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh, gltf_fil
     //This is assuming all mesh attributes (aside from indices) have the same count (for each primitive/mesh output)
     meshes := make([dynamic]Mesh, len(mesh.primitives))
 
+    dbg.log(.INFO, "Extracting mesh of name: '%s'", mesh.name)
+    dbg.log(.INFO, "Mesh has n: %d primitives", len(mesh.primitives))
+
     for primitive, i in mesh.primitives {
         mesh_ret := &meshes[i]
 
@@ -231,6 +245,7 @@ extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh, gltf_fil
         if primitive.material != nil {
             mesh_ret.material = eno_material_from_cgltf_material(manager, primitive.material^, gltf_file_location) or_return
         }
+        dbg.log(.INFO, "Loading primitive of type '%v'", primitive.type)
 
         // Construct layout
         layout: VertexLayout

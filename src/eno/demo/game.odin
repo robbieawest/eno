@@ -60,7 +60,7 @@ load_sword :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
 
     for model in models do log.infof("model name: '%s'", model.model.name)
 
-    models[0].model.meshes[0].transpose_transformation = true
+    // models[0].model.meshes[0].transpose_transformation = true
 
     ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
     return true

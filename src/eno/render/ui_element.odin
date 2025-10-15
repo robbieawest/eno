@@ -358,6 +358,7 @@ shader_ui :: proc(shader: ^resource.Shader) -> (ok: bool) {
     return true
 }
 
+// Todo delete?
 resource_manager_ui_element : ui.UIElement : proc() -> (ok: bool) {
     im.Begin("Resource Manager")
     defer im.End()

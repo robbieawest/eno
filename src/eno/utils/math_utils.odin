@@ -2,6 +2,7 @@ package utils
 
 import "core:testing"
 import "core:math/linalg"
+import glm "core:math/linalg/glsl"
 
 @(require_results)
 pow_u32 :: proc(base, exp: u32) -> (res: u32) {
@@ -64,11 +65,12 @@ decompose_transform :: proc(mat: matrix[4, 4]f32) -> (trans: [3]f32, scale: [3]f
         linalg.length([3]f32{ mat[0, 2], mat[1, 2], mat[2, 2] }),
     }
 
-    rot_mat := linalg.matrix3_from_matrix4_f32(mat)
+    mat3x3 := linalg.matrix3_from_matrix4_f32(mat)
 
+    rot_mat: matrix[3, 3]f32
     for i in 0..<3 {  // columns
         for j in 0..<3 { // rows
-            rot_mat[j, i] /= scale[i]
+            rot_mat[j, i] = mat3x3[j, i] / scale[j]
         }
     }
 
