@@ -60,7 +60,7 @@ Things I'd like to implement if I have the time:
 - Pre-render geometry processing for tangent approximations with `mikkt`; an unweld -> `mikkt` tangent generation -> weld process
 - Forward+
 - Animation
-- Scene graph and proper resource ui elements
+- Some better UI elements for scenes/resources
 - Order independent transparency with integration into SSAO/Bent normals
 
 Far reaching:
