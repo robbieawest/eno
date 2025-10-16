@@ -61,7 +61,7 @@ Things I'd like to implement if I have the time:
 - Forward+
 - Animation
 - Some better UI elements for scenes/resources
-- Order independent transparency with integration into SSAO/Bent normals
+- Order independent transparency
 
 Far reaching:
 - Some proper global illumination
