@@ -240,12 +240,12 @@ vec3 IBLMultiScatterBRDF(vec3 N, vec3 V, vec3 radiance, vec3 irradiance, vec3 al
 }
 
 
-vec3 IBLAmbientTerm(vec3 N, vec3 V, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat, float specular, vec3 specularColour) {
+vec3 IBLAmbientTerm(vec3 N, vec3 AN, vec3 V, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat, float specular, vec3 specularColour) {
     const float MAX_REFLECTION_LOD = 4.0;
-    vec3 R = reflect(-V, N);  // World space
+    vec3 R = reflect(-V, AN);  // World space
     // vec3 RWorld = normalize(transpose(TBN) * R);  // Since tbn is orthogonal it is transitive across the reflect operation *from when R was tangent space
     vec3 radiance = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
-    vec3 irradiance = texture(irradianceMap, N).rgb;
+    vec3 irradiance = texture(irradianceMap, AN).rgb;
 
     vec2 f_ab = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
 
@@ -561,14 +561,14 @@ void main() {
     if (checkBitMask(lightingSettings, 3)) ambientNormal = bentNormal;
 
     if (checkBitMask(lightingSettings, 0)) {
-        vec3 F = FresnelSchlickRoughness(ambientNormal, viewDir, baseFresnelIncidence, roughness);
-        ambient = IBLAmbientTerm(ambientNormal, viewDir, F, albedo, roughness, metallic, false, specular, specularColour);
+        vec3 F = FresnelSchlickRoughness(normal, viewDir, baseFresnelIncidence, roughness);
+        ambient = IBLAmbientTerm(normal, ambientNormal, viewDir, F, albedo, roughness, metallic, false, specular, specularColour);
 
         if (clearcoatActive) {
             // Fresnel at incidence for clearcoat is 0.04/4% at IOR=1.5
             Fc = FresnelSchlickRoughness(clearcoatNormal, viewDir, vec3(0.04), clearcoatRoughness);
             ambient *= (1.0 - Fc);
-            ambient += IBLAmbientTerm(clearcoatNormal, viewDir, Fc, vec3(0.0), clearcoatRoughness, 0.0, true, specular, specularColour);
+            ambient += IBLAmbientTerm(clearcoatNormal, clearcoatNormal, viewDir, Fc, vec3(0.0), clearcoatRoughness, 0.0, true, specular, specularColour);
         }
     }
 

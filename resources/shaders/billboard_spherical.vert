@@ -14,6 +14,7 @@ layout(location = 0) in vec3 aPosition;
 uniform mat4 m_Model;
 out vec2 texCoords;
 out mat3 TBN;
+out mat3 transView;
 out vec3 position;
 out vec3 cameraPosition;
 out vec3 geomNormal;
@@ -49,4 +50,6 @@ void main() {
     // \/ Tangent space
     position = TBN * position;
     cameraPosition = TBN * Camera.position;
+
+    transView = transpose(mat3(Camera.m_View));
 }

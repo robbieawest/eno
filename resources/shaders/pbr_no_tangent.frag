@@ -76,6 +76,7 @@ in vec3 position;
 in vec3 geomNormal;
 in vec2 texCoords;
 in vec3 cameraPosition;
+in mat3 transView;
 out vec4 Colour;
 
 layout(binding = 0) uniform sampler2D baseColourTexture;
@@ -92,6 +93,7 @@ layout(binding = 1) uniform samplerCube prefilterMap;
 layout(binding = 0) uniform sampler2D specularTexture;
 layout(binding = 0) uniform sampler2D specularColourTexture;
 layout(binding = 0) uniform sampler2D SSAOBlur;
+layout(binding = 0) uniform sampler2D SSAOBlurredBentNormal;
 
 uniform vec4 baseColourFactor;
 uniform float metallicFactor;
@@ -248,9 +250,9 @@ vec3 IBLMultiScatterBRDF(vec3 N, vec3 V, vec3 radiance, vec3 irradiance, vec3 al
     return specularContrib + diffuse;
 }
 
-vec3 IBLAmbientTerm(vec3 N, vec3 V, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat, float specular, vec3 specularColour) {
+vec3 IBLAmbientTerm(vec3 N, vec3 AN, vec3 V, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat, float specular, vec3 specularColour) {
     const float MAX_REFLECTION_LOD = 4.0;
-    vec3 R = reflect(-V, N);  // World space
+    vec3 R = reflect(-V, AN);  // World space
     vec3 radiance = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
     vec3 irradiance = texture(irradianceMap, N).rgb;
 
@@ -359,6 +361,18 @@ MetallicRoughness getMetallicRoughness() {
     return metallicRoughness;
 }
 
+// Averages with the usual normal if normal mapping is set
+vec3 getBentNormal(vec2 screenUV, vec3 normal) {
+    vec3 bentNormal = vec3(0.0);
+    if (checkBitMask(lightingSettings, 3)) {
+        bentNormal = texture(SSAOBlurredBentNormal, screenUV).rgb * 2.0 - 1.0;  // View space
+        bentNormal = transView * bentNormal;
+    }
+    if (normalTextureSet) bentNormal += normal;
+    bentNormal = normalize(bentNormal);
+    return bentNormal;
+}
+
 vec3 getNormal(const bool worldSpace) {
     vec3 normal = vec3(1.0);
     if (normalTextureSet) {
@@ -375,12 +389,18 @@ vec3 getNormal(const bool worldSpace) {
     return normal;
 }
 
-float getOcclusion(vec2 screenUV) {
+float getOcclusion() {
     float occlusion = 1.0;
     if (occlusionTextureSet) occlusion *= texture(occlusionTexture, texCoords).r;
+    return occlusion;
+}
+
+float getAmbientOcclusion(vec2 screenUV) {
+    float occlusion = 1.0;
     if (checkBitMask(lightingSettings, 2)) occlusion *= texture(SSAOBlur, screenUV).r;
     return occlusion;
 }
+
 
 vec2 getScreenUV() {
     return gl_FragCoord.xy / ScreenOutputResolution.xy;
@@ -478,6 +498,8 @@ void main() {
     float roughness = metallicRoughness.roughness;
 
     vec3 normal = getNormal(true);
+    vec2 screenUV = getScreenUV();
+    vec3 bentNormal = getBentNormal(screenUV, normal);
 
     Clearcoat clearcoatResult = getClearcoat(normal, true);
     float clearcoat = clearcoatResult.clearcoat;
@@ -491,8 +513,8 @@ void main() {
     float specular = specularTotal.specular;
     vec3 specularColour = specularTotal.specularColour;
 
-    vec2 screenUV = getScreenUV();
-    float occlusion = getOcclusion(screenUV);
+    float occlusion = getOcclusion();
+    float ambientOcclusion = getAmbientOcclusion(screenUV);
 
     // Clamp roughnesses, roughness at zero isn't great visually
     roughness = clamp(roughness, 0.089, 1.0);
@@ -544,20 +566,24 @@ void main() {
 
     vec3 ambient = vec3(0.0);
     vec3 Fc = vec3(0.0);
+    vec3 ambientNormal = normal;
+    if (checkBitMask(lightingSettings, 3)) ambientNormal = bentNormal;
+
     if (checkBitMask(lightingSettings, 0)) {
         vec3 F = FresnelSchlickRoughness(normal, viewDir, baseFresnelIncidence, roughness);
-        ambient = IBLAmbientTerm(normal, viewDir, F, albedo, roughness, metallic, false, specular, specularColour);
+        ambient = IBLAmbientTerm(normal, ambientNormal, viewDir, F, albedo, roughness, metallic, false, specular, specularColour);
 
         if (clearcoatActive) {
             // Fresnel at incidence for clearcoat is 0.04/4% at IOR=1.5
             Fc = FresnelSchlickRoughness(clearcoatNormal, viewDir, vec3(0.04), clearcoatRoughness);
             ambient *= (1.0 - Fc);
-            ambient += IBLAmbientTerm(clearcoatNormal, viewDir, Fc, vec3(0.0), clearcoatRoughness, 0.0, true, specular, specularColour);
+            ambient += IBLAmbientTerm(clearcoatNormal, clearcoatNormal, viewDir, Fc, vec3(0.0), clearcoatRoughness, 0.0, true, specular, specularColour);
         }
     }
 
-    vec3 colour = (ambient + lightOutputted) * occlusion;
+    vec3 colour = (ambient * ambientOcclusion + lightOutputted) * occlusion;
     colour += emissive * (1.0 - clearcoat * Fc);
+
 
     // HDR
     colour = KhronosNeutralTonemapping(colour);

@@ -20,9 +20,11 @@ scene_ui_element : ui.UIElement : proc() -> (ok: bool) {
     im.SeparatorText("Archetypes")
 
     // Uses reflection
+    /*
     for archetype in scene.archetypes {
         archetype.
     }
+    */
 
 
     return true

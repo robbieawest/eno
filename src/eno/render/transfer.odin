@@ -472,7 +472,7 @@ transfer_buffer_data_of_target :: proc(target: u32, data: rawptr, #any_int data_
 
 
 // Compiles and links shaders in program
-transfer_shader_program :: proc(manager: ^resource.ResourceManager, program: ^resource.ShaderProgram) -> (ok: bool) {
+transfer_shader_program :: proc(manager: ^resource.ResourceManager, program: ^resource.ShaderProgram, loc := #caller_location) -> (ok: bool) {
     if program.id != nil do return true
 
     dbg.log(dbg.LogLevel.INFO, "Transferring shader program")
@@ -488,8 +488,9 @@ transfer_shader_program :: proc(manager: ^resource.ResourceManager, program: ^re
         i += 1
     }
 
-    program.id = gl.create_and_link_program(shader_ids[:]) or_return
-    return true
+    program.id, ok = gl.create_and_link_program(shader_ids[:])
+    if !ok do dbg.log(.ERROR, "Failed to create/link program", loc=loc)
+    return
 }
 
 

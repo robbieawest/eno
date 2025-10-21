@@ -18,6 +18,7 @@ out vec3 position;
 out vec3 geomNormal;
 out vec2 texCoords;
 out vec3 cameraPosition;
+out mat3 transView;
 
 void main() {
     // All in world space
@@ -29,4 +30,5 @@ void main() {
     geomNormal = normalize(m_Normal * aNormal);
 
     cameraPosition = Camera.position;
+    transView = transpose(mat3(Camera.m_View));
 }

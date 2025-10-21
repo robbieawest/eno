@@ -15,6 +15,7 @@ uniform mat4 m_Model;
 uniform mat3 m_Normal;
 out vec2 texCoords;
 out mat3 TBN;
+out mat3 transView;
 out vec3 position;
 out vec3 cameraPosition;
 out vec3 geomNormal;
@@ -47,4 +48,6 @@ void main() {
     position = TBN * position;
     cameraPosition = TBN * Camera.position;
     geomNormal = TBN * normal;
+
+    transView = transpose(mat3(Camera.m_View));
 }
