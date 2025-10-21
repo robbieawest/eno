@@ -49,11 +49,10 @@ A list of features detailing what eno currently implements:
 - OpenGL renderer backend ( `render` package )
 - PBR workflow supporting normal mapping, all GLTF standard PBR materials, and the KHR_Clearcoat and KHR_Specular extensions.
 - Central resource manager with hashing and reference counting to share/store shaders, material permutations, vertex layout permuations etc. ( `resource` package )
-- Liberal render pass interface with a general `render` procedure
+- Liberal render pass interface with a general `render` handler.
 - Image based indirect lighting via environment cubemap, precalculated irradiance, prefilter and brdf lut.
 - SSAO
-- Bent normals - WIP as I am attempting to bridge the detail from the normal map to the geometry based bent normals. Currently the bent normals do their job of reducing specular leakage, but sacrifice on some small grazing specular highlights given only by the normal map.
-  ^ I currently average the normal and the bent normal together getting better results, but it isn't there, need to study up a little bit more
+- Bent normals - WIP, current implemention has issues of lack of small-surface normal detail and typical SSAO artifacts being exacerbated in certain models.
 
 Things I'd like to implement if I have the time:
 - Shader introspection and shader defines for more clean render managemnet
