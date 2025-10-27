@@ -21,7 +21,7 @@ Wheel with no AO           |  Wheel with SSAO + Bent Normals
 ## Building
 
 #### Prerequisites
-- `odin` programming language is installed, the current tested release is `dev-2025-04`.
+- `odin` programming language is installed, the current tested release is `dev-2025-09:42c2cb89b`.
 - `SDL2` is installed.
 - `OpenGL` is installed.
 
@@ -48,9 +48,8 @@ Usage: runeno.sh [
     -p (build subpackage instead of the whole of eno, example: ./runeno.sh -p ecs)
     ]
 ```
-Permissions may have to be updated before running the build script.
 
-* You may need to add SDL2.dll to `bin/`, you can find this in `{odin_dir}/vendor/sdl2`.
+* You may need to add SDL2.dll to `bin/`, you can find this in `{odin_dir}/vendor/sdl2` after running `make` in that folder.
 
 ## Features and scope
 A list of features detailing what eno currently implements:
@@ -66,7 +65,7 @@ A list of features detailing what eno currently implements:
 - Liberal render pass interface with a general `render` handler.
 - Image based indirect lighting via environment cubemap, precalculated irradiance, prefilter and brdf lut.
 - SSAO
-- Bent normals - WIP, current implemention has issues of lack of small-surface normal detail and typical SSAO artifacts being exacerbated in certain models.
+- Bent normals - WIP, current implemention has issues of lack of small-surface normal detail and typical SSAO artifacts being exacerbated in certain models. Addition of sample-variance magnitude for the normals based on the bent cone (Klehm, Oliver et all (2011) Bent Normals and Cones in Screen-space) would help as well
 
 Things I'd like to implement if I have the time:
 - Shader introspection and shader defines for more clean render managemnet
