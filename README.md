@@ -12,6 +12,9 @@ Supra with clearcoat, specular extensions            |  Clearcoat test
 :-------------------------:|:-------------------------:
 <img src="https://github.com/robbieawest/eno/blob/main/demo-images/supra_park_stage.png" alt="" width="722" height="540">  |  <img src="https://github.com/robbieawest/eno/blob/main/demo-images/clearcoat_test.png" alt="" width="722" height="540">
 
+Wheel with no AO           |  Wheel with SSAO + Bent Normals
+:-------------------------:|:-------------------------:
+<img src="https://github.com/robbieawest/eno/blob/main/demo-images/wheel_no_ao.png" alt="" width="722" height="540">  |  <img src="https://github.com/robbieawest/eno/blob/main/demo-images/wheel_with_bn_ao.png" alt="" width="722" height="540">
 
 
 
