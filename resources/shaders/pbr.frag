@@ -477,12 +477,17 @@ Specular getSpecular() {
 }
 
 void main() {
+    bool iblEnabled = checkBitMask(lightingSettings, 0);
+    bool directLightingEnabled = checkBitMask(lightingSettings, 1);
+    bool bentNormalsEnabled = checkBitMask(lightingSettings, 3);
+
     vec4 baseColour = getBaseColour();
     if (enableAlphaCutoff && baseColour.a < alphaCutoff) discard;
-    if (unlit) {
+    if (unlit || !(iblEnabled || directLightingEnabled)) {
         Colour = baseColour;
         return;
     }
+
     vec3 albedo = baseColour.rgb;
 
     MetallicRoughness metallicRoughness = getMetallicRoughness();
@@ -527,7 +532,7 @@ void main() {
     uint spotLightSize = 16;
     uint directionalLightSize = 12;
     uint pointLightSize = 8;
-    if (checkBitMask(lightingSettings, 1)) {
+    if (directLightingEnabled) {
 
         // Calculate for point lights
         uint bufIndex = Lights.numSpotLights * spotLightSize + Lights.numDirectionalLights * directionalLightSize;
@@ -558,9 +563,9 @@ void main() {
     vec3 ambient = vec3(0.0);
     vec3 Fc = vec3(0.0);
     vec3 ambientNormal = normal;
-    if (checkBitMask(lightingSettings, 3)) ambientNormal = bentNormal;
+    if (bentNormalsEnabled) ambientNormal = bentNormal;
 
-    if (checkBitMask(lightingSettings, 0)) {
+    if (iblEnabled) {
         vec3 F = FresnelSchlickRoughness(normal, viewDir, baseFresnelIncidence, roughness);
         ambient = IBLAmbientTerm(normal, ambientNormal, viewDir, F, albedo, roughness, metallic, false, specular, specularColour);
 

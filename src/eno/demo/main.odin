@@ -14,7 +14,7 @@ main :: proc() {
 
     log.info("Starting Demo")
 
-    window_target, win_ok := win.initialize_window(900, 900, "eno engine demo")
+    window_target, win_ok := win.initialize_window(1440, 1080, "eno engine demo")
     if !win_ok do return
     // win.set_fullscreen(window_target)
     win.set_mouse_raw_input(true)

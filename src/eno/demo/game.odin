@@ -10,7 +10,6 @@ import "../ui"
 import im "../../../libs/dear-imgui/"
 
 import "core:fmt"
-import "core:strings"
 import "core:log"
 import glm "core:math/linalg/glsl"
 import render "../render"
@@ -30,13 +29,12 @@ every_frame :: proc() -> (ok: bool) {
     return
 }
 
-load_supra :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
-    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/Supra/scene.gltf") or_return
+load_model :: proc(arch: ^ecs.Archetype, path: string) -> (ok: bool) {
+    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, path) or_return
     models := scene_res.models
 
     for &model, i in models {
         mod := &model.model
-        // delete(mod.name)
         mod.name = fmt.aprintf("demo_entity %d", i)
     }
 
@@ -45,139 +43,26 @@ load_supra :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
     defer resource.destroy_model_scene_result(scene_res)
     ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
     return true
+}
+
+load_supra :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
+    return load_model(arch, "./resources/models/Supra/scene.gltf")
 }
 
 load_sword :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
-    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/gradient_fantasy_sword/scene.gltf") or_return
-    defer resource.destroy_model_scene_result(scene_res)
-    models := scene_res.models
-
-    for &model, i in models {
-        mod := &model.model
-        // delete(mod.name)
-        mod.name = fmt.aprintf("demo_entity %d", i)
-    }
-
-    for model in models do log.infof("model name: '%s'", model.model.name)
-
-    // models[0].model.meshes[0].transpose_transformation = true
-
-    ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
-    return true
+    return load_model(arch, "./resources/models/gradient_fantasy_sword/scene.gltf")
 }
 
 load_clearcoat_test :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
-    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/CompareClearcoat/glTF/CompareClearcoat.gltf") or_return
-    models := scene_res.models
-
-    for &model, i in models {
-        mod := &model.model
-        // delete(mod.name)
-        mod.name = fmt.aprintf("demo_entity %d", i)
-    }
-
-    for model in models do log.infof("model name: '%s'", model.model.name)
-
-    defer resource.destroy_model_scene_result(scene_res)
-    ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
-    return true
+    return load_model(arch, "./resources/models/CompareClearcoat/glTF/CompareClearcoat.gltf")
 }
 
 load_helmet :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
-    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf") or_return
-
-    models := scene_res.models
-
-    // Second helmet != preview entity so it will persist always
-    second_helmet := models[0]
-    second_helmet.world_comp = standards.make_world_component(position=glm.vec3{ 3.0, 0.0, 3.0 })
-    append(&models, second_helmet)
-
-    for &model, i in models {
-        mod := &model.model
-       // if len(mod.name) != 0 do delete(mod.name)
-        mod.name = fmt.aprintf("demo_entity %d", i)
-    }
-
-    for model in models do log.infof("model name: '%s'", model.model.name)
-
-    defer resource.destroy_model_scene_result(scene_res)
-    ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
-    return true
+    return load_model(arch, "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf")
 }
 
 load_dhelmet :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
-    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/DamagedHelmet/glTF/DamagedHelmet.gltf") or_return
-
-    models := scene_res.models
-
-    for &model, i in models {
-        mod := &model.model
-        // delete(mod.name)
-        mod.name = fmt.aprintf("demo_entity %d", i)
-    }
-
-    for model in models do log.infof("model name: '%s'", model.model.name)
-
-    defer resource.destroy_model_scene_result(scene_res)
-    ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
-    return true
-}
-
-load_sponza :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
-    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "../glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf") or_return
-
-    models := scene_res.models
-
-    for &model, i in models {
-        mod := &model.model
-        // delete(mod.name)
-        mod.name = fmt.aprintf("demo_entity %d", i)
-    }
-
-    for model in models do log.infof("model name: '%s'", model.model.name)
-
-    defer resource.destroy_model_scene_result(scene_res)
-    ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
-    return true
-}
-
-load_stupid :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
-    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/maxwell_the_cat_dingus/scene.gltf") or_return
-
-    models := scene_res.models
-
-    for &model, i in models {
-        mod := &model.model
-        // delete(mod.name)
-        mod.name = fmt.aprintf("demo_entity %d", i)
-        model.world_comp.scale = [3]f32{ 0.1, 0.1, 0.1 }
-    }
-
-    for model in models do log.infof("model name: '%s'", model.model.name)
-
-    defer resource.destroy_model_scene_result(scene_res)
-    ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
-    return true
-}
-
-load_ak:: proc(arch: ^ecs.Archetype) -> (ok: bool) {
-    scene_res: resource.ModelSceneResult = resource.extract_gltf_scene(&game.Game.resource_manager, "./resources/models/rainier_ak_-_3d/scene.gltf") or_return
-
-    models := scene_res.models
-
-    for &model, i in models {
-        mod := &model.model
-        // delete(mod.name)
-        mod.name = fmt.aprintf("demo_entity %d", i)
-        model.world_comp.scale = [3]f32{ 0.1, 0.1, 0.1 }
-    }
-
-    for model in models do log.infof("model name: '%s'", model.model.name)
-
-    defer resource.destroy_model_scene_result(scene_res)
-    ecs.add_models_to_arch(game.Game.scene, arch, ..models[:]) or_return
-    return true
+    return load_model(arch, "./resources/models/DamagedHelmet/glTF/DamagedHelmet.gltf")
 }
 
 demo_arch: ^ecs.Archetype
@@ -333,7 +218,6 @@ before_frame :: proc() -> (ok: bool) {
         )
     }
 
-
     game.add_event_hooks(
         game.HOOK_MOUSE_MOTION(),
         game.HOOK_CLOSE_WINDOW(),
@@ -353,7 +237,7 @@ before_frame :: proc() -> (ok: bool) {
     return true
 }
 
-
+// Example procedure you could use to query entities and modify results
 set_light_position :: proc() -> (ok: bool) {
     isVisibleQueryData := true
     query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
@@ -387,11 +271,10 @@ demo_ui_element : ui.UIElement : proc() -> (ok: bool) {
     im.Begin("Demo Settings")
     defer im.End()
 
-    @(static) preview_models: []cstring = { "SciFiHelmet", "DamagedHelmet", "Supra", "Clearcoat Test", "Fantasy Sword", "Sponza", "Stupid", "AK" }
+    @(static) preview_models: []cstring = { "SciFiHelmet", "DamagedHelmet", "Supra", "Clearcoat Test", "Fantasy Sword" }
 
-    // Must be seperate ? compiler ;//
     @(static) load_model_procs: []load_proc
-    load_model_procs = []load_proc{ load_helmet, load_dhelmet, load_supra, load_clearcoat_test, load_sword, load_sponza, load_stupid, load_ak }
+    load_model_procs = []load_proc{ load_helmet, load_dhelmet, load_supra, load_clearcoat_test, load_sword }
 
     @(static) selected_model_ind := 0
     if (im.BeginCombo("Preview model", preview_models[selected_model_ind])) {
