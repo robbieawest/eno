@@ -4,6 +4,17 @@ game engine WIP written in odin
 Focuses on providing a simple and relatively powerful game engine interface for programmers to interact with.
 Attempts to be interactable and extendible in every stage.
 
+Helmet with IBL, AO + bent normals            |  2
+:-------------------------:|:-------------------------:
+<img src="https://github.com/robbieawest/eno/blob/main/demo-images/helmet_golden_bay.png" alt="" width="722" height="540">  |  <img src="https://github.com/robbieawest/eno/blob/main/demo-images/helmet_park_stage.png" alt="" width="722" height="540">
+
+Supra with clearcoat, specular extensions            |  Clearcoat test
+:-------------------------:|:-------------------------:
+<img src="https://github.com/robbieawest/eno/blob/main/demo-images/supra_park_stage.png" alt="" width="722" height="540">  |  <img src="https://github.com/robbieawest/eno/blob/main/demo-images/clearcoat_test.png" alt="" width="722" height="540">
+
+
+
+
 ## Building
 
 #### Prerequisites
