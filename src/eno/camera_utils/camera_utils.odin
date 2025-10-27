@@ -7,7 +7,7 @@ import "../resource"
 
 import "core:fmt"
 
-// Utilities for cameras placed elsewhere from camera package, due to circular dependency issues
+// Utilities for cameras placed elsewhere from camera package, due to circular dependency issues. Realistically it needs to be thought through a little better
 
 
 init_camera :: proc(

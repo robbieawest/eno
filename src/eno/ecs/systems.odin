@@ -7,7 +7,6 @@ import "../standards"
 
 import "core:strings"
 import "core:mem"
-import "core:testing"
 import "core:log"
 
 SceneQuery :: union {

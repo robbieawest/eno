@@ -315,7 +315,7 @@ archetype_remove_entities :: proc(archetype: ^Archetype, entities: ..string, con
         }
     }
     else {
-        // Todo true deletion
+        // Todo
     }
 
     return true
