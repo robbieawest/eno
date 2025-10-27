@@ -3,14 +3,12 @@ package render
 import im "../../../libs/dear-imgui/"
 
 import "../ui"
-import utils "../utils"
 import dbg "../debug"
+import "../utils"
 import "../resource"
 
 import "core:strings"
 import slice "core:slice"
-import "core:strconv"
-import "base:intrinsics"
 import "core:fmt"
 
 UIRenderBuffer :: enum {
@@ -23,7 +21,6 @@ UIRenderBuffer :: enum {
     SSAO_BIAS
 }
 
-// Not declaring as constant because taking pointer of Buffers is needed for slice.enumerated_array
 Buffers := [UIRenderBuffer]string {
     .ENV_FACE_SIZE = "##env_face_size",
     .ENV_TEX_URI = "##env_tex_uri",
@@ -43,10 +40,8 @@ load_bufs :: proc() -> (ok: bool) {
     buffer_inits := make([dynamic]ui.BufferInit, allocator=Context.allocator)
     defer delete(buffer_inits)
 
-    env_settings, env_enabled := GlobalRenderSettings.unapplied_environment_settings.?
-    if env_enabled {
-        ibl_settings, ibl_enabled := env_settings.ibl_settings.?
-
+    if GlobalRenderSettings.unapplied_environment_settings != nil {
+        env_settings := &GlobalRenderSettings.unapplied_environment_settings.(EnvironmentSettings)
 
         append_elems(&buffer_inits, ..[]ui.BufferInit{
             {
@@ -59,7 +54,10 @@ load_bufs :: proc() -> (ok: bool) {
             }
         })
 
-        if ibl_enabled {
+        if env_settings.ibl_settings != nil {
+            ibl_settings := &env_settings.ibl_settings.(IBLSettings)
+            dbg.log(.INFO, "Ibl settings: %#v", ibl_settings)
+
             append_elems(&buffer_inits, ..[]ui.BufferInit{
                 {
                     label = Buffers[.BRDF_LUT_SIZE],
@@ -77,8 +75,8 @@ load_bufs :: proc() -> (ok: bool) {
         }
     }
 
-    ssao_settings, ssao_enabled := GlobalRenderSettings.ssao_settings.?
-    if ssao_enabled {
+    if GlobalRenderSettings.ssao_settings != nil {
+        ssao_settings := &GlobalRenderSettings.ssao_settings.(SSAOSettings)
         append_elems(&buffer_inits, ..[]ui.BufferInit{
             {
                 label = Buffers[.SSAO_SAMPLE_RADIUS],
@@ -91,7 +89,7 @@ load_bufs :: proc() -> (ok: bool) {
         })
     }
 
-    if len(buffer_inits) != 0 do ui.load_buffers(..buffer_inits[:])
+    if len(buffer_inits) != 0 do ui.load_buffers(..buffer_inits[:]) or_return
 
     return true
 }
@@ -134,6 +132,7 @@ render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
                         env_settings.ibl_settings = make_ibl_settings()
                         // set_environment_settings(env_settings^)
                         apply_environment_settings(Context.manager, Context.allocator) or_return
+                        dbg.log(.INFO, "Env settings: %#v", env_settings)
                         load_bufs() or_return
                         return true
                     }
@@ -276,11 +275,6 @@ render_pipeline_ui_element : ui.UIElement : proc() -> (ok: bool) {
         }
     }
 
-    if im.TreeNode("Render Passes") {
-        defer im.TreePop()
-
-    }
-
     return true
 }
 
@@ -354,14 +348,6 @@ shader_ui :: proc(shader: ^resource.Shader) -> (ok: bool) {
         defer delete(source_cstr)
         im.Text("%s", source_cstr)
     }
-
-    return true
-}
-
-// Todo delete?
-resource_manager_ui_element : ui.UIElement : proc() -> (ok: bool) {
-    im.Begin("Resource Manager")
-    defer im.End()
 
     return true
 }

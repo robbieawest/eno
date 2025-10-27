@@ -203,9 +203,9 @@ load_buffers :: proc(buffer_inits: ..BufferInit) -> (ok: bool) {
         limit := buffer_init.limit
         byte_buf: []byte
         switch buffer_init.val.id {
-            case int, i32:
+            case i32:
                 limit = limit == 0 ? DEFAULT_NUMERIC_CHAR_LIMIT : limit
-                ptr := transmute(^int)(buffer_init.val.data)
+                ptr := cast(^i32)(buffer_init.val.data)
                 byte_buf = int_to_buf(ptr^, limit, ctx.allocator) or_return
             case string:
                 limit = limit == 0 ? DEFAULT_TEXT_CHAR_LIMIT : limit

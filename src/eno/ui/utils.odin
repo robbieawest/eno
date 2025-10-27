@@ -4,12 +4,11 @@ import dbg "../debug"
 
 import "core:fmt"
 import "core:mem"
-import "core:strconv"
 import "core:strings"
 import utils "../utils"
 
 int_to_buf :: proc(#any_int num: int, #any_int lim: int, allocator: mem.Allocator, loc := #caller_location) -> (byte_buf: []byte, ok: bool) {
-    str := fmt.caprintf("%d", num, allocator=allocator)
+    str := fmt.caprintf("%i", num, allocator=allocator)
     if len(str) > lim {
         dbg.log(.ERROR, "Integer needs to many characters for ui buffer: '%s'", str, loc=loc)
         return

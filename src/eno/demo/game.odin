@@ -343,13 +343,11 @@ before_frame :: proc() -> (ok: bool) {
 
     render.populate_all_shaders(game.Game.scene) or_return
 
-    // render.make_image_environment(standards.TEXTURE_RESOURCE_PATH + "park_music_stage_4k.hdr") or_return
-
     // Use if you have pre render passes
     // render.pre_render(manager, game_data.render_pipeline, game.Game.scene) or_return
 
-    ui.add_ui_elements(render.render_settings_ui_element, render.render_pipeline_ui_element, render.shader_store_ui_element, render.resource_manager_ui_element, demo_ui_element) or_return
-    ui.show_imgui_demo_window(true) or_return
+    ui.add_ui_elements(render.render_settings_ui_element, render.render_pipeline_ui_element, render.shader_store_ui_element, demo_ui_element) or_return
+    ui.show_imgui_demo_window(false) or_return
 
 
     return true
