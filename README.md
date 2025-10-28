@@ -22,17 +22,17 @@ Wheel with no AO           |  Wheel with SSAO + Bent Normals
 
 #### Prerequisites
 - `odin` programming language is installed, the current tested release is `dev-2025-09:42c2cb89b`.
-- `SDL2` is installed.
-- `OpenGL` is installed.
+- A modern `OpenGL` version is installed (at least 4.3).
 
 If you wish to build eno, you can do:
 
-1. Build directly using `odin`
+1. Run the demo directly using `odin`
 ```
-odin build ./src/eno -out:bin/eno-build
+odin build ./src/eno/demo -out:bin/eno-build
 ./bin/eno-build
 ```
 , swapping out `build` for `run` if you wish to run the program immediately.
+
 
 2. Use the build script `runeno.sh`.
 
@@ -49,7 +49,7 @@ Usage: runeno.sh [
     ]
 ```
 
-* You may need to add SDL2.dll to `bin/`, you can find this in `{odin_dir}/vendor/sdl2` after running `make` in that folder.
+`runeno.sh -r -p demo` will run the demo. I've not yet added functionality for building as a library
 
 ## Features and scope
 A list of features detailing what eno currently implements:
@@ -72,7 +72,7 @@ Things I'd like to implement if I have the time:
 - Pre-render geometry processing for tangent approximations with `mikkt`; an unweld -> `mikkt` tangent generation -> weld process
 - Forward+
 - Animation
-- Some better UI elements for scenes/resources
+- Some better UI elements for scenes/resources that a typical game engine would likely have
 - Order independent transparency
 
 Far reaching:
