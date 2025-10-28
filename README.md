@@ -56,7 +56,7 @@ A list of features detailing what eno currently implements:
 
 - Windowing using SDL2 ( `window` package )
 - Archetypal Entity Component System with a powerful query interface where entity component data is stored tighly packed in a cache-efficient manner ( `ecs` package )
-- GLTF model/scene loading with full PBR material support ( `resource` package -> `gltf.odin` )
+- GLTF model/scene loading with PBR material support ( `resource` package -> `gltf.odin` ). There is an issue with loading certain models which I haven't gotten around to fixing yet. 
 - Dynamic shader source interface ( `shader` package )
 - Controls using a centralized hook structure ( `control` package )
 - OpenGL renderer backend ( `render` package )
