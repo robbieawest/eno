@@ -80,4 +80,4 @@ Far reaching:
 - Vulkan backend
 - MoltenVK for Mac
 
-There are current issues with running on certain systems which I am in the process of fixing.
+There are current issues with running on certain systems which I am in the process of fixing, Liunx (PopOS) runs correctly.
