@@ -17,22 +17,26 @@ Wheel with no AO           |  Wheel with SSAO + Bent Normals
 <img src="https://github.com/robbieawest/eno/blob/main/demo-images/wheel_no_ao.png" alt="" width="722" height="540">  |  <img src="https://github.com/robbieawest/eno/blob/main/demo-images/wheel_with_bn_ao.png" alt="" width="722" height="540">
 
 
+## Notes
+The runtime bent normal calculations work nicely on some models, but have lots of artifacts on some. When I spend time on this project this'll be the first problem I work on.
+
+There are current issues with running on certain systems which I am in the process of fixing, on my system (Liunx [PopOS] amdcpu, amdgpu) it runs as expected.
 
 ## Building
 
 #### Prerequisites
 - `odin` programming language is installed, the current tested release is `dev-2025-09:42c2cb89b`.
-- `SDL2` is installed.
-- `OpenGL` is installed.
+- A modern `OpenGL` version is installed (at least 4.3).
 
 If you wish to build eno, you can do:
 
-1. Build directly using `odin`
+1. Run the demo directly using `odin`
 ```
-odin build ./src/eno -out:bin/eno-build
+odin build ./src/eno/demo -out:bin/eno-build
 ./bin/eno-build
 ```
 , swapping out `build` for `run` if you wish to run the program immediately.
+
 
 2. Use the build script `runeno.sh`.
 
@@ -49,14 +53,14 @@ Usage: runeno.sh [
     ]
 ```
 
-* You may need to add SDL2.dll to `bin/`, you can find this in `{odin_dir}/vendor/sdl2` after running `make` in that folder.
+`runeno.sh -r -p demo` will run the demo. I've not yet added functionality for building as a library
 
 ## Features and scope
 A list of features detailing what eno currently implements:
 
 - Windowing using SDL2 ( `window` package )
 - Archetypal Entity Component System with a powerful query interface where entity component data is stored tighly packed in a cache-efficient manner ( `ecs` package )
-- GLTF model/scene loading with full PBR material support ( `resource` package -> `gltf.odin` )
+- GLTF model/scene loading with PBR material support ( `resource` package -> `gltf.odin` ). There is an issue with loading certain models which I haven't gotten around to fixing yet. 
 - Dynamic shader source interface ( `shader` package )
 - Controls using a centralized hook structure ( `control` package )
 - OpenGL renderer backend ( `render` package )
@@ -72,7 +76,7 @@ Things I'd like to implement if I have the time:
 - Pre-render geometry processing for tangent approximations with `mikkt`; an unweld -> `mikkt` tangent generation -> weld process
 - Forward+
 - Animation
-- Some better UI elements for scenes/resources
+- Some better UI elements for scenes/resources that a typical game engine would likely have
 - Order independent transparency
 
 Far reaching:
