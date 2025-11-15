@@ -17,6 +17,10 @@ Wheel with no AO           |  Wheel with SSAO + Bent Normals
 <img src="https://github.com/robbieawest/eno/blob/main/demo-images/wheel_no_ao.png" alt="" width="722" height="540">  |  <img src="https://github.com/robbieawest/eno/blob/main/demo-images/wheel_with_bn_ao.png" alt="" width="722" height="540">
 
 
+## Notes
+The runtime bent normal calculations work nicely on some models, but have lots of artifacts on some. When I spend time on this project this'll be the first problem I work on.
+
+There are current issues with running on certain systems which I am in the process of fixing, on my system (Liunx [PopOS] amdcpu, amdgpu) it runs as expected.
 
 ## Building
 
@@ -80,4 +84,3 @@ Far reaching:
 - Vulkan backend
 - MoltenVK for Mac
 
-There are current issues with running on certain systems which I am in the process of fixing, Liunx (PopOS) runs correctly.
