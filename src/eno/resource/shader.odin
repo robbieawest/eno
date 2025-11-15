@@ -50,16 +50,16 @@ destroy_extended_glsl_type :: proc(type: ExtendedGLSLType) {
 
 GLSLFixedArray :: struct {
     size: uint,
-    type: GLSLType
+    type: GLSLDataType
 }
 
 GLSLVariableArray :: struct {
-    type: GLSLType
+    type: GLSLDataType
 }
 
 
 GLSLPair :: struct {
-    type: GLSLType,
+    type: GLSLDataType,
     name: string  // Assumes ownership
 }
 
@@ -124,6 +124,7 @@ make_shader_info :: proc(allocator := context.allocator) -> ShaderInfo {
     }
 }
 
+// Todo add allocator option
 destroy_shader_info :: proc(shader: ShaderInfo) {
     destroy_shader_bindings(shader.bindings)
 
@@ -438,8 +439,8 @@ Shader :: struct {
     source: ShaderSource
 }
 
-destroy_shader :: proc(shader: Shader) {
-    destroy_shader_source(shader.source)
+destroy_shader :: proc(shader: Shader, allocator := context.allocator) {
+    destroy_shader_source(shader.source, allocator)
 }
 
 
@@ -449,8 +450,8 @@ ShaderSource :: struct {
     string_source: string
 }
 
-destroy_shader_source :: proc(source: ShaderSource) {
-    if source.is_available_as_string && len(source.string_source) != 0 do delete(source.string_source)
+destroy_shader_source :: proc(source: ShaderSource, allocator := context.allocator) {
+    if source.is_available_as_string && len(source.string_source) != 0 do delete(source.string_source, allocator)
     destroy_shader_info(source.shader_info)
 }
 
@@ -459,21 +460,22 @@ ShaderIdentifier :: Maybe(u32)
 
 ShaderProgram :: struct {
     id: ShaderIdentifier,
+    name: string,  // Name is not unique
     shaders: map[ShaderType]ResourceIdent,  // Although it is possible to add more than one shader of each type, adding support really doesn't mean anything
-    uniform_cache: ShaderUniformCache
+    uniforms: ShaderUniforms
 }
 
 
-init_shader_program :: proc(allocator := context.allocator) -> (program: ShaderProgram) {
+init_shader_program :: proc(name: string, allocator := context.allocator) -> (program: ShaderProgram) {
     program.shaders = make(map[ShaderType]ResourceIdent, allocator=allocator)
-    program.uniform_cache = make(ShaderUniformCache, allocator=allocator)
+    program.uniforms = make(ShaderUniforms, allocator=allocator)
+    program.name = strings.clone(name, allocator)
     return
 }
 
 // Does not copy incoming shaders
-make_shader_program:: proc(manager: ^ResourceManager, shaders: []Shader, allocator := context.allocator) -> (program: ShaderProgram, ok: bool) {
-    program.shaders = make(map[ShaderType]ResourceIdent, allocator=allocator)
-    program.uniform_cache = make(ShaderUniformCache, allocator=allocator)
+make_shader_program:: proc(manager: ^ResourceManager, shaders: []Shader, name: string, allocator := context.allocator) -> (program: ShaderProgram, ok: bool) {
+    program = init_shader_program(name, allocator)
     add_shaders_to_program(manager, &program, shaders) or_return
     ok = true
     return
@@ -490,10 +492,11 @@ add_shaders_to_program :: proc(manager: ^ResourceManager, program: ^ShaderProgra
     return true
 }
 
-destroy_shader_program :: proc(manager: ^ResourceManager, program: ShaderProgram) -> (ok: bool) {
+destroy_shader_program :: proc(manager: ^ResourceManager, program: ShaderProgram, allocator := context.allocator) -> (ok: bool) {
     for _, shader in program.shaders do remove_shader(manager, shader) or_return
     delete(program.shaders)
-    delete(program.uniform_cache)
+    delete(program.uniforms)
+    delete(program.name, allocator)
     return true
 }
 
@@ -708,6 +711,60 @@ typeid_to_glsl_type :: proc(type: typeid) -> (glsl_type: GLSLDataType, ok: bool)
     return
 }
 
+conv_gl_glsl_type :: proc(type: u32, #any_int array_size: uint = 0) -> (result: ExtendedGLSLType, ok: bool) {
+    switch type {
+        case gl.FLOAT: result = GLSLDataType.float
+        case gl.FLOAT_VEC2: result = GLSLDataType.float
+        case gl.FLOAT_VEC3: result = GLSLDataType.float
+        case gl.FLOAT_VEC4: result = GLSLDataType.float
+        case gl.DOUBLE: result = GLSLDataType.float
+        case gl.DOUBLE_VEC2: result = GLSLDataType.float
+        case gl.DOUBLE_VEC3: result = GLSLDataType.float
+        case gl.DOUBLE_VEC4: result = GLSLDataType.float
+        case gl.INT: result = GLSLDataType.float
+        case gl.INT_VEC2: result = GLSLDataType.float
+        case gl.INT_VEC3: result = GLSLDataType.float
+        case gl.INT_VEC4: result = GLSLDataType.float
+        case gl.UNSIGNED_INT: result = GLSLDataType.float
+        case gl.UNSIGNED_INT_VEC2: result = GLSLDataType.float
+        case gl.UNSIGNED_INT_VEC3: result = GLSLDataType.float
+        case gl.UNSIGNED_INT_VEC4: result = GLSLDataType.float
+        case gl.BOOL: result = GLSLDataType.float
+        case gl.BOOL_VEC2: result = GLSLDataType.float
+        case gl.BOOL_VEC3: result = GLSLDataType.float
+        case gl.BOOL_VEC4: result = GLSLDataType.float
+        case gl.FLOAT_MAT2: result = GLSLDataType.mat2
+        case gl.FLOAT_MAT3: result = GLSLDataType.mat3
+        case gl.FLOAT_MAT4: result = GLSLDataType.mat4
+        case gl.DOUBLE_MAT2: result = GLSLDataType.dmat2
+        case gl.DOUBLE_MAT3: result = GLSLDataType.dmat3
+        case gl.DOUBLE_MAT4: result = GLSLDataType.dmat4
+        case gl.FLOAT_MAT2x3: result = GLSLDataType.mat2x3
+        case gl.FLOAT_MAT2x4: result = GLSLDataType.mat2x4
+        case gl.FLOAT_MAT3x2: result = GLSLDataType.mat3x2
+        case gl.FLOAT_MAT3x4: result = GLSLDataType.mat3x4
+        case gl.FLOAT_MAT4x2: result = GLSLDataType.mat4x2
+        case gl.FLOAT_MAT4x3: result = GLSLDataType.mat4x3
+        case gl.DOUBLE_MAT2x3: result = GLSLDataType.dmat2x3
+        case gl.DOUBLE_MAT2x4: result = GLSLDataType.dmat2x4
+        case gl.DOUBLE_MAT3x2: result = GLSLDataType.dmat3x2
+        case gl.DOUBLE_MAT3x4: result = GLSLDataType.dmat3x4
+        case gl.DOUBLE_MAT4x2: result = GLSLDataType.dmat4x2
+        case gl.DOUBLE_MAT4x3: result = GLSLDataType.dmat4x3
+        case gl.SAMPLER_2D: result = GLSLDataType.sampler2D
+        case gl.SAMPLER_3D: result = GLSLDataType.sampler3D
+        case gl.SAMPLER_CUBE: result = GLSLDataType.samplerCube
+        case:
+            dbg.log(.ERROR, "Unsupported GLSL type")
+            return result, false
+    }
+
+    if array_size > 1 do result = GLSLFixedArray{ array_size, result.(GLSLDataType) }
+
+    ok = true
+    return
+}
+
 @(private)
 shader_struct_id_to_string :: proc(shader_info: ShaderInfo, id: ShaderStructID, loc := #caller_location) -> (result: string, ok: bool) {
     shader_struct: Maybe(ShaderStruct)
@@ -864,7 +921,7 @@ read_single_shader_source :: proc(full_path: string, shader_type: ShaderType, al
     return
 }
 
-read_shader_source :: proc(manager: ^ResourceManager, filenames: ..string, allocator := context.allocator) -> (program: ShaderProgram, ok: bool) {
+read_shader_source :: proc(manager: ^ResourceManager, pass_name: string, filenames: ..string, allocator := context.allocator) -> (program: ShaderProgram, ok: bool) {
 
     shaders := make([dynamic]Shader, allocator=allocator)
     defer delete(shaders)
@@ -927,7 +984,7 @@ read_shader_source :: proc(manager: ^ResourceManager, filenames: ..string, alloc
         return
     }
 
-    program = make_shader_program(manager, shaders[:], allocator) or_return
+    program = make_shader_program(manager, shaders[:], pass_name, allocator) or_return
 
     ok = true
     return

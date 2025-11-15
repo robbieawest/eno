@@ -14,9 +14,13 @@ main :: proc() {
 
     log.info("Starting Demo")
 
+    window_width :: 1440
+    window_height :: 1080
+    fullscreen :: false
+
     window_target, win_ok := win.initialize_window(1440, 1080, "eno engine demo")
     if !win_ok do return
-    // win.set_fullscreen(window_target)
+    if fullscreen do win.set_fullscreen(window_target)
     win.set_mouse_raw_input(true)
 
     if(!game.init_game(window_target, every_frame, before_frame)) {

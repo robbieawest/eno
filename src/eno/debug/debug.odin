@@ -34,7 +34,7 @@ init_debug :: proc() {
 init_logger :: proc(allocator := context.allocator) -> (logger: log.Logger, ok: bool) {
     console_logger := log.create_console_logger(allocator=allocator)
     if DEBUG_FLAGS.LOG_TO_FILE {
-        file, err := os.open(LOG_FILE, flags=os.O_RDWR)
+        file, err := os.open(LOG_FILE, mode=os.O_RDWR)
         if err != nil || file == os.INVALID_HANDLE {
             fmt.print("Could not initialize file handle for logger")
             return

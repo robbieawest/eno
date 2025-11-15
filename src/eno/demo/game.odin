@@ -233,7 +233,6 @@ before_frame :: proc() -> (ok: bool) {
     ui.add_ui_elements(render.render_settings_ui_element, render.render_pipeline_ui_element, render.shader_store_ui_element, demo_ui_element) or_return
     ui.show_imgui_demo_window(false) or_return
 
-
     return true
 }
 

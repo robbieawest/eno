@@ -83,7 +83,7 @@ apply_environment_settings :: proc(manager: ^resource.ResourceManager, allocator
     // dbg.log(.INFO, "Applied settings: %#v", GlobalRenderSettings.environment_settings)
     changed := exist_settings == nil || !compare_environment_settings(exist_settings.?, settings)
     if changed {
-        destroy_image_environment(Context.image_environment)
+        destroy_image_environment(&Context.image_environment)
         make_image_environment(manager, settings.environment_texture_uri, settings.environment_face_size, allocator=allocator) or_return
 
         if settings.ibl_settings != nil do ibl_render_setup(manager, allocator, loc) or_return
@@ -93,8 +93,7 @@ apply_environment_settings :: proc(manager: ^resource.ResourceManager, allocator
 }
 
 disable_environment_settings :: proc() {
-    destroy_image_environment(Context.image_environment)
-    Context.image_environment = nil
+    destroy_image_environment(&Context.image_environment)
     GlobalRenderSettings.environment_settings = nil
 }
 
@@ -113,7 +112,7 @@ disable_ibl_settings :: proc() {
     env_settings: ^EnvironmentSettings = &GlobalRenderSettings.environment_settings.?
     if env_settings.ibl_settings == nil do return
 
-    destroy_ibl_in_image_environment(Context.image_environment)
+    destroy_ibl_in_image_environment(&Context.image_environment)
     env_settings.ibl_settings = nil
 
     if GlobalRenderSettings.unapplied_environment_settings == nil do return

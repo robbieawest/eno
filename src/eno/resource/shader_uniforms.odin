@@ -4,88 +4,84 @@ import gl "vendor:OpenGL"
 
 import dbg "../debug"
 
+import "core:fmt"
 import "core:strings"
 import "../utils"
 
 // Defines procedures for working with opengl uniforms
 
-@(private)
-UniformLocation :: i32
-
-ShaderUniformCache :: distinct map[string]UniformLocation
-
-@(private)
-cache_checked_uniform_get :: proc(program: ^ShaderProgram, label: string) -> (location: UniformLocation, ok: bool) {
-    return program.uniform_cache[label]
+UniformMetaData :: struct {
+    type: ExtendedGLSLType,
+    location: i32
 }
 
+ShaderUniforms :: distinct map[string]UniformMetaData
+
+get_uniform_metadata :: proc(program: ^ShaderProgram, label: string, loc := #caller_location) -> (metadata: UniformMetaData, ok: bool) {
+    if label not_in program.uniforms {
+        // dbg.log(.WARN, "Program '%s' does not contain the uniform '%s'", program.name, label, loc=loc)
+        return
+    }
+
+    return program.uniforms[label], true
+}
 
 get_uniform_location :: proc(program: ^ShaderProgram, label: string, loc := #caller_location) -> (location: i32, ok: bool) {
-    // dbg.log(.INFO, "Getting uniform location of %s", label)
+    return (get_uniform_metadata(program, label, loc) or_return).location, true
+}
+
+set_shader_uniform_metadata :: proc(program: ^ShaderProgram, allocator := context.allocator, loc := #caller_location) -> (ok: bool) {
     if program.id == nil {
-        dbg.log(.ERROR, "Could not get uniform, program is not yet expressed")
+        dbg.log(.ERROR, "Program is not yet transferred", loc=loc)
         return
     }
+    id := program.id.?
 
-    if cached_location, uniform_is_cached := cache_checked_uniform_get(program, label); uniform_is_cached {
-        return cached_location, uniform_is_cached
+    num_uniforms: i32
+    gl.GetProgramiv(id, gl.ACTIVE_UNIFORMS, &num_uniforms)
+
+    max_uniform_name_length: i32
+    gl.GetProgramiv(id, gl.ACTIVE_UNIFORM_MAX_LENGTH, &max_uniform_name_length)
+
+    for i in 0..<num_uniforms {
+        name_buf := make([]byte, max_uniform_name_length, allocator=allocator); defer delete(name_buf, allocator)
+        length_given: i32; arr_size: i32; type: u32
+        gl.GetActiveUniform(id, u32(i), max_uniform_name_length, &length_given, &arr_size, &type, raw_data(name_buf))
+
+        name_cstr := cstring(raw_data(name_buf[:length_given]))
+        name := strings.clone_from_cstring(name_cstr, allocator=allocator, loc=loc)
+
+
+        name_split, alloc_err := strings.split(name, "[", allocator); defer delete(name_split)
+
+        if alloc_err != .None || len(name_split) == 0 {
+            dbg.log(.ERROR, "Error while splitting fixed array name")
+            return
+        }
+        base_name := name_split[0]
+
+        metadata: UniformMetaData
+        metadata.location = gl.GetUniformLocation(id, name_cstr)
+        metadata.type = conv_gl_glsl_type(type, arr_size) or_return
+
+        #partial switch m_type in metadata.type {
+            case GLSLFixedArray:
+
+                for i in 0..<m_type.size {
+                    elem_name := fmt.caprintf("%s[%d]", base_name, i, allocator=allocator)
+                    elem_metadata := metadata
+                    elem_metadata.location = gl.GetUniformLocation(id, elem_name)
+                    elem_metadata.type = m_type.type
+
+                    program.uniforms[string(elem_name)] = elem_metadata
+                }
+        }
+
+        program.uniforms[base_name] = metadata
     }
 
-    // Not found in cache
-    location, ok = get_uniform_location_without_cache(program, label)
-    if !ok {
-        // dbg.log(.ERROR, "Could not get uniform location \"%s\"", label)
-        return
-    }
-
-    cache_uniform(program, label, location)
-
-    ok = true
-    return
+    return true
 }
-
-
-get_uniform_location_without_cache :: proc(program: ^ShaderProgram, label: string) -> (location: UniformLocation, ok: bool) {
-
-    if program.id == nil {
-        dbg.log(.ERROR, "Shader program not yet created")
-        return
-    }
-
-    location = gl.GetUniformLocation(utils.unwrap_maybe(program.id) or_return, strings.clone_to_cstring(label))
-    if location == -1 {
-        return
-    }
-
-    ok = true
-    return
-}
-
-
-register_uniform :: proc(program: ^ShaderProgram, label: string) -> (ok: bool) {
-
-    if _, uniform_is_cached := cache_checked_uniform_get(program, label); uniform_is_cached {
-        dbg.log(.ERROR, "Uniform \"%s\" already exists")
-        return
-    }
-
-    location: UniformLocation; location, ok = get_uniform_location_without_cache(program, label)
-    if !ok {
-        dbg.log(.ERROR, "Could not get uniform location \"%s\"", label)
-        return
-    }
-
-    cache_uniform(program, label, location)
-
-    ok = true
-    return
-}
-
-@(private)
-cache_uniform :: proc(program: ^ShaderProgram, label: string, location: UniformLocation) {
-    program.uniform_cache[label] = location
-}
-
 
 // ** Setting uniform values **
 

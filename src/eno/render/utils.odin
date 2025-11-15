@@ -30,24 +30,31 @@ create_cubemap_from_2d :: proc(tex: resource.Texture, properties: resource.Textu
     ok = true
     return
 }
-set_uniform_of_extended_type :: proc(program: ^resource.ShaderProgram, label: string, type: resource.ExtendedGLSLType, data: []u8, cur_tex_unit: ^i32 = nil, temp_allocator := context.temp_allocator) -> (ok: bool) {
-    _, uniform_found := resource.get_uniform_location(program, label); if !uniform_found do return true
+
+set_uniform_of_extended_type :: proc(
+    program: ^resource.ShaderProgram,
+    label: string,
+    type: resource.ExtendedGLSLType,
+    data: []u8,
+    cur_tex_unit: ^i32 = nil,
+    temp_allocator := context.temp_allocator
+) -> (ok: bool) {
 
     switch glsl_type_variant in type {
-    case resource.GLSLDataType: set_uniform_of_type(program, label, glsl_type_variant, data, cur_tex_unit) or_return
-    case resource.GLSLFixedArray:
-        uniform_type := resource.get_uniform_type_from_glsl_type(glsl_type_variant.type)
-        uniform_type_size := type_info_of(uniform_type).size
+        case resource.GLSLDataType: set_uniform_of_type(program, label, glsl_type_variant, data, cur_tex_unit) or_return
+        case resource.GLSLFixedArray:
+            uniform_type := resource.get_uniform_type_from_glsl_type(glsl_type_variant.type)
+            uniform_type_size := type_info_of(uniform_type).size
 
-        data_idx := 0
-        next_data_idx: int
-        for i in 0..<len(data) / uniform_type_size {
-            inner_label := fmt.aprintf("%s[%d]", label, i, allocator=temp_allocator)
-            next_data_idx = data_idx + uniform_type_size
-            set_uniform_of_type(program, inner_label, glsl_type_variant.type, data[data_idx:next_data_idx]) or_return
-            data_idx = next_data_idx
-        }
-    case resource.ShaderStructID, resource.GLSLVariableArray: dbg.log(.WARN, "GLSL type variant not supported")
+            data_idx := 0
+            next_data_idx: int
+            for i in 0..<len(data) / uniform_type_size {
+                inner_label := fmt.aprintf("%s[%d]", label, i, allocator=temp_allocator)
+                next_data_idx = data_idx + uniform_type_size
+                set_uniform_of_type(program, inner_label, glsl_type_variant.type, data[data_idx:next_data_idx]) or_return
+                data_idx = next_data_idx
+            }
+        case resource.ShaderStructID, resource.GLSLVariableArray: dbg.log(.WARN, "GLSL type variant not supported")
     }
 
 

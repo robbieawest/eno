@@ -472,7 +472,7 @@ transfer_buffer_data_of_target :: proc(target: u32, data: rawptr, #any_int data_
 
 
 // Compiles and links shaders in program
-transfer_shader_program :: proc(manager: ^resource.ResourceManager, program: ^resource.ShaderProgram, loc := #caller_location) -> (ok: bool) {
+transfer_shader_program :: proc(manager: ^resource.ResourceManager, program: ^resource.ShaderProgram, allocator := context.allocator, loc := #caller_location) -> (ok: bool) {
     if program.id != nil do return true
 
     dbg.log(dbg.LogLevel.INFO, "Transferring shader program")
@@ -490,6 +490,8 @@ transfer_shader_program :: proc(manager: ^resource.ResourceManager, program: ^re
 
     program.id, ok = gl.create_and_link_program(shader_ids[:])
     if !ok do dbg.log(.ERROR, "Failed to create/link program", loc=loc)
+
+    ok = resource.set_shader_uniform_metadata(program, allocator, loc)
     return
 }
 
@@ -880,7 +882,8 @@ draw_buffers_pass_io :: proc(io: []RenderPassIO, allocator := context.allocator)
     return true
 }
 
-reset_texture_bindings :: proc() {
+reset_texture_bindings :: proc(program: ^resource.ShaderProgram) {
+    // Reset units
     for unit in u32(gl.TEXTURE0)..=u32(gl.TEXTURE31) {
         gl.ActiveTexture(unit)
         gl.BindTexture(gl.TEXTURE_2D, 0);
@@ -888,4 +891,17 @@ reset_texture_bindings :: proc() {
         gl.BindTexture(gl.TEXTURE_CUBE_MAP, 0);
     }
     gl.ActiveTexture(gl.TEXTURE0)
+
+    // Reset sampler uniforms to 2D -> 0, Cubemap -> 1
+    for uniform_label, metadata in program.uniforms {
+        type, is_glsl_type := metadata.type.(resource.GLSLDataType)
+        #partial switch type {
+            case .sampler2D:
+                // dbg.log(.INFO, "Resetting 2D sampler: '%s'", uniform_label)
+                resource.set_uniform(program, uniform_label, i32(0))
+            case .samplerCube:
+                // dbg.log(.INFO, "Resetting cube sampler: '%s'", uniform_label)
+                resource.set_uniform(program, uniform_label, i32(1))
+        }
+    }
 }

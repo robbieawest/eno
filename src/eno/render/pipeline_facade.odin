@@ -384,7 +384,7 @@ generate_ssao_first_shader_pass : GenericShaderPassGenerator : proc(
     if frag.id == nil do compile_shader(frag) or_return
     else do dbg.log(.INFO, "Fragment shader already compiled")
 
-    shader_pass = resource.init_shader_program()
+    shader_pass = resource.init_shader_program("SSAO first pass")
     shader_pass.shaders[.VERTEX] = vert_id
     shader_pass.shaders[.FRAGMENT] = frag_id
 
@@ -427,7 +427,7 @@ generate_ssao_second_shader_pass : GenericShaderPassGenerator : proc(
     if frag.id == nil do compile_shader(frag) or_return
     else do dbg.log(.INFO, "Fragment shader already compiled")
 
-    shader_pass = resource.init_shader_program()
+    shader_pass = resource.init_shader_program("SSAO second pass")
     shader_pass.shaders[.VERTEX] = vert_id
     shader_pass.shaders[.FRAGMENT] = frag_id
 

@@ -263,7 +263,7 @@ add_resource :: proc(
             // Now, increase reference count of that resource and return an ident
 
             if resource_node.reference_count == max(u32) {
-                dbg.log(.ERROR, "Max reference count")
+                dbg.log(.ERROR, "Max reference count, likely underflow")
                 return
             }
             resource_node.reference_count += 1
@@ -457,6 +457,7 @@ clear_unused_resources :: proc(manager: ^ResourceManager, allocator := context.t
     ok &= clear(manager, &manager.materials, MaterialType, manager.allocator, allocator, check_reference_zero(MaterialType))
     ok &= clear(manager, &manager.textures, Texture, manager.allocator, allocator, check_reference_zero(Texture))
     ok &= clear(manager, &manager.passes, ShaderProgram, manager.allocator, allocator, check_reference_zero(ShaderProgram))
+    ok &= clear(manager, &manager.shaders, Shader, manager.allocator, allocator, check_reference_zero(Shader))
     return
 }
 
@@ -475,26 +476,31 @@ destroy_manager :: proc(manager: ^ResourceManager, allocator := context.temp_all
     ok &= clear(manager, &manager.materials, MaterialType, manager.allocator, allocator, nil)
     ok &= clear(manager, &manager.textures, Texture, manager.allocator, allocator, nil)
     ok &= clear(manager, &manager.passes, ShaderProgram, manager.allocator, allocator, nil)
+    ok &= clear(manager, &manager.shaders, Shader, manager.allocator, allocator, nil)
 
     delete(manager.materials)
     delete(manager.textures)
     delete(manager.passes)
+    delete(manager.shaders)
     return
 }
 
 @(private)
-destroy_resource :: proc(manager: ^ResourceManager, resource: ^$T) -> (ok: bool){
+destroy_resource :: proc(manager: ^ResourceManager, resource: ^$T, allocator := context.allocator) -> (ok: bool){
     when T == Texture {
-        destroy_texture(resource)
+        destroy_texture(resource, allocator)
     }
     else when T == ShaderProgram {
-        destroy_shader_program(manager, resource^) or_return
+        destroy_shader_program(manager, resource^, allocator) or_return
     }
     else when T == MaterialType {
         destroy_material_type(manager, resource^) or_return
     }
     else when T == VertexLayout {
-        destroy_vertex_layout(manager, resource^) or_return
+        destroy_vertex_layout(manager, resource^, allocator) or_return
+    }
+    else when T == Shader {
+        destroy_shader(resource^)
     }
     return true
 }
@@ -511,7 +517,7 @@ clear :: proc(
 ) -> (ok: bool) {
     if clear_by == nil do dbg.log(.INFO, "Fully clearing mapping of type: %v", typeid_of(T))
 
-    clear_proc, clear_proc_ok := clear_by.?
+    clear_by_filter, clear_proc_ok := clear_by.?
 
     for hash, &bucket in mapping {
         if bucket.head == nil || bucket.tail == nil {
@@ -523,25 +529,14 @@ clear :: proc(
         node := bucket.head
         for node != nil {
             resource_node := (^ResourceNode(T))(uintptr(node) - iterator.offset)
-            if !clear_proc_ok || clear_proc(resource_node^) {
-                // Delete
-                dbg.log(.INFO, "Deleting node of type: %v", typeid_of(T))
-                list.remove(&bucket, &resource_node.node)
-
-                destroy_ok := destroy_resource(manager, &resource_node.resource) // Could potentially delete a node in bucket
-                if !destroy_ok {
-                    dbg.log(.ERROR, "Destruction of resource of type: %v failed", typeid_of(T))
-                    return
-                }
-
-                node = node.next
-                alloc_err := free(resource_node, allocator)
-                if alloc_err != .None {
-                    dbg.log(.ERROR, "Allocator error while freeing resource of type: %v", typeid_of(T), loc=loc)
-                    return
-                }
+            if resource_node == nil {
+                dbg.log(.ERROR, "Unexpected nil node", loc=loc)
+                return
             }
-            else do node = node.next
+
+            node = node.next
+
+            if !clear_proc_ok || clear_by_filter(resource_node^) do destroy_resource_node(manager, &bucket, resource_node, allocator, loc)
         }
 
     }
@@ -549,3 +544,25 @@ clear :: proc(
     return true
 }
 
+@(private)
+destroy_resource_node :: proc(manager: ^ResourceManager, bucket: ^ResourceBucket, resource_node: ^ResourceNode($T), allocator: mem.Allocator, loc := #caller_location) -> (ok: bool) {
+    if resource_node.reference_count <= 1 {
+        dbg.log(.INFO, "Deleting node of type: %v", typeid_of(T))
+        list.remove(bucket, &resource_node.node)
+
+        destroy_ok := destroy_resource(manager, &resource_node.resource, allocator) // Could potentially delete a node in bucket
+        if !destroy_ok {
+            dbg.log(.ERROR, "Destruction of resource of type: %v failed", typeid_of(T))
+            return
+        }
+
+        alloc_err := free(resource_node, allocator)
+        if alloc_err != .None {
+            dbg.log(.ERROR, "Allocator error while freeing resource of type: %v", typeid_of(T), loc=loc)
+            return
+        }
+    }
+    else do resource_node.reference_count -= 1
+
+    return true
+}

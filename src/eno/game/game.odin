@@ -62,7 +62,6 @@ run_game :: proc() {
         t_before_frame := time.now()._nsec
 
         control.poll(&Game.controller)
-        // glutils.frame_setup()
 
         every_ok := Game.every_frame()
 
@@ -75,7 +74,10 @@ run_game :: proc() {
         update_metadata_elapsed(&Game.meta_data)
         // dbg.log(.INFO, "Frame time: %.2f", f32(Game.meta_data.last_delta) / 1_000_000)
 
-        resource.clear_unused_resources(&Game.resource_manager) // todo handle bool ret
+        if !resource.clear_unused_resources(&Game.resource_manager) {
+            dbg.log(.ERROR, "Error while clearing unused resources. Terminating")
+            quit_game()
+        }
     }
 
 }

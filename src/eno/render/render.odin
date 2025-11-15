@@ -157,7 +157,6 @@ render :: proc(
         if pass.properties.render_skybox do render_skybox(manager, scene.viewpoint, allocator) or_return
     }
 
-    reset_texture_bindings()
 
     ui.render_ui(window.WINDOW_WIDTH, window.WINDOW_HEIGHT) or_return
 
@@ -248,9 +247,10 @@ render_geometry :: proc(
     for mapping in shader_map {
         shader_pass := resource.get_shader_pass(manager, mapping.shader) or_return
         attach_program(shader_pass^)
+        reset_texture_bindings(shader_pass)
         bind_missing_textures(shader_pass, allocator) or_return
 
-        cur_tex_unit: i32 = 2  // Must start from 1, 0 is reserved for missing texture
+        cur_tex_unit: i32 = 2  // Must start from 2, 0 and 1 are reserved for missing texture placeholders
 
         bind_global_uniforms(shader_pass, &cur_tex_unit) or_return
         bind_render_pass_inputs(shader_pass, pass, &cur_tex_unit)
@@ -258,8 +258,6 @@ render_geometry :: proc(
         lighting_settings := get_lighting_settings()
         resource.set_uniform(shader_pass, LIGHTING_SETTINGS, transmute(u32)(lighting_settings))
         if .IBL in lighting_settings do bind_ibl_uniforms(shader_pass, &cur_tex_unit)
-
-        // bind_render_pass_inputs(shader_pass, pass, &cur_tex_unit) or_return
 
         for mesh_data in mapping.meshes {
             model_mat, normal_mat := model_and_normal(mesh_data.mesh, mesh_data.world, scene.viewpoint)
@@ -401,7 +399,7 @@ render_skybox :: proc(manager: ^resource.ResourceManager, viewpoint: ^cam.Camera
 create_skybox_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (shader: resource.ShaderProgram, ok: bool) {
     vert := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/skybox.vert", .VERTEX) or_return
     frag := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/skybox.frag", .FRAGMENT) or_return
-    shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, allocator) or_return
+    shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, "Skyboss shader pass", allocator) or_return
     transfer_shader_program(manager, &shader) or_return
 
     ok = true
@@ -412,6 +410,7 @@ create_skybox_shader :: proc(manager: ^resource.ResourceManager, allocator := co
 BRDF_LUT_UNIFORM :: "brdfLUT"
 PREFILTER_MAP_UNIFORM :: "prefilterMap"
 IRRADIANCE_MAP_UNIFORM :: "irradianceMap"
+// todo delete and handle the same way that SSAO handles it
 @(private)
 bind_ibl_uniforms :: proc(shader: ^resource.ShaderProgram, cur_tex_unit: ^i32) -> (ok: bool) {
     m_env := Context.image_environment
@@ -1407,7 +1406,7 @@ generate_gbuffer_shader_pass :: proc(
     if frag.id == nil do compile_shader(frag) or_return
     else do dbg.log(.INFO, "Fragment shader already compiled")
 
-    shader_pass = resource.init_shader_program()
+    shader_pass = resource.init_shader_program("GBuffer shader pass")
     shader_pass.shaders[.VERTEX] = vert_id
     shader_pass.shaders[.FRAGMENT] = frag_id
 
@@ -1456,7 +1455,7 @@ generate_lighting_shader_pass :: proc(
     if vert.id == nil do compile_shader(vert) or_return
     if frag.id == nil do compile_shader(frag) or_return
 
-    shader_pass = resource.init_shader_program()
+    shader_pass = resource.init_shader_program("Lighting pass")
     shader_pass.shaders[.VERTEX] = vertex_layout.shader.?
     shader_pass.shaders[.FRAGMENT] = material_type.shader.?
 
@@ -1618,25 +1617,47 @@ make_image_environment :: proc(
     return
 }
 
-// Todo release GPU memory
-destroy_image_environment :: proc(environment: Maybe(ImageEnvironment)) {
-    if environment == nil do return
-    env := environment.?
+destroy_image_environment :: proc(environment: ^Maybe(ImageEnvironment), allocator := context.allocator) {
+    if environment == nil || environment^ == nil do return
+    env := &(environment.(ImageEnvironment))
 
-    resource.destroy_texture(&env.environment_tex)
-    if env.environment_map != nil do resource.destroy_texture(&env.environment_map.?)
-    if env.irradiance_map != nil do resource.destroy_texture(&env.irradiance_map.?)
-    if env.prefilter_map != nil do resource.destroy_texture(&env.prefilter_map.?)
-    if env.brdf_lookup != nil do resource.destroy_texture(&env.brdf_lookup.?)
+    resource.destroy_texture(&env.environment_tex, allocator)
+    if env.environment_map != nil {
+        env_map := &env.environment_map.(resource.Texture)
+        resource.destroy_texture(env_map, allocator)
+        release_texture(env_map.gpu_texture)
+
+        env.environment_map = nil
+    }
+
+    destroy_ibl_in_image_environment(environment, allocator)
+    environment^ = nil
 }
 
-destroy_ibl_in_image_environment :: proc(environment: Maybe(ImageEnvironment)) {
-    if environment == nil do return
-    env := environment.?
+destroy_ibl_in_image_environment :: proc(environment: ^Maybe(ImageEnvironment), allocator := context.allocator) {
+    if environment == nil || environment^ == nil do return
+    env := &(environment.(ImageEnvironment))
+    dbg.log(.INFO, "HERERE")
 
-    if env.irradiance_map != nil do resource.destroy_texture(&env.irradiance_map.?)
-    if env.prefilter_map != nil do resource.destroy_texture(&env.prefilter_map.?)
-    if env.brdf_lookup != nil do resource.destroy_texture(&env.brdf_lookup.?)
+    if env.irradiance_map != nil {
+        irr_map := &env.irradiance_map.(resource.Texture)
+        resource.destroy_texture(irr_map, allocator)
+        release_texture(irr_map.gpu_texture)
+        env.irradiance_map = nil
+    }
+    if env.prefilter_map != nil {
+        pref_map := &env.prefilter_map.(resource.Texture)
+        resource.destroy_texture(pref_map, allocator)
+        release_texture(pref_map.gpu_texture)
+        env.prefilter_map = nil
+    }
+    if env.brdf_lookup != nil {
+        brdf_lut := &env.brdf_lookup.(resource.Texture)
+        resource.destroy_texture(brdf_lut, allocator)
+        release_texture(brdf_lut.gpu_texture)
+        env.brdf_lookup = nil
+    }
+
 }
 
 
@@ -1868,7 +1889,7 @@ create_environment_map :: proc(
 get_environment_map_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (shader: resource.ShaderProgram, ok: bool) {
     vert := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/cubemap.vert", .VERTEX) or_return
     frag := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/equirectangular_to_cubemap.frag", .FRAGMENT) or_return
-    shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, allocator) or_return
+    shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, "Environment map shader pass", allocator) or_return
     transfer_shader_program(manager, &shader) or_return
 
     attach_program(shader) or_return
@@ -1900,7 +1921,7 @@ create_ibl_irradiance_map :: proc(
     set_render_buffer_storage(gl.DEPTH_COMPONENT24, irradiance_map_face_w, irradiance_map_face_h)
 
     shader := get_ibl_irradiance_shader(manager, allocator) or_return
-    defer resource.destroy_shader_program(manager, shader)
+    defer resource.destroy_shader_program(manager, shader, allocator)
 
     resource.set_uniform(&shader, "environmentMap", i32(0))
     resource.set_uniform(&shader, "m_Project", project)
@@ -1925,7 +1946,7 @@ create_ibl_irradiance_map :: proc(
 get_ibl_irradiance_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (shader: resource.ShaderProgram, ok: bool) {
     vert := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/cubemap.vert", .VERTEX) or_return
     frag := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/ibl_irradiance.frag", .FRAGMENT) or_return
-    shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, allocator) or_return
+    shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, "IBL irradiance map shader pass", allocator) or_return
     transfer_shader_program(manager, &shader) or_return
 
     attach_program(shader) or_return
@@ -2006,7 +2027,7 @@ create_ibl_prefilter_map :: proc(
 get_ibl_prefilter_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (shader: resource.ShaderProgram, ok: bool) {
     vert := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/cubemap.vert", .VERTEX) or_return
     frag := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/ibl_prefilter.frag", .FRAGMENT) or_return
-    shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, allocator) or_return
+    shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, "IBL prefilter map shader pass", allocator) or_return
     transfer_shader_program(manager, &shader) or_return
 
     attach_program(shader) or_return
@@ -2052,7 +2073,7 @@ create_ibl_brdf_lookup :: proc(
 get_ibl_brdf_lut_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (shader: resource.ShaderProgram, ok: bool) {
     vert := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/ibl_brdf.vert", .VERTEX) or_return
     frag := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/ibl_brdf.frag", .FRAGMENT) or_return
-    shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, allocator) or_return
+    shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, "IBL brdf lut shader pass", allocator) or_return
     transfer_shader_program(manager, &shader) or_return
 
     attach_program(shader) or_return

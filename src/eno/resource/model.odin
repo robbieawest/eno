@@ -47,9 +47,9 @@ VertexLayout :: struct {
     shader: ResourceID
 }
 
-destroy_vertex_layout :: proc(manager: ^ResourceManager, layout: VertexLayout) -> (ok: bool) {
-    for attr_info in layout.infos do delete(attr_info.name)
-    delete(layout.infos)
+destroy_vertex_layout :: proc(manager: ^ResourceManager, layout: VertexLayout, allocator := context.allocator) -> (ok: bool) {
+    for attr_info in layout.infos do delete(attr_info.name, allocator)
+    delete(layout.infos, allocator=allocator)
 
     remove_shader(manager, layout.shader) or_return
     return true
@@ -566,9 +566,9 @@ Texture :: struct {
 }
 
 // Does not release GPU memory
-destroy_texture :: proc(texture: ^Texture) {
-    delete(texture.name)
-    destroy_image(&texture.image)
+destroy_texture :: proc(texture: ^Texture, allocator := context.allocator) {
+    if len(texture.name) != 0 do delete(texture.name, allocator)
+    destroy_image(&texture.image, allocator)
 }
 
 Image :: struct {
@@ -577,8 +577,8 @@ Image :: struct {
     pixel_data: rawptr  // Can be nil for no data
 }
 
-destroy_image :: proc(image: ^Image) {
-    delete(image.uri)
+destroy_image :: proc(image: ^Image, allocator := context.allocator) {
+    delete(image.uri, allocator)
     destroy_pixel_data(image)
 }
 
