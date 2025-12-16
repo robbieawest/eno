@@ -6,6 +6,7 @@ import dbg "../debug"
 import "../resource"
 import "../utils"
 import "../standards"
+import win "../window"
 
 import "core:mem"
 import "core:fmt"
@@ -438,4 +439,108 @@ generate_ssao_second_shader_pass : GenericShaderPassGenerator : proc(
 generate_ssao_second_pass_frag_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (frag_id: resource.ResourceIdent, ok: bool) {
     shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "ssao/ssao_second_pass.frag", .FRAGMENT, allocator) or_return
     return resource.add_shader(manager, shader)
+}
+
+make_lighting_passes :: proc(
+    window_res: win.WindowResolution,
+    background_colour: [4]f32,
+    ssao_colour_output: RenderPassIO,
+    ssao_bn_output: RenderPassIO
+) -> (ok: bool) {
+
+    add_render_passes(
+        make_render_pass(
+            shader_gather = RenderPassShaderGenerate(LightingShaderGenerateConfig{}),
+            mesh_gather = RenderPassQuery{ material_query =
+                proc(material: resource.Material, type: resource.MaterialType) -> bool {
+                    return type.alpha_mode != .BLEND && !type.double_sided
+                }
+            },
+            properties=RenderPassProperties{
+                geometry_z_sorting = .ASC,
+                face_culling = FaceCulling.BACK,
+                viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
+                clear = { .COLOUR_BIT, .DEPTH_BIT },
+                clear_colour = background_colour,
+                multisample = true
+            },
+            outputs = []RenderPassIO {
+                {
+                    nil,
+                    AttachmentID{ .COLOUR, 0 },
+                    "OpaqueSingleSidedColour"
+                },
+                {
+                    nil,
+                    AttachmentID{ type=.DEPTH },
+                    "OpaqueSingleSidedDepth"
+                }
+            },
+            inputs = []RenderPassIO{ ssao_colour_output, ssao_bn_output },
+            name = "Opaque Single Sided Pass"
+        ) or_return,
+    )
+
+    opaque_single_pass := get_render_pass("Opaque Single Sided Pass") or_return
+    add_render_passes(
+        make_render_pass(
+            shader_gather = opaque_single_pass,
+            mesh_gather = RenderPassQuery{ material_query =
+                proc(material: resource.Material, type: resource.MaterialType) -> bool {
+                    return type.alpha_mode != .BLEND && type.double_sided
+                }
+            },
+            properties=RenderPassProperties{
+                geometry_z_sorting = .ASC,
+                viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
+                multisample = true,
+                render_skybox = true,  // Rendering skybox will set certain properties indepdendent of what is set in the pass properties, it will also be done last in the pass
+            },
+            outputs = []RenderPassIO {
+                {
+                    nil,
+                    AttachmentID{ .COLOUR, 0 },
+                    "OpaqueDoubleSidedColour"
+                },
+                {
+                    nil,
+                    AttachmentID{ type=.DEPTH },
+                    "OpaqueDoubleSidedDepth"
+                }
+            },
+            inputs = []RenderPassIO{ ssao_colour_output, ssao_bn_output },
+            name = "Opaque Double Sided Pass"
+        ) or_return,
+        make_render_pass(
+            shader_gather = opaque_single_pass,
+                mesh_gather = RenderPassQuery{ material_query =
+                    proc(material: resource.Material, type: resource.MaterialType) -> bool {
+                        return type.alpha_mode == .BLEND
+                    }
+                },
+            properties = RenderPassProperties{
+                geometry_z_sorting = .DESC,
+                face_culling = FaceCulling.ADAPTIVE,
+                viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
+                multisample = true,
+                blend_func = BlendFunc{ .SOURCE_ALPHA, .ONE_MINUS_SOURCE_ALPHA },
+            },
+            outputs = []RenderPassIO {
+                {
+                    nil,
+                    AttachmentID{ .COLOUR, 0 },
+                    "TransparentColour"
+                },
+                {
+                    nil,
+                    AttachmentID{ type = .DEPTH },
+                    "TransparentDepth"
+                }
+            },
+            inputs = []RenderPassIO{ ssao_colour_output, ssao_bn_output },
+            name = "Transparency Pass"
+        ) or_return
+    )
+
+    return true
 }

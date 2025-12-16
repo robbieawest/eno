@@ -12,7 +12,12 @@ import "../utils"
 
 UniformMetaData :: struct {
     type: ExtendedGLSLType,
-    location: i32
+    location: i32,
+    value: UniformVal
+}
+
+UniformVal :: union {
+    i32  // sampler2D binding for example
 }
 
 ShaderUniforms :: distinct map[string]UniformMetaData
@@ -37,11 +42,15 @@ set_shader_uniform_metadata :: proc(program: ^ShaderProgram, allocator := contex
     }
     id := program.id.?
 
+    gl.UseProgram(id);
+
     num_uniforms: i32
     gl.GetProgramiv(id, gl.ACTIVE_UNIFORMS, &num_uniforms)
 
     max_uniform_name_length: i32
     gl.GetProgramiv(id, gl.ACTIVE_UNIFORM_MAX_LENGTH, &max_uniform_name_length)
+
+    curr_tex_unit: i32 = 0
 
     for i in 0..<num_uniforms {
         name_buf := make([]byte, max_uniform_name_length, allocator=allocator); defer delete(name_buf, allocator)
@@ -75,6 +84,17 @@ set_shader_uniform_metadata :: proc(program: ^ShaderProgram, allocator := contex
 
                     program.uniforms[string(elem_name)] = elem_metadata
                 }
+        }
+
+        if metadata.type == GLSLDataType.sampler2D ||  metadata.type == GLSLDataType.sampler3D || metadata.type == GLSLDataType.samplerCube {
+            gl.Uniform1i(metadata.location, curr_tex_unit)
+            metadata.value = curr_tex_unit
+
+            curr_tex_unit += 1
+            if curr_tex_unit >= gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS {
+                dbg.log(.ERROR, "Shader has too many texture image units")
+                return
+            }
         }
 
         program.uniforms[base_name] = metadata

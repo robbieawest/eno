@@ -491,6 +491,7 @@ transfer_shader_program :: proc(manager: ^resource.ResourceManager, program: ^re
     program.id, ok = gl.create_and_link_program(shader_ids[:])
     if !ok do dbg.log(.ERROR, "Failed to create/link program", loc=loc)
 
+    // Introspect shader
     ok = resource.set_shader_uniform_metadata(program, allocator, loc)
     return
 }
@@ -882,7 +883,8 @@ draw_buffers_pass_io :: proc(io: []RenderPassIO, allocator := context.allocator)
     return true
 }
 
-reset_texture_bindings :: proc(program: ^resource.ShaderProgram) {
+reset_texture_bindings :: proc(allocator := context.allocator) -> (ok: bool) {
+
     // Reset units
     for unit in u32(gl.TEXTURE0)..=u32(gl.TEXTURE31) {
         gl.ActiveTexture(unit)
@@ -892,6 +894,8 @@ reset_texture_bindings :: proc(program: ^resource.ShaderProgram) {
     }
     gl.ActiveTexture(gl.TEXTURE0)
 
+
+    /*
     // Reset sampler uniforms to 2D -> 0, Cubemap -> 1
     for uniform_label, metadata in program.uniforms {
         type, is_glsl_type := metadata.type.(resource.GLSLDataType)
@@ -904,4 +908,7 @@ reset_texture_bindings :: proc(program: ^resource.ShaderProgram) {
                 resource.set_uniform(program, uniform_label, i32(1))
         }
     }
+    */
+
+    return true
 }

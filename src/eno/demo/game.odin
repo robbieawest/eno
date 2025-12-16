@@ -82,106 +82,7 @@ before_frame :: proc() -> (ok: bool) {
 
     background_colour := [4]f32{ 1.0, 1.0, 1.0, 1.0 }
     background_colour_factor: f32 = 0.85
-    render.add_render_passes(
-         render.make_render_pass(
-            shader_gather=render.RenderPassShaderGenerate(render.LightingShaderGenerateConfig{}),
-            mesh_gather=render.RenderPassQuery{ material_query =
-                proc(material: resource.Material, type: resource.MaterialType) -> bool {
-                    return type.alpha_mode != .BLEND && !type.double_sided
-                }
-            },
-            properties=render.RenderPassProperties{
-                geometry_z_sorting = .ASC,
-                face_culling = render.FaceCulling.BACK,
-                viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
-                clear = { .COLOUR_BIT, .DEPTH_BIT },
-                clear_colour = background_colour * background_colour_factor,
-                multisample = true
-            },
-            outputs = []render.RenderPassIO {
-                {
-                    nil,
-                    render.AttachmentID{ .COLOUR, 0 },
-                    "OpaqueSingleSidedColour"
-                },
-                {
-                    nil,
-                    render.AttachmentID{ type=.DEPTH },
-                    "OpaqueSingleSidedDepth"
-                }
-            },
-            inputs = []render.RenderPassIO{ ssao_colour_output, ssao_bn_output },
-            name = "Opaque Single Sided Pass"
-        ) or_return,
-    )
-    opaque_single_pass := render.get_render_pass("Opaque Single Sided Pass") or_return
-    render.add_render_passes(
-        render.make_render_pass(
-            shader_gather=opaque_single_pass,
-            mesh_gather=render.RenderPassQuery{ material_query =
-                proc(material: resource.Material, type: resource.MaterialType) -> bool {
-                    return type.alpha_mode != .BLEND && type.double_sided
-                }
-            },
-            properties=render.RenderPassProperties{
-                geometry_z_sorting = .ASC,
-                viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
-                multisample = true,
-                render_skybox = true,  // Rendering skybox will set certain properties indepdendent of what is set in the pass properties, it will also be done last in the pass
-            },
-            outputs = []render.RenderPassIO {
-                {
-                    nil,
-                    render.AttachmentID{ .COLOUR, 0 },
-                    "OpaqueDoubleSidedColour"
-                },
-                {
-                    nil,
-                    render.AttachmentID{ type=.DEPTH },
-                    "OpaqueDoubleSidedDepth"
-                }
-            },
-            inputs = []render.RenderPassIO{ ssao_colour_output, ssao_bn_output },
-            name = "Opaque Double Sided Pass"
-        ) or_return,
-        render.make_render_pass(
-            shader_gather=opaque_single_pass,
-            mesh_gather=render.RenderPassQuery{ material_query =
-                proc(material: resource.Material, type: resource.MaterialType) -> bool {
-                    return type.alpha_mode == .BLEND
-                }
-            },
-            properties=render.RenderPassProperties{
-                geometry_z_sorting = .DESC,
-                face_culling = render.FaceCulling.ADAPTIVE,
-                viewport = [4]i32{ 0, 0, window_res.w, window_res.h },
-                multisample = true,
-                blend_func = render.BlendFunc{ .SOURCE_ALPHA, .ONE_MINUS_SOURCE_ALPHA },
-            },
-            outputs = []render.RenderPassIO {
-                {
-                    nil,
-                    render.AttachmentID{ .COLOUR, 0 },
-                    "TransparentColour"
-                },
-                {
-                    nil,
-                    render.AttachmentID{ type=.DEPTH },
-                    "TransparentDepth"
-                }
-            },
-            inputs = []render.RenderPassIO{ ssao_colour_output, ssao_bn_output },
-            name = "Transparency Pass"
-        ) or_return
-    )
-
-    /* Setup for pre passes
-    game_data.render_pipeline.pre_passes[0] = render.make_pre_render_pass(
-        game_data.render_pipeline,
-        render.IBLInput{},
-        0
-    ) or_return
-    */
+    render.make_lighting_passes(window_res, background_colour * background_colour_factor, ssao_colour_output, ssao_bn_output) or_return
 
     // Camera
     ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
@@ -226,9 +127,6 @@ before_frame :: proc() -> (ok: bool) {
     )
 
     render.populate_all_shaders(game.Game.scene) or_return
-
-    // Use if you have pre render passes
-    // render.pre_render(manager, game_data.render_pipeline, game.Game.scene) or_return
 
     ui.add_ui_elements(render.render_settings_ui_element, render.render_pipeline_ui_element, render.shader_store_ui_element, demo_ui_element) or_return
     ui.show_imgui_demo_window(false) or_return
