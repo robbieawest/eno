@@ -906,7 +906,7 @@ init_shader_source :: proc(source: string, extension: string, allocator := conte
 }
 
 
-read_single_shader_source :: proc(full_path: string, shader_type: ShaderType, allocator := context.allocator, loc := #caller_location) -> (shader: Shader, ok: bool) {
+read_single_shader_source :: proc(full_path: string, shader_type: ShaderType, defines: ..string, allocator := context.allocator, loc := #caller_location) -> (shader: Shader, ok: bool) {
     dbg.log(dbg.LogLevel.INFO, "Reading single shader source: %s", full_path, loc=loc)
     source, err := futils.read_file_source(full_path, allocator); defer delete(source)
     if err != .None {
@@ -914,9 +914,36 @@ read_single_shader_source :: proc(full_path: string, shader_type: ShaderType, al
         return
     }
 
-    new_source := resolve_shader_includes(source, full_path, allocator=allocator) or_return
+    new_source := resolve_shader_includes(source, full_path, allocator=allocator) or_return; defer delete(new_source)
 
-    shader.source.string_source = new_source
+    write_defines :: proc(builder: ^strings.Builder, defines: []string) {
+        for define in defines {
+            strings.write_string(builder, "#define ")
+            strings.write_string(builder, define)
+            strings.write_string(builder, "\n")
+        }
+    }
+
+    defines_builder := strings.builder_make(allocator)
+    if strings.starts_with(new_source, "#version") {
+        version_split := strings.split_lines_n(new_source, 2, allocator); defer delete(version_split)
+        if len(version_split) != 2 {
+            dbg.log(.ERROR, "Error in parsing source for versioning")
+            return
+        }
+
+        strings.write_string(&defines_builder, version_split[0])
+        strings.write_string(&defines_builder, "\n")
+        write_defines(&defines_builder, defines)
+        strings.write_string(&defines_builder, version_split[1])
+    }
+    else {
+        write_defines(&defines_builder, defines)
+        strings.write_string(&defines_builder, new_source)
+    }
+
+    shader.source.string_source = strings.to_string(defines_builder)
+    dbg.log(.INFO, "String source: %s", shader.source.string_source)
     shader.source.is_available_as_string = true // Wtf even is this flag, you can just check the length of the string
 
     shader.type = shader_type

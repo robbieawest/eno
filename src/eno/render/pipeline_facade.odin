@@ -394,14 +394,12 @@ generate_ssao_first_shader_pass : GenericShaderPassGenerator : proc(
 }
 
 generate_ssao_vert_shader :: proc(manager: ^resource.ResourceManager, layout: ^resource.VertexLayout, allocator := context.allocator) -> (vert_id: resource.ResourceIdent, ok: bool) {
-    // todo some layout checks/defines
-    // this is temp test code
-    shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "ssao/ssao.vert", .VERTEX, allocator) or_return
+    shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "ssao/ssao.vert", .VERTEX, allocator=allocator) or_return
     return resource.add_shader(manager, shader)
 }
 
 generate_ssao_first_pass_frag_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (frag_id: resource.ResourceIdent, ok: bool) {
-    shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "ssao/ssao_first_pass.frag", .FRAGMENT, allocator) or_return
+    shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "ssao/ssao_first_pass.frag", .FRAGMENT, allocator=allocator) or_return
     return resource.add_shader(manager, shader)
 }
 
@@ -437,7 +435,7 @@ generate_ssao_second_shader_pass : GenericShaderPassGenerator : proc(
 }
 
 generate_ssao_second_pass_frag_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (frag_id: resource.ResourceIdent, ok: bool) {
-    shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "ssao/ssao_second_pass.frag", .FRAGMENT, allocator) or_return
+    shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "ssao/ssao_second_pass.frag", .FRAGMENT, allocator=allocator) or_return
     return resource.add_shader(manager, shader)
 }
 

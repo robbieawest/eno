@@ -779,8 +779,8 @@ make_light_billboard_model :: proc(
 }
 
 get_billboard_vertex_shader :: proc(cylindrical: bool, allocator := context.allocator) -> (shader: Shader, ok: bool) {
-    if cylindrical do return read_single_shader_source(standards.SHADER_RESOURCE_PATH + "billboard/billboard_cylindrical.vert", .VERTEX, allocator)
-    else do return read_single_shader_source(standards.SHADER_RESOURCE_PATH + "billboard/billboard_spherical.vert", .VERTEX, allocator)
+    if cylindrical do return read_single_shader_source(standards.SHADER_RESOURCE_PATH + "billboard/billboard_cylindrical.vert", .VERTEX, allocator=allocator)
+    else do return read_single_shader_source(standards.SHADER_RESOURCE_PATH + "billboard/billboard_spherical.vert", .VERTEX, allocator=allocator)
 }
 
 
