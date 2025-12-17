@@ -15,6 +15,7 @@ import "core:slice"
 import "core:os"
 import "core:log"
 import glm "core:math/linalg/glsl"
+import standards "../standards"
 
 /*
     File for everything shaders
@@ -907,13 +908,15 @@ init_shader_source :: proc(source: string, extension: string, allocator := conte
 
 read_single_shader_source :: proc(full_path: string, shader_type: ShaderType, allocator := context.allocator, loc := #caller_location) -> (shader: Shader, ok: bool) {
     dbg.log(dbg.LogLevel.INFO, "Reading single shader source: %s", full_path, loc=loc)
-    source, err := futils.read_file_source(full_path, allocator)
+    source, err := futils.read_file_source(full_path, allocator); defer delete(source)
     if err != .None {
         dbg.log(dbg.LogLevel.ERROR, "Could not read file source for shader of path '%s'", full_path, loc=loc)
         return
     }
 
-    shader.source.string_source = source
+    new_source := resolve_shader_includes(source, full_path, allocator=allocator) or_return
+
+    shader.source.string_source = new_source
     shader.source.is_available_as_string = true // Wtf even is this flag, you can just check the length of the string
 
     shader.type = shader_type
@@ -921,6 +924,83 @@ read_single_shader_source :: proc(full_path: string, shader_type: ShaderType, al
     return
 }
 
+MAX_SHADER_INCLUDE_DEPTH :: 10
+resolve_shader_includes :: proc(source: string, source_path: string, depth := 0, allocator := context.allocator) -> (new_source: string, ok: bool) {
+    if depth > MAX_SHADER_INCLUDE_DEPTH {
+        dbg.log(.ERROR, "Exceeded max include depth")
+        return
+    }
+
+    source_builder := strings.builder_make(allocator)
+
+    lines := strings.split_lines(source, allocator); defer delete(lines)
+
+    // Resolve include locations
+    Include :: struct {
+        line_idx: int,
+        include_path: string
+    }
+
+    includes := make([dynamic]Include, allocator=allocator); defer delete(includes)
+    for line, line_idx in lines {
+        if !strings.starts_with(line, "#include \"") do continue
+
+        MAX_FILENAME_SIZE :: 100
+
+        start := len("#include \"")
+        end := -1
+        iters := 0
+        for end == -1 && iters <= MAX_FILENAME_SIZE {
+            end = line[start + iters] == '\"' ? start + iters : -1
+            iters += 1
+        }
+
+        append(&includes, Include{ line_idx, line[start:end] })
+    }
+
+    // Fill builder with new source
+    if len(includes) == 0 {
+        dbg.log(.INFO, "No includes")
+        strings.write_string(&source_builder, source)
+    }
+    else {
+        dbg.log(.INFO, "Includes found: %#v", includes)
+
+        write_lines :: proc(builder: ^strings.Builder, lines: []string, start: int, end: int) {
+            for i := start; i < end; i += 1 {
+                strings.write_string(builder, lines[i])
+                strings.write_string(builder, "\n")
+            }
+        }
+
+        prev_line_idx := 0
+        for include in includes {
+            line_idx := include.line_idx
+            include_path := include.include_path
+
+            write_lines(&source_builder, lines, prev_line_idx, line_idx)
+            prev_line_idx = line_idx + 1
+
+            full_include_path := utils.concat(standards.SHADER_RESOURCE_PATH, include_path); defer delete(full_include_path)
+            included_source, err := futils.read_file_source(full_include_path, allocator); defer delete(included_source)
+            if err != .None {
+                dbg.log(dbg.LogLevel.ERROR, "Could not read file source for shader of path '%s', err: %v", full_include_path, err)
+                return
+            }
+            new_source := resolve_shader_includes(included_source, include_path, depth + 1, allocator) or_return
+            defer delete(new_source)
+
+            strings.write_string(&source_builder, new_source)
+        }
+
+        write_lines(&source_builder, lines, prev_line_idx, len(lines))
+    }
+
+    return strings.to_string(source_builder), true
+}
+
+
+// Unused
 read_shader_source :: proc(manager: ^ResourceManager, pass_name: string, filenames: ..string, allocator := context.allocator) -> (program: ShaderProgram, ok: bool) {
 
     shaders := make([dynamic]Shader, allocator=allocator)

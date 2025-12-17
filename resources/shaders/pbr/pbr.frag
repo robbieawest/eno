@@ -1,5 +1,8 @@
 #version 440
 
+#include "pbr/tonemap.glsl"
+#include "pbr/pbr_util.glsl"
+
 layout(std430, binding = 1) buffer LightBuf {
     uint numSpotLights;
     uint numDirectionalLights;
@@ -115,131 +118,6 @@ uniform uint lightingSettings;
 
 uniform uvec2 ScreenOutputResolution;
 
-
-float PI = 3.14159265358979323;
-
-vec3 ReinhardTonemapping(vec3 colour) {
-    return colour / (colour + vec3(1.0));
-}
-
-// https://www.khronos.org/news/press/khronos-pbr-neutral-tone-mapper-released-for-true-to-life-color-rendering-of-3d-products
-vec3 KhronosNeutralTonemapping(vec3 colour) {
-    const float startCompression = 0.8 - 0.04;
-    const float desaturation = 0.15;
-
-    float x = min(colour.r, min(colour.g, colour.b));
-    float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
-    colour -= offset;
-
-    float peak = max(colour.r, max(colour.g, colour.b));
-    if (peak < startCompression) return colour;
-
-    const float d = 1. - startCompression;
-    float newPeak = 1. - d * d / (peak + d - startCompression);
-    colour *= newPeak / peak;
-
-    float g = 1. - 1. / (desaturation * (peak - newPeak) + 1.);
-    return mix(colour, newPeak * vec3(1, 1, 1), g);
-}
-
-float DistributionGGX(vec3 N, vec3 H, float roughness) {
-    float a = roughness*roughness;
-    float a2 = a*a;
-    float NdotH  = max(dot(N, H), 0.0);
-    float NdotH2 = NdotH*NdotH;
-
-    float num = a2;
-    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
-    denom = PI * denom * denom;
-
-    return num / denom;
-}
-
-float GeomSchlickGGX(float NdotV, float roughness) {
-    float r = (roughness + 1.0);
-    float k = (r * r) / 8.0;
-
-    float num = NdotV;
-    float denom = NdotV * (1.0 - k) + k;
-
-    return num / denom;
-}
-
-float GeomSmith(vec3 N, vec3 V, vec3 L, float roughness) {
-    float NdotV = max(dot(N, V), 0.0);
-    float NdotL = max(dot(N, L), 0.0);
-    float ggx2 = GeomSchlickGGX(NdotV, roughness);
-    float ggx1 = GeomSchlickGGX(NdotL, roughness);
-
-    return ggx1 * ggx2;
-}
-
-float KelemenVisibility(vec3 L, vec3 H) {
-    return 0.25 * pow(max(dot(L, H), 0.0), 2);
-}
-
-vec3 FresnelSchlick(vec3 V, vec3 H, vec3 F0) {
-    return F0 + (1.0 - F0) * pow(clamp(1.0 - max(dot(H, V), 0.0), 0.0, 1.0), 5.0);
-}
-
-vec3 FresnelSchlickRoughness(vec3 N, vec3 V, vec3 F0, float roughness) {
-    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - max(dot(N, V), 0.0), 0.0, 1.0), 5.0);
-}
-
-vec3 calculateBRDF(vec3 N, vec3 V, vec3 L, vec3 H, vec3 albedo, float roughness, float metallic, vec3 F0, float specular) {
-    float NDF = DistributionGGX(N, H, roughness);
-    float G = GeomSmith(N, V, L, roughness);
-    vec3 fresnel = FresnelSchlick(H, V, F0);
-
-    // Cook-torrence
-    vec3 num = NDF * G * fresnel;
-    float denom = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
-    vec3 specularContrib = specular * (num / denom);
-
-    vec3 diffuseShare = (vec3(1.0) - fresnel) * (1 - metallic);
-    vec3 lambertian = albedo / PI;
-    return diffuseShare * lambertian + specularContrib;
-}
-
-vec3 calculateClearcoatBRDF(vec3 N, vec3 L, vec3 H, float roughness, vec3 Fc) {
-    float NDF = DistributionGGX(N, H, roughness);
-    float G = KelemenVisibility(L, H);
-    return (NDF * G) * Fc;
-}
-
-vec3 calculateReflectance(vec3 BRDF, vec3 N, vec3 L, vec3 radiance) {
-    return BRDF * radiance * max(dot(N, L), 0.0);
-}
-
-vec3 IBLMultiScatterBRDF(vec3 N, vec3 V, vec3 radiance, vec3 irradiance, vec3 albedo, vec2 f_ab, float perceptualRoughness, const bool dielectric, float specular, vec3 specularColour) {
-    vec3 F0;
-    if (dielectric) F0 = min(vec3(0.04) * specularColour * specular, vec3(1.0));
-    else F0 = albedo;
-
-    vec3 kS = FresnelSchlickRoughness(N, V, F0, perceptualRoughness);
-
-    vec3 FssEss = kS * f_ab.x + f_ab.y;
-    vec3 specularContrib = FssEss * radiance;
-
-    float Ess = f_ab.x + f_ab.y;
-    float Ems = 1 - Ess;
-    vec3 Favg = F0 + (1.0 - F0) / 21.0;
-    vec3 Fms = FssEss * Favg / (1 - Ems * Favg);
-    vec3 FmsEms = Fms * Ems;
-
-    vec3 diffuse = irradiance;
-    // Dielectric kD term
-    if (dielectric) {  // Full dielectric, metallic = 0
-       vec3 Edss = 1.0 - (FssEss + Fms + Ems);
-       vec3 kD = albedo * Edss;
-       diffuse *= FmsEms + kD;
-    }
-    else diffuse *= FmsEms;  // Full metal, metallic = 1
-
-    return specularContrib + diffuse;
-}
-
-
 vec3 IBLAmbientTerm(vec3 N, vec3 AN, vec3 V, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat, float specular, vec3 specularColour) {
     const float MAX_REFLECTION_LOD = 4.0;
     vec3 R = reflect(-V, AN);  // World space
@@ -255,6 +133,7 @@ vec3 IBLAmbientTerm(vec3 N, vec3 AN, vec3 V, vec3 fresnelRoughness, vec3 albedo,
     const bool multiScatter = true;
     if (multiScatter) {
         // Multiple scattering https://www.jcgt.org/published/0008/01/03/paper.pdf
+        // Could use interped F0 instead of two BRDF calculations
         vec3 metalBRDF = IBLMultiScatterBRDF(N, V, radiance, irradiance, albedo, f_ab, roughness, false, 1.0, vec3(1.0));
         vec3 dielectricBRDF = IBLMultiScatterBRDF(N, V, radiance, irradiance, albedo, f_ab, roughness, true, specular, specularColour);
         return mix(dielectricBRDF, metalBRDF, metallic);
@@ -275,11 +154,6 @@ bool checkBitMask(uint mask, int bitPosition) {
     return (mask & uint(1 << bitPosition)) != 0;
 }
 
-// Material usage enumerations
-// Todo add defines pre compilation?
-// Allows for less coordination between engine and shader
-// Could use for vertex attributes as well, making only one shader needed
-// With these changes shader includes could be made as well
 #define BaseColourFactor 0
 bool baseColourFactorSet = checkBitMask(materialUsages, BaseColourFactor);
 #define BaseColourTexture 1
@@ -316,7 +190,6 @@ bool specularTextureSet = checkBitMask(materialUsages, SpecularTexture);
 bool specularColourFactorSet = checkBitMask(materialUsages, SpecularColourFactor);
 #define SpecularColourTexture 17
 bool specularColourTextureSet = checkBitMask(materialUsages, SpecularColourTexture);
-
 
 vec4 getBaseColour() {
     vec4 baseColour = vec4(vec3(0.0), 1.0);

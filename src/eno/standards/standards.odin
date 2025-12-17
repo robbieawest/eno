@@ -3,9 +3,9 @@ package standards
 import glm "core:math/linalg/glsl"
 import "core:math/linalg"
 
-SHADER_RESOURCE_PATH :: "./resources/shaders/"
-MODEL_RESOURCE_PATH :: "./resources/models/"
-TEXTURE_RESOURCE_PATH :: "./resources/textures/"
+SHADER_RESOURCE_PATH :: #config(SHADER_RESOURCE_PATH, "./resources/shaders/")
+MODEL_RESOURCE_PATH :: #config(MODEL_RESOURCE_PATH, "./resources/models/")
+TEXTURE_RESOURCE_PATH :: #config(TEXTURE_RESOURCE_PATH, "./resources/textures/")
 
 ComponentTemplate :: struct {
     label: string,
