@@ -73,8 +73,10 @@ A list of features detailing what eno currently implements:
 - SSAO
 - Bent normals - WIP, current implemention has issues of lack of small-surface normal detail and typical SSAO artifacts being exacerbated in certain models. Addition of sample-variance magnitude for the normals based on the bent cone (Klehm, Oliver et all (2011) Bent Normals and Cones in Screen-space) would help as well
 
+What I want to do next:
+- Global illumination
+
 Things I'd like to implement if I have the time:
-- Shader introspection and shader defines for more clean render managemnet
 - Pre-render geometry processing for tangent approximations with `mikkt`; an unweld -> `mikkt` tangent generation -> weld process
 - Forward+
 - Animation
@@ -82,7 +84,6 @@ Things I'd like to implement if I have the time:
 - Order independent transparency
 
 Far reaching:
-- Some proper global illumination
 - Vulkan backend
 - MoltenVK for Mac
 
