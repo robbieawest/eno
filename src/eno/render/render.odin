@@ -136,10 +136,12 @@ render :: proc(
     }
 
 
+
     // Used for render passes that query their own data
     mesh_data_map := make(map[^RenderPass][dynamic]MeshData, allocator=temp_allocator)
     // Used for render passes which point to another render pass's model data
     mesh_data_references := make(map[^RenderPass]^[dynamic]MeshData, allocator=temp_allocator)
+
 
     for &pass in pipeline.passes {
 
@@ -156,7 +158,6 @@ render :: proc(
         if len(mesh_data) != 0 do render_geometry(manager, scene, pipeline.shader_store, pass, mesh_data, allocator, temp_allocator) or_return
         if pass.properties.render_skybox do render_skybox(manager, scene.viewpoint, allocator) or_return
     }
-
 
     ui.render_ui(window.WINDOW_WIDTH, window.WINDOW_HEIGHT) or_return
 
@@ -653,7 +654,6 @@ handle_pass_state :: proc(pass: RenderPass) -> (ok: bool) {
         dbg.log(.ERROR, "Pass needs at least one output")
         return
     }
-
 
     properties := pass.properties
     set_front_face(properties.front_face)

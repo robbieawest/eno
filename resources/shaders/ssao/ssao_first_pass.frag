@@ -21,8 +21,8 @@ uniform float SSAOBias;
 
 uniform bool SSAOEvaluateBentNormal;
 
-out float Colour;
-out vec3 BentNormal;
+layout(location = 0) out float Colour;
+layout(location = 1) out vec3 BentNormal;
 
 
 in mat4 m_Project;

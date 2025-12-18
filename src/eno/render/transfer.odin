@@ -701,8 +701,9 @@ check_framebuffer_status :: proc(framebuffer: FrameBuffer, log := true, loc := #
 }
 
 check_framebuffer_status_raw :: proc(log := true, loc := #caller_location) -> (ok: bool) {
-    ok = gl.CheckFramebufferStatus(gl.FRAMEBUFFER) == gl.FRAMEBUFFER_COMPLETE
-    if !ok && log do dbg.log(.ERROR, "Framebuffer status is invalid/incomplete", loc=loc)
+    status := gl.CheckFramebufferStatus(gl.FRAMEBUFFER)
+    ok = status == gl.FRAMEBUFFER_COMPLETE
+    if !ok && log do dbg.log(.ERROR, "Framebuffer status is invalid/incomplete %v", status, loc=loc)
     return
 }
 

@@ -109,6 +109,9 @@ add_ui_elements :: proc(elements: ..UIElement) -> (ok: bool) {
 render_ui :: proc(#any_int display_w, #any_int display_y: i32) -> (running: bool) {
     ctx := check_context() or_return
 
+    backup_current_window := SDL.GL_GetCurrentWindow()
+    backup_current_context := SDL.GL_GetCurrentContext()
+
     imgui_impl_opengl3.NewFrame()
     imgui_impl_sdl2.NewFrame()
     im.NewFrame()
@@ -121,11 +124,9 @@ render_ui :: proc(#any_int display_w, #any_int display_y: i32) -> (running: bool
     gl.Viewport(0, 0, display_w, display_y)
     imgui_impl_opengl3.RenderDrawData(im.GetDrawData())
 
-    backup_current_window := SDL.GL_GetCurrentWindow()
     im.UpdatePlatformWindows()
-
-    backup_current_context := SDL.GL_GetCurrentContext()
     im.RenderPlatformWindowsDefault()
+
     SDL.GL_MakeCurrent(backup_current_window, backup_current_context);
 
     return true

@@ -943,7 +943,7 @@ read_single_shader_source :: proc(full_path: string, shader_type: ShaderType, de
     }
 
     shader.source.string_source = strings.to_string(defines_builder)
-    dbg.log(.INFO, "String source: %s", shader.source.string_source)
+    // dbg.log(.INFO, "String source: %s", shader.source.string_source)
     shader.source.is_available_as_string = true // Wtf even is this flag, you can just check the length of the string
 
     shader.type = shader_type
