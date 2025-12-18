@@ -9,8 +9,13 @@ layout (std140, binding = 0) uniform CameraInfo {
 
 layout (location = 0) in vec3 aNormal;
 layout (location = 1) in vec3 aPosition;
+
+#ifdef CONTAINS_TANGENT
 layout (location = 2) in vec4 aTangent;
 layout (location = 3) in vec2 aTexCoords;
+#else
+layout (location = 2) in vec2 aTexCoords;
+#endif
 
 uniform mat4 m_Model;
 uniform mat3 m_Normal;
@@ -19,8 +24,11 @@ out vec3 position;
 out vec3 geomNormal;
 out vec2 texCoords;
 out vec3 cameraPosition;
-out mat3 TBN;
 out mat3 transView;
+
+#ifdef CONTAINS_TANGENT
+out mat3 TBN;
+#endif
 
 void main() {
     texCoords = aTexCoords;
@@ -30,6 +38,7 @@ void main() {
 
     geomNormal = normalize(m_Normal * aNormal);
 
+    #ifdef CONTAINS_TANGENT
     float bitangentSign = aTangent.w;
     vec3 tangent = normalize(m_Normal * vec3(aTangent));
     // vec3 tangent = normalize(cross(normal, vec3(0.0, 1.0, 1.0)));  // approximation
@@ -38,6 +47,7 @@ void main() {
     tangent = normalize(tangent - dot(tangent, geomNormal) * geomNormal);
     vec3 bitangent = cross(geomNormal, tangent) * bitangentSign;
     TBN = mat3(tangent, bitangent, geomNormal);
+    #endif
 
     // Apply TBN to outgoing values
     // position = TBN * position;

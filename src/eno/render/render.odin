@@ -1554,8 +1554,8 @@ generate_lighting_vertex_shader :: proc(
     dbg.log(.INFO, "Generating lighting vertex shader")
 
     single_shader: resource.Shader
-    tangent_define := contains_tangent ? "CONTAINS_TANGENT true" : "CONTAINS_TANGENT false"
-    single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr/pbr.vert", .VERTEX, tangent_define, allocator=allocator) or_return
+    if contains_tangent do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr/pbr.vert", .VERTEX, "CONTAINS_TANGENT", allocator=allocator) or_return
+    else do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr/pbr.vert", .VERTEX, allocator=allocator) or_return
 
     id = resource.add_shader(manager, single_shader) or_return
     ok = true
@@ -1571,8 +1571,8 @@ generate_lighting_frag_shader :: proc(
     dbg.log(.INFO, "Generating lighting frag shader")
 
     single_shader: resource.Shader
-    tangent_define := contains_tangent ? "CONTAINS_TANGENT true" : "CONTAINS_TANGENT false"
-    single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr/pbr.frag", .FRAGMENT, tangent_define, allocator=allocator) or_return
+    if contains_tangent do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr/pbr.frag", .FRAGMENT, "CONTAINS_TANGENT", allocator=allocator) or_return
+    else do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr/pbr.frag", .FRAGMENT, allocator=allocator) or_return
 
     id = resource.add_shader(manager, single_shader) or_return
     ok = true

@@ -79,9 +79,28 @@ in vec3 position;
 in vec3 geomNormal;
 in vec2 texCoords;
 in vec3 cameraPosition;
-in mat3 TBN;
 in mat3 transView;
 out vec4 Colour;
+
+#ifdef CONTAINS_TANGENT
+in mat3 TBN;
+#else
+
+mat3 calculateTBN() {
+    vec3 Q1  = dFdx(position);
+    vec3 Q2  = dFdy(position);
+    vec2 st1 = dFdx(texCoords);
+    vec2 st2 = dFdy(texCoords);
+
+    vec3 gNormal = normalize(geomNormal);
+    vec3 tangent = normalize(Q1 * st2.t - Q2 * st1.t);
+    vec3 bitangent = -normalize(cross(gNormal, tangent));
+    return mat3(tangent, bitangent, gNormal);
+}
+mat3 TBN = calculateTBN();
+
+#endif
+
 
 layout(binding = 0) uniform sampler2D baseColourTexture;
 layout(binding = 0) uniform sampler2D emissiveTexture;
@@ -303,6 +322,9 @@ Clearcoat getClearcoat(vec3 eNormal) {
     }
     if (clearcoatNormalTextureSet) {
         clearcoat.clearcoatNormal = texture(clearcoatNormalTexture, texCoords).rgb * 2.0 - 1.0;
+        #ifndef CONTAINS_TANGENT
+        clearcoat.clearcoatNormal = normalize(TBN * clearcoat.clearcoatNormal);
+        #endif
     }
 
     return clearcoat;
