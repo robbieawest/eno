@@ -1,5 +1,7 @@
 #version 440
 
+#include "pbr/geom_util.glsl"
+
 layout (std140, binding = 0) uniform CameraInfo {
     vec3 position;
     float _pad;
@@ -39,14 +41,7 @@ void main() {
     geomNormal = normalize(m_Normal * aNormal);
 
     #ifdef CONTAINS_TANGENT
-    float bitangentSign = aTangent.w;
-    vec3 tangent = normalize(m_Normal * vec3(aTangent));
-    // vec3 tangent = normalize(cross(normal, vec3(0.0, 1.0, 1.0)));  // approximation
-
-    // Orthogonalize tangent to normal
-    tangent = normalize(tangent - dot(tangent, geomNormal) * geomNormal);
-    vec3 bitangent = cross(geomNormal, tangent) * bitangentSign;
-    TBN = mat3(tangent, bitangent, geomNormal);
+    TBN = getTBN(m_Normal, geomNormal, aTangent);
     #endif
 
     // Apply TBN to outgoing values

@@ -1,0 +1,45 @@
+
+
+vec3 orthogonalize(vec3 from, vec3 to) {
+    return normalize(from - dot(from, to) * to);
+}
+
+// todo remove?
+mat3 getTBN(mat3 normalMatrix, vec3 normal, vec4 tangent) {
+    float bitangentSign = tangent.w;
+    vec3 T = normalize(normalMatrix* vec3(tangent));
+    // vec3 tangent = normalize(cross(normal, vec3(0.0, 1.0, 1.0)));  // approximation
+
+    // Orthogonalize tangent to normal
+    T = orthogonalize(T, normal);
+    vec3 bitangent = cross(normal, T) * bitangentSign;
+    return mat3(T, bitangent, normal);
+}
+
+struct TangentNormalSign {
+    vec3 tangent;
+    vec3 normal;
+    float sign;
+};
+
+TangentNormalSign getTangentNormalSign(mat3 normalMatrix, vec3 viewNormal, vec4 tangent) {
+    vec3 T = normalize(normalMatrix * vec3(tangent));
+
+    // Orthogonalize tangent to normal
+    T = orthogonalize(T, viewNormal);
+
+    TangentNormalSign ret;
+    ret.normal = viewNormal;
+    ret.tangent = T;
+    ret.sign = tangent.w;
+
+    return ret;
+}
+
+// To be used on an interpolated TangentNormalSign
+mat3 orthogonalize(TangentNormalSign tangentNormalSign) {
+    vec3 normal = tangentNormalSign.normal;
+    vec3 tangent = orthogonalize(tangentNormalSign.tangent, normal);
+    vec3 bitangent = cross(normal, tangent) * tangentNormalSign.sign;
+    return mat3(tangent, bitangent, normal);
+}

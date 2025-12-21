@@ -139,7 +139,7 @@ uniform uvec2 ScreenOutputResolution;
 
 vec3 IBLAmbientTerm(vec3 N, vec3 AN, vec3 V, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat, float specular, vec3 specularColour) {
     const float MAX_REFLECTION_LOD = 4.0;
-    vec3 R = reflect(-V, AN);  // World space
+    vec3 R = reflect(-V, N);  // World space
     // vec3 RWorld = normalize(transpose(TBN) * R);  // Since tbn is orthogonal it is transitive across the reflect operation *from when R was tangent space
     vec3 radiance = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
     vec3 irradiance = texture(irradianceMap, AN).rgb;
@@ -149,7 +149,7 @@ vec3 IBLAmbientTerm(vec3 N, vec3 AN, vec3 V, vec3 fresnelRoughness, vec3 albedo,
     // Clearcoat -> No metallic or diffuse effects
     if (clearcoat) return (fresnelRoughness * f_ab.x + f_ab.y) * radiance;
 
-    const bool multiScatter = true;
+    const bool multiScatter = false;
     if (multiScatter) {
         // Multiple scattering https://www.jcgt.org/published/0008/01/03/paper.pdf
         // Could use interped F0 instead of two BRDF calculations

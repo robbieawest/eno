@@ -1471,12 +1471,20 @@ generate_gbuffer_shader_pass :: proc(
     //  todo  the shader store, instead of meshes. This does kind of make sense since the shader store is super simple then, since
     //  todo   not many vertex/material permutations, but lots of meshes
 
+    defines := make([dynamic]string, allocator=allocator); defer delete(defines)
+    for attribute in vertex_layout.infos do #partial switch attribute.type {
+        case .position: append_elem(&defines, "POSITION_INPUT")
+        case .normal: append_elem(&defines, "NORMAL_INPUT")
+        case .texcoord: append_elem(&defines, "TEXCOORD_INPUT")
+        case .tangent: append_elem(&defines, "TANGENT_INPUT")
+    }
+
     dbg.log(dbg.LogLevel.INFO, "Creating gbuffer vertex shader")
-    vert_id := generate_gbuffer_vertex_shader(manager, vertex_layout, allocator) or_return
+    vert_id := generate_gbuffer_vertex_shader(manager, defines[:], allocator) or_return
 
     dbg.log(dbg.LogLevel.INFO, "Creating gbuffer fragment shader")
     config := cast(^GBufferShaderGenerateConfig)options
-    frag_id := generate_gbuffer_frag_shader(manager, config^, vertex_layout, allocator) or_return
+    frag_id := generate_gbuffer_frag_shader(manager, config^, defines[:], allocator) or_return
 
     // Grabbing shaders here makes it impossible to compile a shader twice
     vert := resource.get_shader(manager, vert_id) or_return
@@ -1582,24 +1590,14 @@ generate_lighting_frag_shader :: proc(
 @(private)
 generate_gbuffer_vertex_shader :: proc(
     manager: ^resource.ResourceManager,
-    vertex_layout: ^resource.VertexLayout,
+    defines: []string,
     allocator := context.allocator
 ) -> (id: resource.ResourceIdent, ok: bool) {
     dbg.log(.INFO, "Generating gbuffer vertex shader")
 
-    shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "gbuffer/gbuffer.vert", .VERTEX, allocator=allocator) or_return
 
-    defines := make([dynamic]string, allocator=allocator)
-    defer delete(defines)
 
-    // I guess two position/normals in the layout info is ub
-    for attribute in vertex_layout.infos do #partial switch attribute.type {
-        case .position: append_elem(&defines, "#define POSITION_INPUT")
-        case .normal: append_elem(&defines, "#define NORMAL_INPUT")
-    }
-    old_src := shader.source.string_source
-    defer delete(old_src)
-    shader.source.string_source = resource.add_shader_defines(old_src, ..defines[:], allocator=allocator) or_return
+    shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "gbuffer/gbuffer.vert", .VERTEX, ..defines, allocator=allocator) or_return
 
     return resource.add_shader(manager, shader)
 }
@@ -1608,23 +1606,13 @@ generate_gbuffer_vertex_shader :: proc(
 generate_gbuffer_frag_shader :: proc(
     manager: ^resource.ResourceManager,
     generate_config: GBufferShaderGenerateConfig,
-    vertex_layout: ^resource.VertexLayout,
+    defines: []string,
     allocator := context.allocator
 ) -> (id: resource.ResourceIdent, ok: bool) {
     dbg.log(.INFO, "Generating gbuffer frag shader")
 
-    shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "gbuffer/gbuffer.frag", .FRAGMENT, allocator=allocator) or_return
+    shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "gbuffer/gbuffer.frag", .FRAGMENT, ..defines, allocator=allocator) or_return
 
-    defines := make([dynamic]string, allocator=allocator)
-    defer delete(defines)
-
-    for attribute in vertex_layout.infos do #partial switch attribute.type {
-    case .position: if .POSITION in generate_config.outputs do append_elem(&defines, "#define POSITION_INPUT")
-    case .normal: if .NORMAL in generate_config.outputs do append_elem(&defines, "#define NORMAL_INPUT")
-    }
-    old_src := shader.source.string_source
-    defer delete(old_src)
-    shader.source.string_source = resource.add_shader_defines(old_src, ..defines[:], allocator=allocator) or_return
 
     return resource.add_shader(manager, shader)
 }
