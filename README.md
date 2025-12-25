@@ -30,7 +30,7 @@ If you wish to build eno, you can do:
 ```
 odin build ./src/eno/demo -out:bin/eno-build
 ```
-, adding `.exe` on windows.
+, adding `.exe` on windows, and provided `bin/` exists.
 
 
 2. Use the build script `runeno.sh`.
