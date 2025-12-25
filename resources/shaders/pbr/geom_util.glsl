@@ -43,3 +43,19 @@ mat3 orthogonalize(TangentNormalSign tangentNormalSign) {
     vec3 bitangent = cross(normal, tangent) * tangentNormalSign.sign;
     return mat3(tangent, bitangent, normal);
 }
+
+#ifdef INCLUDE_FRAG_UTILS
+
+mat3 calculateTBN(vec3 position, vec2 texCoords, vec3 geomNormal) {
+    vec3 Q1  = dFdx(position);
+    vec3 Q2  = dFdy(position);
+    vec2 st1 = dFdx(texCoords);
+    vec2 st2 = dFdy(texCoords);
+
+    vec3 gNormal = normalize(geomNormal);
+    vec3 tangent = normalize(Q1 * st2.t - Q2 * st1.t);
+    vec3 bitangent = -normalize(cross(gNormal, tangent));
+    return mat3(tangent, bitangent, gNormal);
+}
+
+#endif

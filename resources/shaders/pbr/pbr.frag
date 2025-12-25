@@ -1,7 +1,10 @@
 #version 440
 
+#define INCLUDE_FRAG_UTILS
+
 #include "pbr/tonemap.glsl"
 #include "pbr/pbr_util.glsl"
+#include "pbr/geom_util.glsl"
 
 layout(std430, binding = 1) buffer LightBuf {
     uint numSpotLights;
@@ -85,20 +88,7 @@ out vec4 Colour;
 #ifdef CONTAINS_TANGENT
 in mat3 TBN;
 #else
-
-mat3 calculateTBN() {
-    vec3 Q1  = dFdx(position);
-    vec3 Q2  = dFdy(position);
-    vec2 st1 = dFdx(texCoords);
-    vec2 st2 = dFdy(texCoords);
-
-    vec3 gNormal = normalize(geomNormal);
-    vec3 tangent = normalize(Q1 * st2.t - Q2 * st1.t);
-    vec3 bitangent = -normalize(cross(gNormal, tangent));
-    return mat3(tangent, bitangent, gNormal);
-}
-mat3 TBN = calculateTBN();
-
+mat3 TBN = calculateTBN(position, texCoords, geomNormal);
 #endif
 
 
@@ -144,6 +134,8 @@ vec3 IBLAmbientTerm(vec3 N, vec3 AN, vec3 V, vec3 fresnelRoughness, vec3 albedo,
     vec3 radiance = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
     vec3 irradiance = texture(irradianceMap, AN).rgb;
 
+    float so = 1.0 - clamp(dot(R, AN), 0.0, 1.0);
+
     vec2 f_ab = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
 
     // Clearcoat -> No metallic or diffuse effects
@@ -166,6 +158,7 @@ vec3 IBLAmbientTerm(vec3 N, vec3 AN, vec3 V, vec3 fresnelRoughness, vec3 albedo,
         kD *= 1.0 - metallic;
         vec3 diffuse = irradiance * albedo;
         return kD * diffuse + specular;
+        // return kD * diffuse + specular * so;
     }
 }
 

@@ -1,5 +1,7 @@
 #version 440
 
+#define INCLUDE_FRAG_UTILS
+
 #include "pbr/material.glsl"
 #include "pbr/geom_util.glsl"
 
@@ -39,7 +41,16 @@ void main() {
     vec3 vNormal;  // View space
     if (materialIsUsed(NormalTexture)) {
         vec3 texNormal = texture(normalTexture, texCoords).rgb * 2.0 - 1.0;  // Tangent space
-        vNormal = orthogonalize(tangentNormalSign) * texNormal;
+        mat3 TBN;
+
+        #ifdef TANGENT_INPUT
+        TBN = orthogonalize(tangentNormalSign);
+        #else
+        TBN = calculateTBN(position, texCoords, normal);
+        #endif
+
+        vNormal = TBN * texNormal;
+
     }
     else {
         vNormal = normal;
