@@ -1,5 +1,7 @@
 #version 440
 
+#include "util/camera.glsl"
+
 in vec2 texCoords;
 
 uniform sampler2D gbDepth;
@@ -26,20 +28,26 @@ layout(location = 1) out vec3 BentNormal;
 
 
 in mat4 m_Project;
-in mat4 m_ProjectInv;
+// in mat4 m_ProjectInv;
+
+in vec3 viewRay;
+
+
+float linearizeDepth(float projDepth) {
+    float zNear = Camera.zNear;
+    float zFar = Camera.zFar;
+    return 2.0 * zNear * zFar / (zFar + zNear - (2.0 * projDepth - 1.0) * (zFar - zNear));
+}
 
 // Could be incorrect
-vec3 reconstructFragPos(vec2 UV, float depth) {
-    vec4 clip = vec4(vec3(UV, depth) * 2.0 - 1.0, 1.0);
-    vec4 view = m_ProjectInv * clip;
-    view /= view.w;
-
-    return view.xyz;
+vec3 reconstructFragPos(float depth) {
+    float linearDepth = linearizeDepth(depth);
+    return viewRay * linearDepth;
 }
 
 void main() {
     float depth = texture(gbDepth, texCoords).r;
-    vec3 fragPos = reconstructFragPos(texCoords, depth);
+    vec3 fragPos = reconstructFragPos(depth);
     vec3 normal = normalize(texture(gbNormal, texCoords).rgb * 2.0 - 1.0);
     BentNormal = normal;
 
@@ -64,7 +72,7 @@ void main() {
         sampleUV.xyz = sampleUV.xyz * 0.5 + 0.5;
 
         float sampleDepth = texture(gbDepth, sampleUV.st).r;
-        sampleDepth = reconstructFragPos(sampleUV.st, sampleDepth).z;
+        sampleDepth = reconstructFragPos(sampleDepth).z;
 
         float rangeCheck = smoothstep(0.0, 1.0, SSAOSampleRadius / abs(fragPos.z - sampleDepth));
         float occluded = (sampleDepth >= samplePos.z + SSAOBias ? 1.0 : 0.0) * rangeCheck;
@@ -76,9 +84,9 @@ void main() {
         occlusion += occluded;
         unocclusion += unoccluded;
 
-        if (SSAOEvaluateBentNormal) bentNormal += sampleV * unoccluded;
+        if (SSAOEvaluateBentNormal) bentNormal += normalize(sampleV) * unoccluded;
     }
-    if (SSAOEvaluateBentNormal) BentNormal = normalize(bentNormal);
+    if (SSAOEvaluateBentNormal) BentNormal = bentNormal / unocclusion;
     BentNormal = (BentNormal + 1.0) * 0.5;
 
     Colour = 1.0 - (occlusion / SSAONumSamplesInKernel);

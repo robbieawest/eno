@@ -1016,7 +1016,10 @@ CameraBufferData :: struct #packed {
     position: glm.vec3,
     _pad: f32,
     view: glm.mat4,
-    projection: glm.mat4
+    projection: glm.mat4,
+    inv_projection: glm.mat4,
+    z_near: f32,
+    z_far: f32
 }
 
 update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
@@ -1028,11 +1031,15 @@ update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
         return
     }
 
+    proj := cam.get_perspective(viewpoint)
     camera_buffer_data := CameraBufferData {
         viewpoint.position,
         0,
         cam.camera_look_at(viewpoint),
-        cam.get_perspective(viewpoint)
+        proj,
+        glm.inverse(proj),
+        viewpoint.near_plane,
+        viewpoint.far_plane
     }
 
     if Context.camera_ubo == nil {

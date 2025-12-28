@@ -1,13 +1,7 @@
 #version 440
 
 #include "pbr/geom_util.glsl"
-
-layout (std140, binding = 0) uniform CameraInfo {
-    vec3 position;
-    float _pad;
-    mat4 m_View;
-    mat4 m_Project;
-} Camera;
+#include "util/camera.glsl"
 
 layout (location = 0) in vec3 aNormal;
 layout (location = 1) in vec3 aPosition;

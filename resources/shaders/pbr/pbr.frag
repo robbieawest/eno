@@ -127,14 +127,79 @@ uniform uint lightingSettings;
 
 uniform uvec2 ScreenOutputResolution;
 
-vec3 IBLAmbientTerm(vec3 N, vec3 AN, vec3 V, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat, float specular, vec3 specularColour) {
+
+bool checkBitMask(uint mask, int bitPosition) {
+    return (mask & uint(1 << bitPosition)) != 0;
+}
+
+float getAperature(vec3 AN) {
+    return PI * 0.5 * (1.0 - max(0.0, 2.0 * length(AN) - 1.0));
+}
+
+float getAperature(float ao) {
+    return acos(sqrt(1.0 - ao));
+}
+
+float calculatePartialConeIntersection(float r_p, float r_l, float d) {
+    float LHS = 2.0 * PI * (1.0 - cos(min(r_p, r_l)));
+    float k = 1.0 - (d - abs(r_p - r_l)) / (r_p + r_l - abs(r_p - r_l));
+    return LHS * smoothstep(0.0, 1.0, k);
+}
+
+float calculateFullConeIntersection(float r_p, float r_l) {
+    return 2.0 * PI * (1.0 - cos(min(r_p, r_l)));
+}
+
+float convertSolidAngleToRadians(float angle) {
+    return acos((-angle) / (2.0 * PI) + 1.0);
+}
+
+// WIP
+float calculateSpecularOcclusion(vec3 BN, vec3 R, float roughness, float ao) {
+
+    //float aperture = getAperature(BN);
+    float aperture = getAperature(ao);
+    float omega_s = roughness;
+
+    float r_p = aperture;
+    float r_l = convertSolidAngleToRadians(omega_s);
+    float d = acos(clamp(dot(normalize(BN), R), 0.0, 1.0));
+    // Light source vector V_l = R, radius r_l = reflection cone angle
+    // d = similarity
+    // r_p = bent cone aperture -> spherical cap radius
+
+    // Find the area of intersection of specular (R) and visibility (BN) cones
+    // calculate SO = omega_i / omega_s (reflection/specular cone angle])
+
+    // Find intersection area
+    // if min(r_p, r_l) <= max(r_p, r_l) - d, then 2pi(1 - cos(min(r_p, r_l)))
+    // if r_p + r_l <= d, then 0
+    // otherwise, L(d, r_p, r_l)
+    // L defines partial intersection, and has a large trig-based identity in the paper
+    // They find an optimized approximation:
+    // L(d, r_p, r_l) = (2pi - 2picos(min_rp, r_l))) *
+    //  smoothstep(0, 1, 1 - (d - abs(r_p - r_l)) / (r_+p + r_l - abs(r_p - r_l)))
+
+    bool fullIntersection = bool(min(r_p, r_l) <= max(r_p, r_l) - d);
+    bool noIntersection = bool((r_p + r_l) <= d);
+    bool partialIntersection = !noIntersection && !fullIntersection;
+    float omega_i = float(fullIntersection) * calculateFullConeIntersection(r_p, r_l) +
+            float(partialIntersection) * calculatePartialConeIntersection(r_p, r_l, d);
+
+    return omega_i / omega_s;
+}
+
+vec3 IBLAmbientTerm(vec3 N, vec3 geomNormal, vec3 AN, vec3 V, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat, float specular, vec3 specularColour, float ao) {
     const float MAX_REFLECTION_LOD = 4.0;
     vec3 R = reflect(-V, N);  // World space
     // vec3 RWorld = normalize(transpose(TBN) * R);  // Since tbn is orthogonal it is transitive across the reflect operation *from when R was tangent space
     vec3 radiance = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
-    vec3 irradiance = texture(irradianceMap, AN).rgb;
+    vec3 irradiance = texture(irradianceMap, normalize(AN)).rgb;
 
-    float so = 1.0 - clamp(dot(R, AN), 0.0, 1.0);
+    float so = 1.0;
+    if (checkBitMask(lightingSettings, 3)) {
+        so = calculateSpecularOcclusion(AN, reflect(-V, N), roughness, ao);
+    }
 
     vec2 f_ab = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
 
@@ -157,13 +222,8 @@ vec3 IBLAmbientTerm(vec3 N, vec3 AN, vec3 V, vec3 fresnelRoughness, vec3 albedo,
         vec3 kD = 1.0 - kS;
         kD *= 1.0 - metallic;
         vec3 diffuse = irradiance * albedo;
-        return kD * diffuse + specular;
-        // return kD * diffuse + specular * so;
+        return kD * diffuse * ao + specular * so;
     }
-}
-
-bool checkBitMask(uint mask, int bitPosition) {
-    return (mask & uint(1 << bitPosition)) != 0;
 }
 
 #define BaseColourFactor 0
@@ -265,7 +325,6 @@ vec3 getBentNormal(vec2 screenUV, vec3 normal) {
         bentNormal = transView * bentNormal;
     }
     if (normalTextureSet) bentNormal += normal;
-    bentNormal = normalize(bentNormal);
     return bentNormal;
 }
 
@@ -399,7 +458,7 @@ void main() {
     vec3 specularColour = specularTotal.specularColour;
 
     float occlusion = getOcclusion();
-    float ambientOcclusion = getAmbientOcclusion(screenUV);
+    float ao = getAmbientOcclusion(screenUV) * occlusion;
 
     // Clamp roughnesses, roughness at zero isn't great visually
     roughness = clamp(roughness, 0.089, 1.0);
@@ -455,17 +514,17 @@ void main() {
 
     if (iblEnabled) {
         vec3 F = FresnelSchlickRoughness(normal, viewDir, baseFresnelIncidence, roughness);
-        ambient = IBLAmbientTerm(normal, ambientNormal, viewDir, F, albedo, roughness, metallic, false, specular, specularColour);
+        ambient = IBLAmbientTerm(normal, geomNormal, ambientNormal, viewDir, F, albedo, roughness, metallic, false, specular, specularColour, ao);
 
         if (clearcoatActive) {
             // Fresnel at incidence for clearcoat is 0.04/4% at IOR=1.5
             Fc = FresnelSchlickRoughness(clearcoatNormal, viewDir, vec3(0.04), clearcoatRoughness);
             ambient *= (1.0 - Fc);
-            ambient += IBLAmbientTerm(clearcoatNormal, clearcoatNormal, viewDir, Fc, vec3(0.0), clearcoatRoughness, 0.0, true, specular, specularColour);
+            ambient += IBLAmbientTerm(clearcoatNormal, geomNormal, clearcoatNormal, viewDir, Fc, vec3(0.0), clearcoatRoughness, 0.0, true, specular, specularColour, ao);
         }
     }
 
-    vec3 colour = (ambient * ambientOcclusion + lightOutputted) * occlusion;
+    vec3 colour = (ambient + lightOutputted);
     colour += emissive * (1.0 - clearcoat * Fc);
 
     // HDR
