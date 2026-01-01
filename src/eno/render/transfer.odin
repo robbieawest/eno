@@ -508,7 +508,8 @@ compile_shader :: proc(shader: ^resource.Shader) -> (id: u32, ok: bool) {
 
     id, ok = gl.compile_shader_from_source(shader.source.string_source, resource.conv_gl_shader_type(shader.type))
     if !ok {
-        dbg.log(dbg.LogLevel.ERROR, "Could not compile shader source of shader type %v", shader.type)
+        dbg.log(.ERROR, "Could not compile shader source of shader type %v", shader.type)
+        dbg.log(.ERROR, "Shader source: %#v\n", shader.source.string_source)
         return
     }
 

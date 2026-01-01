@@ -16,8 +16,7 @@ layout(binding = 1) uniform samplerCube irradianceMap;
 layout(binding = 1) uniform samplerCube prefilterMap;
 layout(binding = 0) uniform sampler2D specularTexture;
 layout(binding = 0) uniform sampler2D specularColourTexture;
-layout(binding = 0) uniform sampler2D SSAOBlur;
-layout(binding = 0) uniform sampler2D SSAOBlurredBentNormal;
+layout(binding = 0) uniform sampler2D SSAOFilteredOut;
 
 uniform vec4 baseColourFactor;
 uniform float metallicFactor;

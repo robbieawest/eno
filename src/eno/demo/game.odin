@@ -78,11 +78,11 @@ before_frame :: proc() -> (ok: bool) {
     render.init_render_pipeline()
 
     gbuf_normal_output := render.make_gbuffer_passes(window_res.w, window_res.h, render.GBufferInfo{ .NORMAL, .DEPTH }) or_return
-    ssao_colour_output, ssao_bn_output := render.make_ssao_passes(window_res.w, window_res.h, gbuf_normal_output.?) or_return
+    ssao_output := render.make_ssao_passes(window_res.w, window_res.h, gbuf_normal_output.?) or_return
 
     background_colour := [4]f32{ 1.0, 1.0, 1.0, 1.0 }
     background_colour_factor: f32 = 0.85
-    render.make_lighting_passes(window_res, background_colour * background_colour_factor, ssao_colour_output, ssao_bn_output) or_return
+    render.make_lighting_passes(window_res, background_colour * background_colour_factor, ssao_output) or_return
 
     // Camera
     ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint

@@ -23,35 +23,26 @@ uniform float SSAOBias;
 
 uniform bool SSAOEvaluateBentNormal;
 
-layout(location = 0) out float Colour;
-layout(location = 1) out vec3 BentNormal;
-
+layout(location = 0) out vec4 SSAOOut;
 
 in mat4 m_Project;
 // in mat4 m_ProjectInv;
 
 in vec3 viewRay;
 
-
-float linearizeDepth(float projDepth) {
-    float zNear = Camera.zNear;
-    float zFar = Camera.zFar;
-    return 2.0 * zNear * zFar / (zFar + zNear - (2.0 * projDepth - 1.0) * (zFar - zNear));
-}
-
-// Could be incorrect
-vec3 reconstructFragPos(float depth) {
-    float linearDepth = linearizeDepth(depth);
-    return viewRay * linearDepth;
+float interleavedGradientNoise(vec2 position) {
+    vec3 magic = vec3(0.06711056, 0.00583715, 52.9829189);
+    return fract(magic.z * fract(dot(position, magic.xy)));
 }
 
 void main() {
     float depth = texture(gbDepth, texCoords).r;
-    vec3 fragPos = reconstructFragPos(depth);
+    vec3 fragPos = viewRay * linearizeDepth(depth);
     vec3 normal = normalize(texture(gbNormal, texCoords).rgb * 2.0 - 1.0);
-    BentNormal = normal;
 
-    vec3 noise = normalize(texture(SSAONoiseTex, texCoords * noiseScale).xyz);
+    //vec3 noise = normalize(texture(SSAONoiseTex, texCoords * noiseScale).xyz);
+    float rv = interleavedGradientNoise(gl_FragCoord.xy);
+    vec3 noise = vec3(cos(rv * 6.28), sin(rv * 6.28), 0.0);
 
     vec3 tangent = normalize(noise - normal * dot(noise, normal));
     vec3 bitangent = cross(normal, tangent);
@@ -72,7 +63,7 @@ void main() {
         sampleUV.xyz = sampleUV.xyz * 0.5 + 0.5;
 
         float sampleDepth = texture(gbDepth, sampleUV.st).r;
-        sampleDepth = reconstructFragPos(sampleDepth).z;
+        sampleDepth = -linearizeDepth(sampleDepth);
 
         float rangeCheck = smoothstep(0.0, 1.0, SSAOSampleRadius / abs(fragPos.z - sampleDepth));
         float occluded = (sampleDepth >= samplePos.z + SSAOBias ? 1.0 : 0.0) * rangeCheck;
@@ -84,10 +75,12 @@ void main() {
         occlusion += occluded;
         unocclusion += unoccluded;
 
-        if (SSAOEvaluateBentNormal) bentNormal += normalize(sampleV) * unoccluded;
+        if (SSAOEvaluateBentNormal) bentNormal += normalize(sampleT) * unoccluded;
     }
-    if (SSAOEvaluateBentNormal) BentNormal = bentNormal / unocclusion;
-    BentNormal = (BentNormal + 1.0) * 0.5;
+    if (SSAOEvaluateBentNormal) bentNormal = bentNormal / unocclusion;
+    bentNormal = TBN * bentNormal;
+    bentNormal = (bentNormal + 1.0) * 0.5;
 
-    Colour = 1.0 - (occlusion / SSAONumSamplesInKernel);
+    float colour = 1.0 - (occlusion / SSAONumSamplesInKernel);
+    SSAOOut = vec4(bentNormal, colour);
 }

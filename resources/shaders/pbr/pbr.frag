@@ -2,6 +2,7 @@
 
 #define INCLUDE_FRAG_UTILS
 
+#include "pbr/material.glsl"
 #include "pbr/tonemap.glsl"
 #include "pbr/pbr_util.glsl"
 #include "pbr/geom_util.glsl"
@@ -91,46 +92,8 @@ in mat3 TBN;
 mat3 TBN = calculateTBN(position, texCoords, geomNormal);
 #endif
 
-
-layout(binding = 0) uniform sampler2D baseColourTexture;
-layout(binding = 0) uniform sampler2D emissiveTexture;
-layout(binding = 0) uniform sampler2D occlusionTexture;
-layout(binding = 0) uniform sampler2D normalTexture;
-layout(binding = 0) uniform sampler2D pbrMetallicRoughness;
-layout(binding = 0) uniform sampler2D clearcoatTexture;
-layout(binding = 0) uniform sampler2D clearcoatRoughnessTexture;
-layout(binding = 0) uniform sampler2D clearcoatNormalTexture;
-layout(binding = 0) uniform sampler2D brdfLUT;
-layout(binding = 1) uniform samplerCube irradianceMap;
-layout(binding = 1) uniform samplerCube prefilterMap;
-layout(binding = 0) uniform sampler2D specularTexture;
-layout(binding = 0) uniform sampler2D specularColourTexture;
-layout(binding = 0) uniform sampler2D SSAOBlur;
-layout(binding = 0) uniform sampler2D SSAOBlurredBentNormal;
-
-uniform vec4 baseColourFactor;
-uniform float metallicFactor;
-uniform float roughnessFactor;
-uniform vec3 emissiveFactor;
-uniform float clearcoatFactor;
-uniform float clearcoatRoughnessFactor;
-uniform bool enableAlphaCutoff;
-uniform float alphaCutoff;
-uniform float specularFactor;
-uniform vec3 specularColourFactor;
-uniform bool enableBaseColourOverride;
-uniform vec3 baseColourOverride;
-uniform bool unlit;
-
-uniform uint materialUsages;
 uniform uint lightingSettings;
-
 uniform uvec2 ScreenOutputResolution;
-
-
-bool checkBitMask(uint mask, int bitPosition) {
-    return (mask & uint(1 << bitPosition)) != 0;
-}
 
 float getAperature(vec3 AN) {
     return PI * 0.5 * (1.0 - max(0.0, 2.0 * length(AN) - 1.0));
@@ -154,16 +117,15 @@ float convertSolidAngleToRadians(float angle) {
     return acos((-angle) / (2.0 * PI) + 1.0);
 }
 
-// WIP
-float calculateSpecularOcclusion(vec3 BN, vec3 R, float roughness, float ao) {
+float calculateSpecularOcclusion(float NdotV, vec3 BN, vec3 R, float roughness, float ao) {
 
-    //float aperture = getAperature(BN);
+    // float aperture = getAperature(BN);
     float aperture = getAperature(ao);
-    float omega_s = roughness;
 
     float r_p = aperture;
-    float r_l = convertSolidAngleToRadians(omega_s);
-    float d = acos(clamp(dot(normalize(BN), R), 0.0, 1.0));
+    float r_l = convertSolidAngleToRadians(roughness);
+    //float d = acos(dot(normalize(BN), R) * mix(0.1, 1.0, clamp(NdotV, 0.0, 1.0)));  // Account for grazing artefacts, diminishes total quality, use with caution?
+    float d = acos(dot(normalize(BN), R));
     // Light source vector V_l = R, radius r_l = reflection cone angle
     // d = similarity
     // r_p = bent cone aperture -> spherical cap radius
@@ -183,22 +145,29 @@ float calculateSpecularOcclusion(vec3 BN, vec3 R, float roughness, float ao) {
     bool fullIntersection = bool(min(r_p, r_l) <= max(r_p, r_l) - d);
     bool noIntersection = bool((r_p + r_l) <= d);
     bool partialIntersection = !noIntersection && !fullIntersection;
+    // Can just be replaced with calculatePartialConeIntersection(...)
     float omega_i = float(fullIntersection) * calculateFullConeIntersection(r_p, r_l) +
             float(partialIntersection) * calculatePartialConeIntersection(r_p, r_l, d);
 
-    return omega_i / omega_s;
+    // Addition: Check intersection of specular cone with perfect visibility hemisphere
+    // This is not accounted for in the GTAO paper, but it seems that when bent normals/AO have artefacts, aperture is underestimated
+    //  and grazing angles create fake occlusion. This solves some of the issue, which comes from the specular cone overlapping past the
+    //  perfect visibility hemisphere, which is unreachable by visibility samples.
+    r_p = PI * 0.5;
+    float omega_s = calculatePartialConeIntersection(r_p, r_l, d);
+    return clamp(omega_i / omega_s, 0.0, 1.0);
 }
 
-vec3 IBLAmbientTerm(vec3 N, vec3 geomNormal, vec3 AN, vec3 V, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat, float specular, vec3 specularColour, float ao) {
+vec3 IBLAmbientTerm(vec3 N, vec3 BN, vec3 V, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat, float specular, vec3 specularColour, float ao) {
     const float MAX_REFLECTION_LOD = 4.0;
     vec3 R = reflect(-V, N);  // World space
     // vec3 RWorld = normalize(transpose(TBN) * R);  // Since tbn is orthogonal it is transitive across the reflect operation *from when R was tangent space
     vec3 radiance = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
-    vec3 irradiance = texture(irradianceMap, normalize(AN)).rgb;
+    vec3 irradiance = texture(irradianceMap, normalize(BN)).rgb;
 
     float so = 1.0;
     if (checkBitMask(lightingSettings, 3)) {
-        so = calculateSpecularOcclusion(AN, reflect(-V, N), roughness, ao);
+        so = calculateSpecularOcclusion(dot(N, V), BN, reflect(-V, N), roughness, ao);
     }
 
     vec2 f_ab = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
@@ -226,41 +195,23 @@ vec3 IBLAmbientTerm(vec3 N, vec3 geomNormal, vec3 AN, vec3 V, vec3 fresnelRoughn
     }
 }
 
-#define BaseColourFactor 0
 bool baseColourFactorSet = checkBitMask(materialUsages, BaseColourFactor);
-#define BaseColourTexture 1
 bool baseColourTextureSet = checkBitMask(materialUsages, BaseColourTexture);
-#define PBRMetallicFactor 2
 bool PBRMetallicFactorSet = checkBitMask(materialUsages, PBRMetallicFactor);
-#define PBRRoughnessFactor 3
 bool PBRRoughnessFactorSet = checkBitMask(materialUsages, PBRRoughnessFactor);
-#define PBRMetallicRoughnessTexture 4
 bool PBRMetallicRoughnessTextureSet = checkBitMask(materialUsages, PBRMetallicRoughnessTexture);
-#define EmissiveFactor 5
 bool emissiveFactorSet = checkBitMask(materialUsages, EmissiveFactor);
-#define EmissiveTexture 6
 bool emissiveTextureSet = checkBitMask(materialUsages, EmissiveTexture);
-#define OcclusionTexture 7
 bool occlusionTextureSet = checkBitMask(materialUsages, OcclusionTexture);
-#define NormalTexture 8
 bool normalTextureSet = checkBitMask(materialUsages, NormalTexture);
-#define ClearcoatFactor 9
 bool clearcoatFactorSet = checkBitMask(materialUsages, ClearcoatFactor);
-#define ClearcoatTexture 10
 bool clearcoatTextureSet = checkBitMask(materialUsages, ClearcoatTexture);
-#define ClearcoatRoughnessFactor 11
 bool clearcoatRoughnessFactorSet = checkBitMask(materialUsages, ClearcoatRoughnessFactor);
-#define ClearcoatRoughnessTexture 12
 bool clearcoatRoughnessTextureSet = checkBitMask(materialUsages, ClearcoatRoughnessTexture);
-#define ClearcoatNormalTexture 13
 bool clearcoatNormalTextureSet = checkBitMask(materialUsages, ClearcoatNormalTexture);
-#define SpecularFactor 14
 bool specularFactorSet = checkBitMask(materialUsages, SpecularFactor);
-#define SpecularTexture 15
 bool specularTextureSet = checkBitMask(materialUsages, SpecularTexture);
-#define SpecularColourFactor 16
 bool specularColourFactorSet = checkBitMask(materialUsages, SpecularColourFactor);
-#define SpecularColourTexture 17
 bool specularColourTextureSet = checkBitMask(materialUsages, SpecularColourTexture);
 
 vec4 getBaseColour() {
@@ -317,16 +268,6 @@ vec3 getNormal() {
     return normal;
 }
 
-// Averages with the usual normal if normal mapping is set
-vec3 getBentNormal(vec2 screenUV, vec3 normal) {
-    vec3 bentNormal = vec3(0.0);
-    if (checkBitMask(lightingSettings, 3)) {
-        bentNormal = texture(SSAOBlurredBentNormal, screenUV).rgb * 2.0 - 1.0;  // View space
-        bentNormal = transView * bentNormal;
-    }
-    if (normalTextureSet) bentNormal += normal;
-    return bentNormal;
-}
 
 float getOcclusion() {
     float occlusion = 1.0;
@@ -334,10 +275,20 @@ float getOcclusion() {
     return occlusion;
 }
 
-float getAmbientOcclusion(vec2 screenUV) {
+vec4 getAmbientOcclusion(vec2 screenUV, vec3 normal) {
     float occlusion = 1.0;
-    if (checkBitMask(lightingSettings, 2)) occlusion *= texture(SSAOBlur, screenUV).r;
-    return occlusion;
+    vec3 bentNormal = vec3(0.0);
+    if (checkBitMask(lightingSettings, 2)) {
+        vec4 ssao_output = texture(SSAOFilteredOut, screenUV).rgba;
+        occlusion *= ssao_output.a;
+
+        if (checkBitMask(lightingSettings, 3)) {
+            bentNormal = ssao_output.rgb * 2.0 - 1.0;  // View space
+            bentNormal = transView * bentNormal;
+        }
+    }
+
+    return vec4(bentNormal, occlusion);
 }
 
 vec2 getScreenUV() {
@@ -443,7 +394,6 @@ void main() {
 
     vec2 screenUV = getScreenUV();
     vec3 normal = getNormal();
-    vec3 bentNormal = getBentNormal(screenUV, normal);
 
     Clearcoat clearcoatResult = getClearcoat(normal);
     float clearcoat = clearcoatResult.clearcoat;
@@ -458,7 +408,9 @@ void main() {
     vec3 specularColour = specularTotal.specularColour;
 
     float occlusion = getOcclusion();
-    float ao = getAmbientOcclusion(screenUV) * occlusion;
+    vec4 ao_bn = getAmbientOcclusion(screenUV, normal);
+    float ao = ao_bn.a * occlusion;
+    vec3 bentNormal = ao_bn.rgb;
 
     // Clamp roughnesses, roughness at zero isn't great visually
     roughness = clamp(roughness, 0.089, 1.0);
@@ -514,13 +466,13 @@ void main() {
 
     if (iblEnabled) {
         vec3 F = FresnelSchlickRoughness(normal, viewDir, baseFresnelIncidence, roughness);
-        ambient = IBLAmbientTerm(normal, geomNormal, ambientNormal, viewDir, F, albedo, roughness, metallic, false, specular, specularColour, ao);
+        ambient = IBLAmbientTerm(normal, ambientNormal, viewDir, F, albedo, roughness, metallic, false, specular, specularColour, ao);
 
         if (clearcoatActive) {
             // Fresnel at incidence for clearcoat is 0.04/4% at IOR=1.5
             Fc = FresnelSchlickRoughness(clearcoatNormal, viewDir, vec3(0.04), clearcoatRoughness);
             ambient *= (1.0 - Fc);
-            ambient += IBLAmbientTerm(clearcoatNormal, geomNormal, clearcoatNormal, viewDir, Fc, vec3(0.0), clearcoatRoughness, 0.0, true, specular, specularColour, ao);
+            ambient += IBLAmbientTerm(clearcoatNormal, clearcoatNormal, viewDir, Fc, vec3(0.0), clearcoatRoughness, 0.0, true, specular, specularColour, ao);
         }
     }
 

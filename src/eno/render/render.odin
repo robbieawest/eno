@@ -136,7 +136,6 @@ render :: proc(
     }
 
 
-
     // Used for render passes that query their own data
     mesh_data_map := make(map[^RenderPass][dynamic]MeshData, allocator=temp_allocator)
     // Used for render passes which point to another render pass's model data
@@ -144,7 +143,6 @@ render :: proc(
 
 
     for &pass in pipeline.passes {
-
         // Gather model data
         mesh_data := meshes_from_gather(manager, scene, &mesh_data_map, &mesh_data_references, pass, temp_allocator) or_return
 
@@ -155,8 +153,11 @@ render :: proc(
         update_camera_ubo(scene) or_return
         update_lights_ssbo(scene) or_return
 
-        if len(mesh_data) != 0 do render_geometry(manager, scene, pipeline.shader_store, pass, mesh_data, allocator, temp_allocator) or_return
-        if pass.properties.render_skybox do render_skybox(manager, scene.viewpoint, allocator) or_return
+        for execution in pass.executions {
+            if len(mesh_data) != 0 do render_geometry(manager, scene, pipeline.shader_store, pass, mesh_data, execution.uniforms, allocator, temp_allocator) or_return
+            if pass.properties.render_skybox do render_skybox(manager, scene.viewpoint, allocator) or_return
+        }
+
     }
 
     ui.render_ui(window.WINDOW_WIDTH, window.WINDOW_HEIGHT) or_return
@@ -173,6 +174,8 @@ meshes_from_gather :: proc(
     pass: ^RenderPass,
     temp_allocator: mem.Allocator
 ) -> (res: []MeshData, ok: bool) {
+
+    if pass in mesh_data_map do return mesh_data_map[pass][:], true
 
     mesh_data: ^[dynamic]MeshData
     switch &mesh_gather_variant in pass.mesh_gather {
@@ -235,6 +238,7 @@ render_geometry :: proc(
     shader_store: RenderShaderStore,
     pass: ^RenderPass,
     mesh_data: []MeshData,
+    extra_uniforms: []UniformData,
     allocator := context.allocator,
     temp_allocator := context.temp_allocator
 ) -> (ok: bool) {
@@ -243,7 +247,6 @@ render_geometry :: proc(
 
     // Group geometry by shaders
     shader_map := group_meshes_by_shader(shader_store, pass, mesh_data, sort_geom, temp_allocator) or_return
-
 
     for mapping in shader_map {
         shader_pass := resource.get_shader_pass(manager, mapping.shader) or_return
@@ -256,7 +259,8 @@ render_geometry :: proc(
         resource.set_uniform(shader_pass, LIGHTING_SETTINGS, transmute(u32)(lighting_settings))
         if .IBL in lighting_settings do bind_ibl_uniforms(shader_pass)
 
-        bind_global_uniforms(shader_pass) or_return
+        bind_global_uniforms(shader_pass, temp_allocator) or_return
+        bind_uniforms(shader_pass, extra_uniforms, temp_allocator) or_return
         bind_render_pass_inputs(shader_pass, pass)
 
         for mesh_data in mapping.meshes {
@@ -374,6 +378,17 @@ bind_global_uniforms :: proc(shader: ^resource.ShaderProgram, temp_allocator := 
     for uniform_name, uniform_data in uniform_store {
         if uniform_name in shader.uniforms {
             set_uniform_of_extended_type(shader, uniform_name, shader.uniforms[uniform_name], uniform_data, temp_allocator) or_return
+        }
+    }
+
+    return true
+}
+
+@(private)
+bind_uniforms :: proc(shader: ^resource.ShaderProgram, uniforms: []UniformData, temp_allocator := context.temp_allocator) -> (ok: bool) {
+    for uniform in uniforms {
+        if uniform.name in shader.uniforms {
+            set_uniform_of_extended_type(shader, uniform.name, shader.uniforms[uniform.name], uniform, temp_allocator) or_return
         }
     }
 
@@ -1019,7 +1034,8 @@ CameraBufferData :: struct #packed {
     projection: glm.mat4,
     inv_projection: glm.mat4,
     z_near: f32,
-    z_far: f32
+    z_far: f32,
+    _pad2: glm.vec2
 }
 
 update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
@@ -1033,13 +1049,12 @@ update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
 
     proj := cam.get_perspective(viewpoint)
     camera_buffer_data := CameraBufferData {
-        viewpoint.position,
-        0,
-        cam.camera_look_at(viewpoint),
-        proj,
-        glm.inverse(proj),
-        viewpoint.near_plane,
-        viewpoint.far_plane
+        position = viewpoint.position,
+        view = cam.camera_look_at(viewpoint),
+        projection = proj,
+        inv_projection = glm.inverse(proj),
+        z_near = viewpoint.near_plane,
+        z_far = viewpoint.far_plane
     }
 
     if Context.camera_ubo == nil {
@@ -1184,130 +1199,6 @@ update_lights_ssbo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
     return true
 }
 
-
-
-
-
-LightingModel :: enum {
-    DIRECT
-}
-
-MaterialModel :: enum {
-    BLING_PHONG,
-    PBR
-}
-
-/*
-    Creates a lighting shader based on vertex attribute info, a material, a lighting model and a material model
-    todo unfinished
-*/
-create_forward_lighting_shader :: proc(
-    attribute_infos: resource.VertexLayout,
-    material: resource.Material,
-    lighting_model: LightingModel,
-    material_model: MaterialModel,
-    allocator := context.allocator
-) -> (vertex: resource.ShaderInfo, frag: resource.ShaderInfo, ok: bool) {
-
-/*
-
-// Add input bindings
-shader_layout_from_mesh_layout(&vertex, attribute_infos) or_return
-
-//Lights
-light_struct := resource.make_shader_struct("Light",
-    { resource.GLSLDataType.vec3, "colour", }, { resource.GLSLDataType.vec3, "position" }
-)
-resource.add_structs(&frag, light_struct)
-
-resource.add_bindings_of_type(&frag, .SSBO, {
-    "lights",
-    []resource.ExtendedGLSLPair{
-        {
-            resource.GLSLVariableArray { "Light" },
-            "lights"
-        }
-    }
-})
-
-
-vertex_source := make([dynamic]string)
-defer resource.destroy_function_source(vertex_source[:])
-
-// Add shader input/output for both vertex and fragment
-for attribute_info in attribute_infos {
-    input_pair := resource.GLSLPair{ glsl_type_from_attribute(attribute_info) or_return, attribute_info.name}
-    resource.add_outputs(&vertex, input_pair)
-    resource.add_inputs(&frag, input_pair)
-
-    assign_to: string
-    defer delete(assign_to)
-
-    if type, type_ok := input_pair.type.(resource.GLSLDataType); type_ok {
-        // todo change usage of "position" and "normal" and make a standard for model loading and attribute names, with custom names as well
-        if input_pair.name == "position" && type == .vec3 {
-            // todo pass this into glsl_type_from_attribute
-            prefixed_name := utils.concat("a_", input_pair.name); defer delete(prefixed_name)
-            assign_to = fmt.aprintf("vec3(%s * vec4(%s, 1.0))", MODEL_MATRIX_UNIFORM, prefixed_name)
-        }
-        else if input_pair.name == "normal" && type == .vec3 {
-            prefixed_name := utils.concat("a_", input_pair.name); defer delete(prefixed_name)
-            assign_to = fmt.aprintf("%s * %s", NORMAL_MATRIX_UNIFORM, prefixed_name)
-        }
-    }
-    if assign_to == "" do assign_to = strings.clone(attribute_info.name)
-
-    utils.fmt_append(&vertex_source, "%s = %s;", input_pair.name, assign_to)
-}
-
-// Add vertex MVP uniforms
-resource.add_uniforms(&vertex,
-    { .mat4, MODEL_MATRIX_UNIFORM },
-    { .mat4, VIEW_MATRIX_UNIFORM },
-    { .mat4, PROJECTION_MATRIX_UNIFORM },
-    { .mat4, NORMAL_MATRIX_UNIFORM }
-)
-
-// Add vertex main function
-utils.fmt_append(&vertex_source, "gl_Position = %s * %s * vec4(%s, 1.0);", PROJECTION_MATRIX_UNIFORM, VIEW_MATRIX_UNIFORM, "position")
-
-main_func := resource.make_shader_function(.void, "main", vertex_source[:])
-resource.add_functions(&vertex, main_func)
-
-// Frag uniforms
-if .NORMAL_TEXTURE not_in material.properties {
-    dbg.debug_point(dbg.LogLevel.ERROR, "Normal map must be available in the material for lighting")
-    return
-}
-
-if .PBR_METALLIC_ROUGHNESS not_in material.properties {
-    dbg.debug_point(dbg.LogLevel.ERROR, "PBR Metallic Roughness map must be available in the material for lighting")
-    return
-}
-
-uniforms := make([dynamic]resource.GLSLPair); defer resource.destroy_glsl_pairs(uniforms[:])
-
-// todo
-append(&uniforms, resource.GLSLPair{ resource.GLSLDataType.sampler2D, resource.BASE_COLOUR_TEXTURE })  // base colour comes from pbrMetallicRoughness
-append(&uniforms, resource.GLSLPair{ resource.GLSLDataType.sampler2D, resource.PBR_METALLIC_ROUGHNESS })
-append(&uniforms, resource.GLSLPair{ resource.GLSLDataType.sampler2D, resource.NORMAL_TEXTURE })
-
-inc_emissive_texture := .EMISSIVE_TEXTURE in material.properties
-inc_occlusion_texture := .OCCLUSION_TEXTURE in material.properties
-
-if inc_emissive_texture {
-    append(&uniforms, resource.GLSLPair{ resource.GLSLDataType.sampler2D, resource.EMISSIVE_TEXTURE })
-    append(&uniforms, resource.GLSLPair{ resource.GLSLDataType.vec3, resource.EMISSIVE_FACTOR })
-}
-
-if inc_occlusion_texture do append(&uniforms, resource.GLSLPair{ resource.GLSLDataType.sampler2D, resource.OCCLUSION_TEXTURE })
-
-*/
-
-
-    ok = true
-    return
-}
 
 MODEL_MATRIX_UNIFORM :: "m_Model"
 VIEW_MATRIX_UNIFORM :: "m_View"

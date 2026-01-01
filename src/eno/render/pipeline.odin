@@ -334,6 +334,7 @@ RenderPass :: struct {
     properties: RenderPassProperties,
     inputs: []RenderPassIO,
     outputs: []RenderPassIO,
+    executions: []RenderPassExecution,  // Not necessary for a pass, only used if there are multiple executions of a pass needed, with different uniforms set on each execution
     // todo bindables definitions, e.g. uniform (use camera data, light data) or what and specify binding location.
     // todo ^ custom specification for gather of uniform data. e.g. from render pass output (a texture) or a generic function you can tune
     name: string
@@ -368,6 +369,10 @@ RenderPassIO :: struct {
     identifier: string
 }
 
+RenderPassExecution :: struct {
+    uniforms: []UniformData
+}
+
 // todo destroy_render_pass
 
 
@@ -380,6 +385,7 @@ make_render_pass :: proc(
     properties: RenderPassProperties = {},
     inputs: []RenderPassIO = {},
     outputs: []RenderPassIO = {},
+    executions: []RenderPassExecution = {},
     allocator := context.allocator
 ) -> (pass: RenderPass, ok: bool) {
     dbg.log(.INFO, "Creating render pass")
@@ -390,6 +396,9 @@ make_render_pass :: proc(
     pass.name = strings.clone(name, allocator)
     pass.inputs = slice.clone(inputs, allocator)
     pass.outputs = slice.clone(outputs, allocator)
+
+    if len(executions) == 0 do pass.executions = make([]RenderPassExecution, 1, allocator)
+    else do pass.executions = slice.clone(executions, allocator)
 
     if pass.mesh_gather != nil && !check_render_pass_mesh_gather(&pass, 0, len(Context.pipeline.passes)) {
         dbg.log(.ERROR, "Render pass mesh gather must end in a RenderPassQuery")
