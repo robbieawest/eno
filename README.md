@@ -2,19 +2,21 @@
 game engine WIP written in odin
 
 Focuses on providing a simple and relatively powerful game engine interface for programmers to interact with.
-Attempts to be interactable and extendible in every stage.
+Attempts to be interactive and extensible in every stage.
 
-Helmet with IBL, AO + bent normals            |  2
-:-------------------------:|:-------------------------:
-<img src="https://github.com/robbieawest/eno/blob/main/demo-images/helmet_golden_bay.png" alt="" width="722" height="540">  |  <img src="https://github.com/robbieawest/eno/blob/main/demo-images/helmet_park_stage.png" alt="" width="722" height="540">
+## Renderer output examples
 
-Supra with clearcoat, specular extensions            |  Clearcoat test
+Indirect Environment Lighting <br> Including ambient and specular occlusion        |  Direct lighting
 :-------------------------:|:-------------------------:
-<img src="https://github.com/robbieawest/eno/blob/main/demo-images/supra_park_stage.png" alt="" width="722" height="540">  |  <img src="https://github.com/robbieawest/eno/blob/main/demo-images/clearcoat_test.png" alt="" width="722" height="540">
+<img src="https://github.com/robbieawest/eno/blob/main/demo-images/metro_so.png" alt="" width="722" height="540">  |  <img src="https://github.com/robbieawest/eno/blob/main/demo-images/direct.png" alt="" width="722" height="540">
 
-Wheel with no AO           |  Wheel with SSAO + Bent Normals
+Clearcoat test <br> Left: Fully reflective &emsp; Middle: Rough &emsp; Right: Same as rough middle but with a second reflective layer, requiring multiple reflectance evaluations with energy conservation
+:--------------------------------------------------:
+<img src="https://github.com/robbieawest/eno/blob/main/demo-images/clearcoat_test.png" alt="" width="1400" height="540">
+
+Toyota Supra model without ambient/specular occlusion          |  Previvous, with occlusion
 :-------------------------:|:-------------------------:
-<img src="https://github.com/robbieawest/eno/blob/main/demo-images/wheel_no_ao.png" alt="" width="722" height="540">  |  <img src="https://github.com/robbieawest/eno/blob/main/demo-images/wheel_with_bn_ao.png" alt="" width="722" height="540">
+<img src="https://github.com/robbieawest/eno/blob/main/demo-images/supra_no_so.png" alt="" width="722" height="540">  |  <img src="https://github.com/robbieawest/eno/blob/main/demo-images/supra_so.png" alt="" width="722" height="540">
 
 
 
