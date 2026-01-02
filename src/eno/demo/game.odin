@@ -81,7 +81,7 @@ before_frame :: proc() -> (ok: bool) {
     ssao_output := render.make_ssao_passes(window_res.w, window_res.h, gbuf_normal_output.?) or_return
 
     background_colour := [4]f32{ 1.0, 1.0, 1.0, 1.0 }
-    background_colour_factor: f32 = 0.85
+    background_colour_factor: f32 = 0.01
     render.make_lighting_passes(window_res, background_colour * background_colour_factor, ssao_output) or_return
 
     // Camera
@@ -96,9 +96,9 @@ before_frame :: proc() -> (ok: bool) {
 
     lights := make([dynamic]resource.PointLight)
     defer delete(lights)
-    light_height: f32 = 5.0
-    light_dist: f32 = 5.0
-    intensity: f32 = 3.0
+    light_height: f32 = 2.0
+    light_dist: f32 = 2.0
+    intensity: f32 = 2.2
     enabled := true
     append_elems(&lights,
         resource.PointLight{ "demo_light", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ light_dist, light_height, light_dist } },
@@ -168,10 +168,10 @@ demo_ui_element : ui.UIElement : proc() -> (ok: bool) {
     im.Begin("Demo Settings")
     defer im.End()
 
-    @(static) preview_models: []cstring = { "SciFiHelmet", "DamagedHelmet", "Supra", "Clearcoat Test", "Fantasy Sword" }
+    @(static) preview_models: []cstring = { "SciFiHelmet", "Supra", "Clearcoat Test", "Fantasy Sword" }
 
     @(static) load_model_procs: []load_proc
-    load_model_procs = []load_proc{ load_helmet, load_dhelmet, load_supra, load_clearcoat_test, load_sword }
+    load_model_procs = []load_proc{ load_helmet, load_supra, load_clearcoat_test, load_sword }
 
     @(static) selected_model_ind := 0
     if (im.BeginCombo("Preview model", preview_models[selected_model_ind])) {

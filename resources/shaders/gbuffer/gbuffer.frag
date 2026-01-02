@@ -25,16 +25,6 @@ layout(location = 3) in TangentNormalSign tangentNormalSign;
 layout(location = 2) in vec2 texCoords;
 #endif
 
-/* Unused
-#ifdef TEXCOORD_INPUT
-in vec3 aTexCoord;
-#endif
-#ifdef TANGENT_INPUT
-in vec3 aTangent;
-#endif
-*/
-
-
 
 void main() {
     #ifdef NORMAL_INPUT
@@ -50,7 +40,6 @@ void main() {
         #endif
 
         vNormal = TBN * texNormal;
-
     }
     else {
         vNormal = normal;
