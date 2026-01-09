@@ -99,6 +99,7 @@ render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
         dbg.log(.ERROR, "Render context manager is not yet set")
         return
     }
+    ctx := ui.check_context() or_return
 
     im.Begin("Render settings")
     defer im.End()
@@ -121,6 +122,7 @@ render_settings_ui_element : ui.UIElement : proc() -> (ok: bool) {
 
             im.Text("Environment texture uri")
             env_settings.environment_texture_uri, _ = ui.text_input(Buffers[.ENV_TEX_URI]) or_return
+            ui.pick_file_from_explorer(ui.get_buffer(ctx, Buffers[.ENV_TEX_URI], 50)) or_return
 
             if im.TreeNode("IBL Settings") {
                 defer im.TreePop()

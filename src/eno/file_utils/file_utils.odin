@@ -109,3 +109,36 @@ file_path_to_folder_path :: proc(file_path: string) -> (folder_path: string, ok:
 is_path_separator :: proc(to_check: byte) -> bool {
     return to_check == '/' || to_check == '\\';
 }
+
+
+get_directory_contents :: proc(cwd: string, num_files := 0, allocator := context.allocator) -> (contents: []os.File_Info, ok: bool) {
+    dir_handle, ferr := os.open(cwd)
+    if ferr != nil {
+        dbg.log(.ERROR, "Error opening directory %s, error: %v", cwd, ferr)
+        return
+    }
+
+    // Defaults to reading 100 files when num_files = 0
+    contents, ferr = os.read_dir(dir_handle, num_files)
+    if ferr != nil {
+        dbg.log(.ERROR, "Error reading directory %s, error: %v", cwd, ferr)
+        return
+    }
+
+    ok = true
+    return
+}
+
+split_extension_from_path :: proc(path: string, allocator := context.allocator) -> (base_path: string, ext: string, ok: bool) {
+    if len(path) == 0 || os.is_path_separator(rune(path[len(path) - 1])) {
+        return
+    }
+
+    split := strings.split_n(path, ".", 2, allocator)
+    if len(split) != 2 {
+        ok = true
+        return
+    }
+
+    return split[0], split[1], true
+}

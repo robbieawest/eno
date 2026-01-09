@@ -153,3 +153,21 @@ rearrange_test :: proc(t: ^testing.T) {
 
     log.infof("rearrange: %v", a)
 }
+
+copy_and_zero :: proc(dest: $T, from: T)
+    where T == string || T == cstring {
+
+    dest_rptr, from_rptr: rawptr
+    when T == string {
+        dest_rptr = rawptr(raw_data(dest))
+        from_rptr = rawptr(raw_data(from))
+    }
+    else {
+        dest_rptr = rawptr(dest)
+        from_rptr = rawptr(from)
+    }
+
+    mem.copy(dest_rptr, from_rptr, min(len(dest), len(from)))
+    offsetted := rawptr(uintptr(dest_rptr) + uintptr(len(from)))
+    mem.set(offsetted, 0, len(dest) - len(from))  // Zero the bytes not set
+}

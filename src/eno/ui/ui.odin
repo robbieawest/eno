@@ -129,6 +129,12 @@ render_ui :: proc(#any_int display_w, #any_int display_y: i32) -> (running: bool
 
     SDL.GL_MakeCurrent(backup_current_window, backup_current_context);
 
+    free_err := free_all(allocator=ctx.temp_allocator)
+    if free_err != .None {
+        dbg.log(.ERROR, "Error while clearing UI temporary allocator")
+        return
+    }
+
     return true
 }
 
