@@ -11,7 +11,21 @@ import "core:os"
 import "core:strings"
 import "core:slice"
 
-pick_file_from_explorer :: proc(buffer: []byte, label := "", file_extension := "*") -> (ok: bool) {
+
+// Returns picked_new as string pointing to the buffer
+pick_file_from_explorer :: proc{ pick_file_from_explorer_raw, pick_file_from_explorer_buf }
+
+pick_file_from_explorer_buf :: proc(buffer_label: string, label := "", file_extension := "*") -> (picked_new: string, ok: bool) {
+    ctx := check_context() or_return
+    return pick_file_from_explorer(get_buffer(ctx, buffer_label), ctx, label, file_extension)
+}
+
+pick_file_from_explorer_raw :: proc(buffer: []byte, ctx: ^UIContext, label := "", file_extension := "*") -> (picked_new: string, ok: bool) {
+    if file_extension != "*" && !strings.starts_with(file_extension, ".") {
+        dbg.log(.ERROR, "File extension must start with .")
+        return
+    }
+
     ctx := check_context() or_return
     im.SetNextWindowSize(im.Vec2{ 400, 400 }, .Always)  // Todo define elsewhere, best based on window resolution
 
@@ -30,6 +44,7 @@ pick_file_from_explorer :: proc(buffer: []byte, label := "", file_extension := "
         new_picked_file := display_directory_contents(os.get_current_directory(allocator=ctx.temp_allocator), string(file_extension), ctx.temp_allocator) or_return
         if new_picked_file != nil {
             utils.copy_and_zero(string(buffer), string(new_picked_file))
+            picked_new = string(buffer)
             dbg.log(.INFO, "Setting new %s picked %s", new_picked_file, buffer)
             im.CloseCurrentPopup()
         }
@@ -47,9 +62,11 @@ pick_file_from_explorer :: proc(buffer: []byte, label := "", file_extension := "
         im.Text(file_extension_c)
     }
 
-    return true
+    ok = true
+    return
 }
 
+@(private)
 display_directory_contents :: proc(current_working_dir: string, allowed_extension: string, temp_allocator: mem.Allocator) -> (picked_file: cstring, ok: bool) {
     file_infos := futils.get_directory_contents(current_working_dir, allocator=temp_allocator) or_return
 
@@ -67,8 +84,8 @@ display_directory_contents :: proc(current_working_dir: string, allowed_extensio
             }
         }
         else {
-            base_path, extension := futils.split_extension_from_path(file_info.fullpath, temp_allocator) or_return
-            if len(extension) != 0 && (strings.compare(allowed_extension, "*") == 0 || strings.compare(extension, allowed_extension) == 0) {
+            _, extension := futils.split_extension_from_path(file_info.fullpath, temp_allocator) or_return
+            if len(extension) != 0 && (strings.compare(allowed_extension, "*") == 0 || strings.compare(extension, allowed_extension[1:]) == 0) {
                 name_cstr := strings.clone_to_cstring(file_info.name, temp_allocator)
                 if im.Button(name_cstr) {
                     picked_file = strings.clone_to_cstring(file_info.fullpath, temp_allocator)

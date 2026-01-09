@@ -184,7 +184,8 @@ float_text_input :: proc(label: string, #any_int char_limit: uint = DEFAULT_FLOA
     return f32(strconv.atof(str)), changed, true
 }
 
-get_buffer :: proc(ctx: ^UIContext, label: string, size: uint) -> (buf: []byte) {
+// Provide size if expecting to create the buffer
+get_buffer :: proc(ctx: ^UIContext, label: string, size: uint = 0) -> (buf: []byte) {
     if label in ctx.buffers {
         return ctx.buffers[label]
     }

@@ -45,32 +45,12 @@ load_model :: proc(arch: ^ecs.Archetype, path: string) -> (ok: bool) {
     return true
 }
 
-load_supra :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
-    return load_model(arch, "./resources/models/Supra/scene.gltf")
-}
-
-load_sword :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
-    return load_model(arch, "./resources/models/gradient_fantasy_sword/scene.gltf")
-}
-
-load_clearcoat_test :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
-    return load_model(arch, "./resources/models/CompareClearcoat/glTF/CompareClearcoat.gltf")
-}
-
-load_helmet :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
-    return load_model(arch, "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf")
-}
-
-load_dhelmet :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
-    return load_model(arch, "./resources/models/DamagedHelmet/glTF/DamagedHelmet.gltf")
-}
 
 demo_arch: ^ecs.Archetype
 before_frame :: proc() -> (ok: bool) {
 
-    arch := ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
-    demo_arch = ecs.scene_get_archetype(game.Game.scene, "demo_entities") or_return
-    load_helmet(arch) or_return
+    demo_arch = ecs.scene_add_default_archetype(game.Game.scene, "demo_entities") or_return
+    setup_demo_ui()  // this loads the first preview model, if done after render config then the model will not have generated shaders, and render.populate_all_shaders is needed
 
     window_res := win.get_window_resolution(game.Game.window)
 
@@ -163,34 +143,25 @@ unload_current_preview_model :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
     return true
 }
 
-load_proc :: #type proc(arch: ^ecs.Archetype) -> bool
+
+MODEL_PATH_BUFFER :: "demo_model_path"
+SCIFI_HELMET_PATH :: "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf"
+setup_demo_ui :: proc() -> (ok: bool) {
+    load_model(demo_arch, SCIFI_HELMET_PATH) or_return
+    return ui.load_buffers(ui.BufferInit{ MODEL_PATH_BUFFER, 90, SCIFI_HELMET_PATH })
+}
+
 demo_ui_element : ui.UIElement : proc() -> (ok: bool) {
     im.Begin("Demo Settings")
     defer im.End()
 
-    @(static) preview_models: []cstring = { "SciFiHelmet", "Supra", "Clearcoat Test", "Fantasy Sword" }
-
-    @(static) load_model_procs: []load_proc
-    load_model_procs = []load_proc{ load_helmet, load_supra, load_clearcoat_test, load_sword }
-
-    @(static) selected_model_ind := 0
-    if (im.BeginCombo("Preview model", preview_models[selected_model_ind])) {
-        defer im.EndCombo()
-
-        for i in 0..<len(preview_models) {
-            selected := selected_model_ind == i
-            if im.Selectable(preview_models[i], selected) {
-                if !selected {
-                    log.info("selected new preview model")
-                    unload_current_preview_model(demo_arch) or_return
-                    load_model_procs[i](demo_arch) or_return
-                    render.populate_all_shaders(game.Game.scene) or_return
-                }
-                selected_model_ind = i
-            }
-
-            if selected do im.SetItemDefaultFocus()
-        }
+    im.Text("Demo preview model")
+    buffer_if_picked := ui.pick_file_from_explorer(MODEL_PATH_BUFFER, file_extension=".gltf") or_return
+    if len(buffer_if_picked) != 0 {
+        log.info("Previewing demo model %s", buffer_if_picked)
+        unload_current_preview_model(demo_arch)
+        load_model(demo_arch, buffer_if_picked)
+        render.populate_all_shaders(game.Game.scene)
     }
 
     return true
