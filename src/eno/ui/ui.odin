@@ -14,6 +14,7 @@ import "base:runtime"
 import "core:slice"
 import "core:strconv"
 import "core:mem"
+import os "core:os"
 
 setup_ui :: proc(window: ^SDL.Window, sdl_gl_context: rawptr, allocator := context.allocator, temp_allocator := context.temp_allocator) -> (ok: bool) {
     im.CHECKVERSION()
@@ -74,7 +75,7 @@ UIElement :: #type proc() -> bool
 UIContext :: struct {
     elements: [dynamic]UIElement,
     show_demo_window: bool,
-
+    working_dir: string,
     // Persistent buffers for input fields
     buffers: map[string][]byte,
     image_scale: [2]f32,
@@ -84,7 +85,7 @@ UIContext :: struct {
 
 Context: Maybe(UIContext)
 init_ui_context :: proc(show_demo_win := false, image_scale := [2]f32{ 0.25, 0.25 }, allocator := context.allocator, temp_allocator := context.temp_allocator) {
-    Context = UIContext{ make([dynamic]UIElement, allocator=allocator), show_demo_win, make(map[string][]byte, allocator=allocator), image_scale, allocator, temp_allocator }
+    Context = UIContext{ make([dynamic]UIElement, allocator=allocator), show_demo_win, os.get_current_directory(allocator), make(map[string][]byte, allocator=allocator), image_scale, allocator, temp_allocator }
 }
 
 show_imgui_demo_window :: proc(show: bool) -> (ok: bool) {

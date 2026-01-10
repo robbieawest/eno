@@ -6,6 +6,7 @@ import futils "../file_utils"
 import dbg "../debug"
 import "../utils"
 
+import "core:fmt"
 import "core:mem"
 import "core:os"
 import "core:strings"
@@ -27,7 +28,6 @@ pick_file_from_explorer_raw :: proc(buffer: []byte, ctx: ^UIContext, label := ""
     }
 
     ctx := check_context() or_return
-    im.SetNextWindowSize(im.Vec2{ 400, 400 }, .Always)  // Todo define elsewhere, best based on window resolution
 
     label : cstring = len(label) == 0 ? "Open file explorer" : strings.clone_to_cstring(label, ctx.temp_allocator)
     if im.Button(label) {
@@ -38,28 +38,46 @@ pick_file_from_explorer_raw :: proc(buffer: []byte, ctx: ^UIContext, label := ""
     file_extension_c := cstring(raw_data(make_slice([]u8, MAX_FILE_EXTENSION_LENGTH + 1, ctx.temp_allocator)))
 
     mem.copy(rawptr(file_extension_c), rawptr(strings.clone_to_cstring(file_extension, ctx.temp_allocator)), min(len(file_extension) + 1, MAX_FILE_EXTENSION_LENGTH))
-    if im.BeginPopupEx(im.GetID("#file_dialog"), { .Popup }) {
+    if im.BeginPopupEx(im.GetID("#file_dialog"), { .NoSavedSettings, .NoTitleBar }) {
         defer im.EndPopup()
 
-        new_picked_file := display_directory_contents(os.get_current_directory(allocator=ctx.temp_allocator), string(file_extension), ctx.temp_allocator) or_return
-        if new_picked_file != nil {
+        cwd := ctx.working_dir
+        im.Text("%s", fmt.aprintf("Directory : %s", cwd, allocator=ctx.temp_allocator))
+        im.SameLine()
+        if im.Button("<<") {
+            decrement_ui_cwd(ctx) or_return
+        }
+        im.Spacing()
+        im.Spacing()
+
+        new_picked_file, new_picked_dir := display_directory_contents(cwd, string(file_extension), ctx.temp_allocator) or_return
+        if len(new_picked_dir) != 0 {
+            dbg.log(.INFO, "New picked dir: %s", new_picked_dir)
+            delete(cwd, ctx.allocator)
+            ctx.working_dir = strings.clone(new_picked_dir, ctx.allocator)
+        }
+        else if new_picked_file != nil {
             utils.copy_and_zero(string(buffer), string(new_picked_file))
-            picked_new = string(buffer)
             dbg.log(.INFO, "Setting new %s picked %s", new_picked_file, buffer)
             im.CloseCurrentPopup()
+            return string(buffer), true
         }
 
-        if im.Button("Cancel") do im.CloseCurrentPopup()
+        im.Spacing()
+        im.Spacing()
 
+        im.Text(file_extension_c)
         if len(file_extension) == 0 {
             if im.BeginCombo("File type", file_extension_c) {
                 defer im.EndCombo()
 
-                // Todo
+            // Todo
             }
         }
 
-        im.Text(file_extension_c)
+        im.Spacing()
+        im.Spacing()
+        if im.Button("Cancel") do im.CloseCurrentPopup()
     }
 
     ok = true
@@ -67,29 +85,56 @@ pick_file_from_explorer_raw :: proc(buffer: []byte, ctx: ^UIContext, label := ""
 }
 
 @(private)
-display_directory_contents :: proc(current_working_dir: string, allowed_extension: string, temp_allocator: mem.Allocator) -> (picked_file: cstring, ok: bool) {
+decrement_ui_cwd :: proc(ctx: ^UIContext) -> (ok: bool) {
+    cwd := ctx.working_dir
+    if len(cwd) == 0 {
+        dbg.log(.ERROR, "CWD is invalid, length 0")
+        return
+    }
+    last_is_seperator := os.is_path_separator(rune(cwd[len(cwd) - 1]))
+
+    counted := 0
+    i: int
+    for i = len(cwd) - 1; i >= 0 && counted != 1 + int(last_is_seperator); i -= 1 {
+        if os.is_path_separator(rune(cwd[i])) do counted += 1
+    }
+    if i == -1 do return true
+
+    ctx.working_dir = cwd[:i+1]
+    dbg.log(.INFO, "New ui working dir: %s", ctx.working_dir)
+    return true
+}
+
+@(private)
+display_directory_contents :: proc(current_working_dir: string, allowed_extension: string, temp_allocator: mem.Allocator) -> (picked: cstring, picked_cwd: string, ok: bool) {
     file_infos := futils.get_directory_contents(current_working_dir, allocator=temp_allocator) or_return
 
     directories := slice.filter(file_infos, proc(info: os.File_Info) -> bool { return info.is_dir}, temp_allocator)
     files := slice.filter(file_infos, proc(info: os.File_Info) -> bool { return !info.is_dir}, temp_allocator)
 
-    for file_info in slice.concatenate([][]os.File_Info{ directories, files }, allocator=temp_allocator) {  // Disgusting ;/
+    for file_info, file_idx in slice.concatenate([][]os.File_Info{ directories, files }, allocator=temp_allocator) {  // Disgusting ;/
         file_info: os.File_Info = file_info
 
         if file_info.is_dir {
             if im.TreeNode(strings.clone_to_cstring(file_info.name, temp_allocator)) {
                 defer im.TreePop()
-                new_picked_file := display_directory_contents(file_info.fullpath, allowed_extension, temp_allocator) or_return
-                if new_picked_file != nil do return new_picked_file, true
+                new_picked_file, new_picked_cwd := display_directory_contents(file_info.fullpath, allowed_extension, temp_allocator) or_return
+                if len(new_picked_cwd) != 0 do return nil, new_picked_cwd, true
+                else if new_picked_file != nil do return new_picked_file, "", true
+            }
+            else {
+                im.SameLine(spacing = 15)
+                enter_button_label := fmt.caprintf("Enter##dir_%s", file_info.fullpath, allocator=temp_allocator)
+                if im.Button(enter_button_label) do return nil, file_info.fullpath, true
             }
         }
         else {
             _, extension := futils.split_extension_from_path(file_info.fullpath, temp_allocator) or_return
             if len(extension) != 0 && (strings.compare(allowed_extension, "*") == 0 || strings.compare(extension, allowed_extension[1:]) == 0) {
-                name_cstr := strings.clone_to_cstring(file_info.name, temp_allocator)
-                if im.Button(name_cstr) {
-                    picked_file = strings.clone_to_cstring(file_info.fullpath, temp_allocator)
-                    dbg.log(.INFO, "Picked file: %s", picked_file)
+                name_button_label := fmt.caprintf("%s##button_%s", file_info.name, file_info.fullpath)
+                if im.Button(name_button_label) {
+                    dbg.log(.INFO, "Picked file: %s", file_info.fullpath)
+                    return strings.clone_to_cstring(file_info.fullpath, temp_allocator), "", true
                 }
             }
         }
