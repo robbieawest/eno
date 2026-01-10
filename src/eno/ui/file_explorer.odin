@@ -34,10 +34,19 @@ pick_file_from_explorer_raw :: proc(buffer: []byte, ctx: ^UIContext, label := ""
         im.OpenPopup("#file_dialog")
     }
 
+    @(static) extension_filter_options := []cstring{ "*", ".gltf", ".hdr", ".png", ".jpg" }
+    @(static) selected_extension_filter := 0
+
+    // I'm handling file_extension_c seperate in memory to file_extension and the filter options to create a standard between both options, but the procedure cold just be overloaded for each
     MAX_FILE_EXTENSION_LENGTH :: 5
     file_extension_c := cstring(raw_data(make_slice([]u8, MAX_FILE_EXTENSION_LENGTH + 1, ctx.temp_allocator)))
+    if file_extension == "*" {
+        mem.copy(rawptr(file_extension_c), rawptr(extension_filter_options[selected_extension_filter]), MAX_FILE_EXTENSION_LENGTH)
+    }
+    else {
+        mem.copy(rawptr(file_extension_c), raw_data(file_extension), min(len(file_extension), MAX_FILE_EXTENSION_LENGTH))
+    }
 
-    mem.copy(rawptr(file_extension_c), rawptr(strings.clone_to_cstring(file_extension, ctx.temp_allocator)), min(len(file_extension) + 1, MAX_FILE_EXTENSION_LENGTH))
     if im.BeginPopupEx(im.GetID("#file_dialog"), { .NoSavedSettings, .NoTitleBar }) {
         defer im.EndPopup()
 
@@ -50,15 +59,13 @@ pick_file_from_explorer_raw :: proc(buffer: []byte, ctx: ^UIContext, label := ""
         im.Spacing()
         im.Spacing()
 
-        new_picked_file, new_picked_dir := display_directory_contents(cwd, string(file_extension), ctx.temp_allocator) or_return
+        new_picked_file, new_picked_dir := display_directory_contents(cwd, string(file_extension_c), ctx.temp_allocator) or_return
         if len(new_picked_dir) != 0 {
-            dbg.log(.INFO, "New picked dir: %s", new_picked_dir)
             delete(cwd, ctx.allocator)
             ctx.working_dir = strings.clone(new_picked_dir, ctx.allocator)
         }
         else if new_picked_file != nil {
             utils.copy_and_zero(string(buffer), string(new_picked_file))
-            dbg.log(.INFO, "Setting new %s picked %s", new_picked_file, buffer)
             im.CloseCurrentPopup()
             return string(buffer), true
         }
@@ -67,11 +74,18 @@ pick_file_from_explorer_raw :: proc(buffer: []byte, ctx: ^UIContext, label := ""
         im.Spacing()
 
         im.Text(file_extension_c)
-        if len(file_extension) == 0 {
-            if im.BeginCombo("File type", file_extension_c) {
+        if file_extension == "*" {
+            // File extension dropdown
+
+            if im.BeginCombo("File type filter", extension_filter_options[selected_extension_filter]) {
                 defer im.EndCombo()
 
-            // Todo
+                for option, i in extension_filter_options {
+                    is_selected := selected_extension_filter == i
+                    if im.Selectable(extension_filter_options[i], is_selected) do selected_extension_filter = i
+
+                    if is_selected do im.SetItemDefaultFocus()
+                }
             }
         }
 
@@ -124,7 +138,7 @@ display_directory_contents :: proc(current_working_dir: string, allowed_extensio
             }
             else {
                 im.SameLine(spacing = 15)
-                enter_button_label := fmt.caprintf("Enter##dir_%s", file_info.fullpath, allocator=temp_allocator)
+                enter_button_label := fmt.caprintf("<##dir_%s", file_info.fullpath, allocator=temp_allocator)
                 if im.Button(enter_button_label) do return nil, file_info.fullpath, true
             }
         }

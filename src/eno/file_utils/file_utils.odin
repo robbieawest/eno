@@ -113,6 +113,7 @@ is_path_separator :: proc(to_check: byte) -> bool {
 
 get_directory_contents :: proc(cwd: string, num_files := 0, allocator := context.allocator) -> (contents: []os.File_Info, ok: bool) {
     dir_handle, ferr := os.open(cwd)
+    defer os.close(dir_handle)
     if ferr != nil {
         dbg.log(.ERROR, "Error opening directory %s, error: %v", cwd, ferr)
         return
