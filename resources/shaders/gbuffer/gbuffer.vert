@@ -33,8 +33,14 @@ layout(location = 3) out TangentNormalSign tangentNormalSign;
 #endif
 
 #ifdef TEXCOORD_INPUT
+#ifdef TANGENT_INPUT
 layout(location = 3) in vec2 aTexCoord;
+#else
+layout(location = 2) in vec2 aTexCoord;
+#endif
+
 layout(location = 2) out vec2 texCoords;
+
 #endif
 
 
