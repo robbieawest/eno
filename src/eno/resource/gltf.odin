@@ -230,6 +230,7 @@ extract_model :: proc(manager: ^ResourceManager, path: string, model_name: strin
 
 /*
     Gives an eno mesh for each primitive in the cgltf "mesh"
+    todo add allocator options
 */
 extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh, gltf_file_location: string) -> (model: Model, ok: bool) {
     //This is assuming all mesh attributes (aside from indices) have the same count (for each primitive/mesh output)
@@ -247,19 +248,30 @@ extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh, gltf_fil
         }
         dbg.log(.INFO, "Loading primitive of type '%v'", primitive.type)
 
+        // Order attributes in NORMAL, POSITION, TANGENT, TEXCOORD
+        // Do not allow attributes outside these types
+        attributes := make([dynamic]^cgltf.attribute)
+        allowed_types := []MeshAttributeType{ .normal, .position, .tangent, .texcoord }
+        for type in allowed_types {
+            for &attribute in primitive.attributes do if cast(MeshAttributeType)int(attribute.type) == type {
+                append(&attributes, &attribute)
+            }
+        }
+        if len(attributes) != len(primitive.attributes) do dbg.log(.WARN, "Certain attributes in the mesh %s were not loaded", mesh.name)
+
         // Construct layout
         layout: VertexLayout
         layout.infos = make([]MeshAttributeInfo, len(primitive.attributes))
-        for attribute, i in primitive.attributes {
+        for attribute, i in attributes {
             accessor := attribute.data
 
+            attribute_type := cast(MeshAttributeType)int(attribute.type)
+            element_type := cast(MeshElementType)int(accessor.type)
             attribute_info := MeshAttributeInfo{
-                cast(MeshAttributeType)int(attribute.type),
-                cast(MeshElementType)int(accessor.type),
-                convert_component_type(accessor.component_type),
-                u32(accessor.stride),
-                u32(accessor.stride >> 2),
-                string(accessor.name)
+                attribute_type,
+                element_type,
+                get_size_of_element_type(element_type) or_return,
+                string(attribute.name)
             }
             layout.infos[i] = attribute_info
         }
@@ -267,9 +279,7 @@ extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh, gltf_fil
         mesh_ret.layout = layout_id
 
 
-        // Get float stride - the number of floats needed for each vertex
-
-        mesh_ret.vertex_data = extract_vertex_data_from_primitive(primitive) or_return
+        mesh_ret.vertex_data = extract_vertex_data_from_primitive(attributes[:], layout.infos) or_return
         mesh_ret.vertices_count = len(mesh_ret.vertex_data)
         mesh_ret.index_data = extract_index_data_from_primitive(primitive) or_return
         mesh_ret.indices_count = len(mesh_ret.index_data)
@@ -283,29 +293,34 @@ extract_cgltf_mesh :: proc(manager: ^ResourceManager, mesh: cgltf.mesh, gltf_fil
 }
 
 
-extract_vertex_data_from_primitive :: proc(primitive: cgltf.primitive) -> (result: VertexData, ok: bool) {
+extract_vertex_data_from_primitive :: proc(attributes: []^cgltf.attribute, attribute_infos: []MeshAttributeInfo) -> (result: VertexData, ok: bool) {
 
-    if len(primitive.attributes) == 0 {
+    if len(attributes) == 0 {
         dbg.log(.ERROR, "Primitive must have attributes")
         return
     }
+    if len(attributes) != len(attribute_infos) {
+        dbg.log(.ERROR, "Number of primitive attributes does not match the attribute infos given")
+        return
+    }
 
-    float_stride: uint = 0; for attribute in primitive.attributes do float_stride += uint(attribute.data.stride) >> 2
-    count := primitive.attributes[0].data.count
+    stride: uint
+    for info in attribute_infos do stride += info.size_in_bytes
+    float_stride : uint = stride >> 2
+
+    count := attributes[0].data.count
     result = make(VertexData, float_stride * count)
 
     element_offset: uint = 0
-    for attribute, j in primitive.attributes {
+    for attribute, i in attributes {
         accessor := attribute.data
 
-        element_size := (accessor.stride) >> 2  // Number of floats in current element
+        n_floats_in_element := attribute_infos[i].size_in_bytes >> 2
 
-        next_offset := element_offset + element_size
         vertex_offset: uint = 0
-        for k in 0..<count {
-            raw_vertex_data : [^]f32 = raw_data(result[vertex_offset + element_offset:vertex_offset + next_offset])
+        for j in 0..<count {
 
-            read_res: b32 = cgltf.accessor_read_float(accessor, k, raw_vertex_data, element_size)
+            read_res: b32 = cgltf.accessor_read_float(accessor, j, &result[vertex_offset + element_offset], n_floats_in_element)
             if read_res == false {
                 dbg.log(.ERROR, "Error while reading float from accessor, received boolean false")
                 return
@@ -313,7 +328,7 @@ extract_vertex_data_from_primitive :: proc(primitive: cgltf.primitive) -> (resul
 
             vertex_offset += float_stride
         }
-        element_offset = next_offset
+        element_offset += n_floats_in_element
     }
 
     ok = true
@@ -340,28 +355,24 @@ extract_index_data_from_primitive :: proc(primitive: cgltf.primitive) -> (result
     return
 }
 
-
+//Returns in bytes
 @(private)
-cgltf_component_type_to_typeid :: proc(type: cgltf.component_type) -> (ret: typeid, ok: bool) {
-    switch type {
-    case .invalid:
-        dbg.log(.ERROR, "Component type is invalid")
-        return
-    case .r_8: ret = i8
-    case .r_8u: ret = u8
-    case .r_16: ret = i16
-    case .r_16u: ret = u16
-    case .r_32u: ret = u32
-    case .r_32f: ret = f32
+get_size_of_element_type :: proc(element_type: MeshElementType) -> (size: uint, ok: bool) {
+    switch element_type {
+        case .invalid:
+            dbg.log(.INFO, "Invalid element type found")
+            return
+        case .scalar: size = 4
+        case .vec2: size = 8
+        case .vec3: size = 12
+        case .vec4: size = 16
+        case .mat2: size = 16
+        case .mat3: size = 36
+        case .mat4: size = 64
     }
 
     ok = true
     return
-}
-
-@(private)
-convert_component_type :: proc(type: cgltf.component_type) -> (ret: MeshComponentType) {
-    return cast(MeshComponentType)int(type)
 }
 
 

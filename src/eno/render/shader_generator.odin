@@ -48,40 +48,22 @@ parse_attribute_name :: proc(attribute_info: resource.MeshAttributeInfo, allocat
 glsl_type_from_attribute :: proc(attribute_info: resource.MeshAttributeInfo) -> (glsl_type: resource.GLSLDataType, ok: bool) {
 
     switch attribute_info.element_type {
-    case .invalid:
-        dbg.log(.ERROR, "Invalid attribute element type")
-        return
-    case .scalar: glsl_type = convert_component_type_to_glsl_type(attribute_info.data_type) or_return
-    case .vec2: glsl_type = .vec2
-    case .vec3: glsl_type = .vec3
-    case .vec4: glsl_type = .vec4
-    case .mat2: glsl_type = .mat2
-    case .mat3: glsl_type = .mat3
-    case .mat4: glsl_type = .mat4
-    }
-
-    ok = true
-    return
-}
-
-
-/*
-    GLTF only supports types mentioned in MeshComponentType
-    GLSL does suppport some mention of precision, but I really do not care for this
-*/
-@(private)
-convert_component_type_to_glsl_type :: proc(component_type: resource.MeshComponentType) -> (type: resource.GLSLDataType, ok: bool) {
-    switch component_type {
-        case .invalid, .i8, .i16, .u8, .u16:
-            dbg.log(.ERROR, "Invalid component type when attempting to convert to GLSL type")
+        case .invalid:
+            dbg.log(.ERROR, "Invalid attribute element type")
             return
-        case .f32: type = .float
-        case .u32: type = .uint
+        case .scalar: glsl_type = .float
+        case .vec2: glsl_type = .vec2
+        case .vec3: glsl_type = .vec3
+        case .vec4: glsl_type = .vec4
+        case .mat2: glsl_type = .mat2
+        case .mat3: glsl_type = .mat3
+        case .mat4: glsl_type = .mat4
     }
 
     ok = true
     return
 }
+
 
 
 /* Todo write proper interface for typeid -> ShaderStuct later

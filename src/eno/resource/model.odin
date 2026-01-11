@@ -32,15 +32,9 @@ InstanceTo :: struct {
 INSTANCE_TO_COMPONENT := standards.ComponentTemplate{ "InstanceTo",  InstanceTo, size_of(InstanceTo) }
 
 
-/*
-VertexLayout :: struct {
-    sizes : []u32,
-    types: []cgltf.attribute_type
-}
-*/
 
 VertexLayout :: struct {
-    infos: []MeshAttributeInfo,
+    infos: []MeshAttributeInfo,  // Ordered!
     // Decides if the VertexLayout should be grouped with duplicates in the resource manager or not
     // Use when the vertex shader should be unique to layouts with the same mesh attribute infos
     unique: bool,
@@ -59,9 +53,7 @@ destroy_vertex_layout :: proc(manager: ^ResourceManager, layout: VertexLayout, a
 MeshAttributeInfo :: struct {
     type: MeshAttributeType,  // Describes the type of the attribute (position, normal etc)
     element_type: MeshElementType,  // Describes the direct datatype of each element (vec2, vec3 etc)
-    data_type: MeshComponentType,
-    byte_stride: u32,  // Describes attribute length in bytes
-    float_stride: u32,  // Describes attribute length in number of floats (f32) (byte_stride / 4)
+    size_in_bytes: uint, // Number of bytes for the specific attribute
     name: string
 }
 
@@ -88,17 +80,6 @@ MeshAttributeType :: enum {
     weights,
     custom,
 }
-
-MeshComponentType :: enum {
-    invalid,
-    i8,
-    u8,
-    i16,
-    u16,
-    u32,
-    f32
-}
-
 
 VertexData :: [dynamic]f32
 IndexData :: [dynamic]u32
@@ -204,8 +185,8 @@ primitive_square_mesh_data :: proc(allocator := context.allocator) -> (mesh: Mes
 
 primitive_square_mesh_layout :: proc(unique_layout: bool, allocator := context.allocator) -> (layout: VertexLayout) {
     layout.infos = make([]MeshAttributeInfo, 2, allocator=allocator)
-    layout.infos[0] = { .position, .vec3, .f32, 12, 3, strings.clone("aPosition")}
-    layout.infos[1] = { .texcoord, .vec2, .f32, 8, 2, strings.clone("aTexCoords")}
+    layout.infos[0] = { .position, .vec3, 12, strings.clone("aPosition")}
+    layout.infos[1] = { .texcoord, .vec2, 8, strings.clone("aTexCoords")}
     layout.unique = unique_layout
     return
 }
@@ -803,7 +784,7 @@ calculate_centroid :: proc(vertex_data: VertexData, layout_infos: []MeshAttribut
             position_found = true
             position_float_offset = total_float_stride
         }
-        total_float_stride += int(info.float_stride)
+        total_float_stride += int(info.size_in_bytes >> 2)
     }
     if !position_found {
         dbg.log(.ERROR, "Mesh layout infos contains no position")

@@ -86,10 +86,8 @@ hash_resource :: proc(resource: $T, allocator: mem.Allocator) -> ResourceHash {
         for info in resource.infos {
             info: MeshAttributeInfo = info  // For IDE type hint
             append_elems(&bytes, ..utils.to_bytes(&info.type))
-            append_elems(&bytes, ..utils.to_bytes(&info.float_stride))
-            append_elems(&bytes, ..utils.to_bytes(&info.byte_stride))
             append_elems(&bytes, ..utils.to_bytes(&info.element_type))
-            append_elems(&bytes, ..utils.to_bytes(&info.data_type))
+            append_elems(&bytes, ..utils.to_bytes(&info.size_in_bytes))
         }
 
         return hash_raw(bytes[:])
@@ -199,10 +197,8 @@ compare_resources :: proc(a: $T, b: T, allocator: mem.Allocator) -> bool {
 
             equal := true
             equal &= a_info.type == b_info.type
-            equal &= a_info.data_type == b_info.data_type
             equal &= a_info.element_type == b_info.element_type
-            equal &= a_info.byte_stride == b_info.byte_stride
-            equal &= a_info.float_stride == b_info.float_stride
+            equal &= a_info.size_in_bytes == b_info.size_in_bytes
             equal &= strings.compare(a_info.name, b_info.name) == 0
 
             if !equal do return false

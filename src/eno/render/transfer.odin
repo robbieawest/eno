@@ -120,19 +120,18 @@ create_and_transfer_vbo_raw :: proc(vbo: ^u32, vertex_data: resource.VertexData,
     gl.GenBuffers(1, vbo)
     bind_vbo(vbo^)
 
-    total_byte_stride: u32 = 0; for attribute_layout in layout do total_byte_stride += attribute_layout.byte_stride
+    stride: uint = 0; for attribute_layout in layout do stride += attribute_layout.size_in_bytes
 
     transfer_buffer_data(gl.ARRAY_BUFFER, raw_data(vertex_data), len(vertex_data) * size_of(f32), BufferUsage{ .WRITE_ONCE_READ_MANY, .DRAW })
 
     for attrib in 0..<max_vertex_attributes() do gl.DisableVertexAttribArray(attrib);
 
-    offset, current_ind: u32 = 0, 0
-    for attribute_info in layout {
-        gl.VertexAttribPointer(current_ind, i32(attribute_info.float_stride), gl.FLOAT, gl.FALSE, i32(total_byte_stride), uintptr(offset))
-        gl.EnableVertexAttribArray(current_ind)
+    offset: uint
+    for attribute_info, i in layout {
+        gl.VertexAttribPointer(u32(i), i32(attribute_info.size_in_bytes >> 2), gl.FLOAT, gl.FALSE, i32(stride), uintptr(offset))
+        gl.EnableVertexAttribArray(u32(i))
 
-        offset += attribute_info.byte_stride
-        current_ind += 1
+        offset += attribute_info.size_in_bytes
     }
 
     ok = true

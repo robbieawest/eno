@@ -2105,9 +2105,9 @@ create_primitive_cube_mesh :: proc(manager: ^resource.ResourceManager) -> (mesh:
     create_and_transfer_vao(&comp.vao)
     verts_dyn := transmute([dynamic]f32)runtime.Raw_Dynamic_Array{ &verts[0], len(verts), len(verts), context.allocator }
     layout := []resource.MeshAttributeInfo{
-        resource.MeshAttributeInfo{ .position, .vec3, .f32, 12, 3, "" },
-        resource.MeshAttributeInfo{ .normal, .vec2, .f32, 12, 3, "" },
-        resource.MeshAttributeInfo{ .texcoord, .vec2, .f32, 8, 2, "" },
+        resource.MeshAttributeInfo{ .position, .vec3, 12, "" },
+        resource.MeshAttributeInfo{ .normal, .vec2, 12, "" },
+        resource.MeshAttributeInfo{ .texcoord, .vec2, 8, "" },
     }
     create_and_transfer_vbo_maybe(&comp.vbo, verts_dyn, layout)
 
@@ -2166,9 +2166,9 @@ create_primitive_cube :: proc() -> (comp: resource.GLComponent) {
     create_and_transfer_vao(&comp.vao)
     verts_dyn := transmute([dynamic]f32)runtime.Raw_Dynamic_Array{ &verts[0], len(verts), len(verts), context.allocator }
     layout := []resource.MeshAttributeInfo{
-        resource.MeshAttributeInfo{ .position, .vec3, .f32, 12, 3, "" },
-        resource.MeshAttributeInfo{ .normal, .vec2, .f32, 12, 3, "" },
-        resource.MeshAttributeInfo{ .texcoord, .vec2, .f32, 8, 2, "" },
+        resource.MeshAttributeInfo{ .position, .vec3, 12, "" },
+        resource.MeshAttributeInfo{ .normal, .vec2, 12, "" },
+        resource.MeshAttributeInfo{ .texcoord, .vec2, 8, "" },
     }
     create_and_transfer_vbo_maybe(&comp.vbo, verts_dyn, layout)
 
@@ -2231,8 +2231,8 @@ create_primitive_quad_mesh :: proc(manager: ^resource.ResourceManager) -> (mesh:
     create_and_transfer_vao(&comp.vao)
     verts_dyn := transmute([dynamic]f32)runtime.Raw_Dynamic_Array{ &verts[0], len(verts), len(verts), context.allocator }
     layout := []resource.MeshAttributeInfo{
-        resource.MeshAttributeInfo{ .position, .vec3, .f32, 12, 3, "" },
-        resource.MeshAttributeInfo{ .texcoord, .vec2, .f32, 8, 2, "" },
+        resource.MeshAttributeInfo{ .position, .vec3, 12, "" },
+        resource.MeshAttributeInfo{ .texcoord, .vec2, 8, "" },
     }
     create_and_transfer_vbo_maybe(&comp.vbo, verts_dyn, layout)
 
