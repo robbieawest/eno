@@ -6,6 +6,9 @@ The engine focuses on providing a simple and relatively powerful game engine int
 
 ## Renderer output examples
 
+<br>
+<img src="https://github.com/robbieawest/eno/blob/main/demo-images/sponza.png" alt="" width="1440" height="900">
+
 Indirect Environment Lighting <br> Including ambient and specular occlusion        |  Direct lighting
 :-------------------------:|:-------------------------:
 <img src="https://github.com/robbieawest/eno/blob/main/demo-images/metro_so.png" alt="" width="722" height="540">  |  <img src="https://github.com/robbieawest/eno/blob/main/demo-images/direct.png" alt="" width="722" height="540">
@@ -14,9 +17,6 @@ Clearcoat test <br> Left: Fully reflective &emsp; Middle: Rough &emsp; Right: Sa
 :--------------------------------------------------:
 <img src="https://github.com/robbieawest/eno/blob/main/demo-images/clearcoat_test.png" alt="" width="1400" height="540">
 
-Sponza
-:--------------------------------------------------:
-<img src="https://github.com/robbieawest/eno/blob/main/demo-images/Sponza.png" alt="" width="1400" height="540">
 
 
 
