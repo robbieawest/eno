@@ -14,6 +14,10 @@ Clearcoat test <br> Left: Fully reflective &emsp; Middle: Rough &emsp; Right: Sa
 :--------------------------------------------------:
 <img src="https://github.com/robbieawest/eno/blob/main/demo-images/clearcoat_test.png" alt="" width="1400" height="540">
 
+Sponza
+:--------------------------------------------------:
+<img src="https://github.com/robbieawest/eno/blob/main/demo-images/Sponza.png" alt="" width="1400" height="540">
+
 
 
 ## Building instructions
