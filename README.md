@@ -14,10 +14,6 @@ Clearcoat test <br> Left: Fully reflective &emsp; Middle: Rough &emsp; Right: Sa
 :--------------------------------------------------:
 <img src="https://github.com/robbieawest/eno/blob/main/demo-images/clearcoat_test.png" alt="" width="1400" height="540">
 
-Toyota Supra model without ambient/specular occlusion          |  Previvous, with occlusion
-:-------------------------:|:-------------------------:
-<img src="https://github.com/robbieawest/eno/blob/main/demo-images/supra_no_so.png" alt="" width="722" height="540">  |  <img src="https://github.com/robbieawest/eno/blob/main/demo-images/supra_so.png" alt="" width="722" height="540">
-
 
 
 ## Building instructions
