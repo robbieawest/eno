@@ -75,6 +75,7 @@ A list of features detailing what eno currently implements:
 - Dear Imgui integration, with a UI element interface to create UI elements or use those available
 - Ambient occlusion calculated in screen space (SSAO), with runtime bent normal calculation. Bent normals follow the [Klehm2011](https://www.researchgate.net/publication/220839265_Bent_Normals_and_Cones_in_Screen-space) bent cones description, and are packed with the occlusion term. A seperated cross bilteral filter is then done to remove noise while preserving edges and the cone variance in the bent normals
 - Specular occlusion using the bent cone variance and bent normal from the SSAO pass. This follows the [Jimenez2016](https://www.activision.com/cdn/research/Practical_Real_Time_Strategies_for_Accurate_Indirect_Occlusion_NEW%20VERSION_COLOR.pdf) specular occlusion (cone-cone approximation) term, using the solution given in Ambient Aperture Lighting [Oat2006](https://dl.acm.org/doi/10.1145/1185657.1185833). This has limitations when using SSAO for the occlusion and bent normal calculation, as the (very typical and expected) SSAO artifacts are exacerbated.
+- Custom file explorer UI element - ex. for picking texture, model URIs
 
 What I'm working on:
 - UI improvements, including resource inspection and a scene hierarchy
