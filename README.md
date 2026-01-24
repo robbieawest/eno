@@ -11,7 +11,7 @@ The engine focuses on providing a simple and relatively powerful game engine int
 
 Indirect Environment Lighting <br> Including ambient and specular occlusion        |  Direct lighting
 :-------------------------:|:-------------------------:
-<img src="https://github.com/robbieawest/eno/blob/main/demo-images/metro_so.png" alt="" width="722" height="540">  |  <img src="https://github.com/robbieawest/eno/blob/main/demo-images/direct.png" alt="" width="722" height="540">
+<img src="https://github.com/robbieawest/eno/blob/main/demo-images/damaged_helmet.png" alt="" width="722" height="540">  |  <img src="https://github.com/robbieawest/eno/blob/main/demo-images/direct.png" alt="" width="722" height="540">
 
 Clearcoat test <br> Left: Fully reflective &emsp; Middle: Rough &emsp; Right: Same as rough middle but with a second reflective layer, requiring multiple reflectance evaluations with energy conservation
 :--------------------------------------------------:
