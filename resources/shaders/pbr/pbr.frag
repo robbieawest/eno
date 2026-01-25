@@ -154,7 +154,7 @@ float calculateSpecularOcclusion(float NdotV, vec3 BN, vec3 N, vec3 R, float rou
     //  and grazing angles create fake occlusion. This solves some of the issue, which comes from the specular cone overlapping past the
     //  perfect visibility hemisphere, which is unreachable by visibility samples.
     // return omega_i / roughness;
-    float hemisphere_overlap = clamp(calculatePartialConeIntersection(PI * 0.5, r_l, acos(dot(N, R))), 0.0, 1.0);
+    float hemisphere_overlap = clamp(calculatePartialConeIntersection(PI * 0.5, r_l, acos(NdotV)), 0.0, 1.0);
     return clamp((omega_i / roughness + NdotV * hemisphere_overlap) / hemisphere_overlap, 0.0, 1.0);
 
 }
