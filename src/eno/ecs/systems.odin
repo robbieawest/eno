@@ -87,19 +87,22 @@ destroy_archetype_query_result :: proc(result: ArchetypeQueryResult) {
 // Defaults to temp allocator
 query_scene :: proc(scene: ^Scene, query: SceneQuery, allocator := context.temp_allocator) -> (result: SceneQueryResult, ok: bool) {
     result = make(SceneQueryResult, allocator=allocator)
-    switch v in query {
+    switch query_var in query {
         case ArchetypeQuery:
             for label, ind in scene.archetype_label_match {
-                result[strings.clone(label, allocator=allocator)] = query_archetype(&scene.archetypes[ind], v, allocator) or_return
+                query_res := query_archetype(&scene.archetypes[ind], query_var, allocator) or_return
+                if (query_res != nil) do result[strings.clone(label, allocator=allocator)] = query_res.?
             }
         case map[string]ArchetypeQuery:
-            for archetype_label, archetype_query in v {
+            for archetype_label, archetype_query in query_var {
                 archetype, archetype_exists := scene_get_archetype(scene, archetype_label)
                 if !archetype_exists {
                     dbg.log(dbg.LogLevel.ERROR, "Archetype label %s does not map to an existing archetype", archetype_label)
                     return
                 }
-                result[strings.clone(archetype_label, allocator=allocator)] = query_archetype(archetype, archetype_query, allocator) or_return
+
+                query_res := query_archetype(archetype, archetype_query, allocator) or_return
+                if (query_res != nil) do result[strings.clone(archetype_label, allocator=allocator)] = query_res.?
             }
     }
 
@@ -107,14 +110,15 @@ query_scene :: proc(scene: ^Scene, query: SceneQuery, allocator := context.temp_
     return
 }
 
-query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, allocator := context.temp_allocator) -> (result: ArchetypeQueryResult, ok: bool) {
+query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, allocator := context.temp_allocator) -> (res: Maybe(ArchetypeQueryResult), ok: bool) {
     for component_query in query.components {
         if (component_query.action == .QUERY_AND_INCLUDE || component_query.action == .QUERY_NO_INCLUDE) &&
             component_query.label not_in archetype.components_label_match {
-            return {}, true // Skip archetype
+            return nil, true // Skip archetype
         }
     }
 
+    result := ArchetypeQueryResult{}
     result.data = archetype_get_entity_data(archetype, allocator) or_return
     result.component_map = utils.copy_map(archetype.components_label_match, allocator)
     result.entity_map = utils.copy_map(archetype.entities, allocator)
@@ -180,8 +184,7 @@ query_archetype :: proc(archetype: ^Archetype, query: ArchetypeQuery, allocator 
         last_column = int(entity.archetype_column)
     }
 
-    ok = true
-    return
+    return result, true
 }
 
 

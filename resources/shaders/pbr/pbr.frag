@@ -17,8 +17,6 @@ layout(std430, binding = 1) buffer LightBuf {
 
 struct LightSourceInformation {
     vec3 colour;
-    float _pad;
-    vec3 position;  // World space
     float intensity;
 };
 
@@ -38,6 +36,8 @@ struct DirectionalLight {
 
 struct PointLight {
     LightSourceInformation lightInformation;
+    vec3 position; // World space
+    float _pad;
 };
 
 LightSourceInformation getLightSourceInformation(uint index) {
@@ -45,36 +45,36 @@ LightSourceInformation getLightSourceInformation(uint index) {
     lightInformation.colour.r = Lights.lightdata[index];
     lightInformation.colour.g = Lights.lightdata[index + 1];
     lightInformation.colour.b = Lights.lightdata[index + 2];
-    lightInformation.position.x = Lights.lightdata[index + 4];
-    lightInformation.position.y = Lights.lightdata[index + 5];
-    lightInformation.position.z = Lights.lightdata[index + 6];
-    lightInformation.intensity = Lights.lightdata[index + 7];
+    lightInformation.intensity = Lights.lightdata[index + 3];
     return lightInformation;
 }
 
 SpotLight getSpotLight(uint index) {
     SpotLight light;
     light.lightInformation = getLightSourceInformation(index);
-    light.direction.x = Lights.lightdata[index + 8];
-    light.direction.y = Lights.lightdata[index + 9];
-    light.direction.z = Lights.lightdata[index + 10];
-    light.innerConeAngle = Lights.lightdata[index + 11];
-    light.outerConeAngle = Lights.lightdata[index + 12];
+    light.direction.x = Lights.lightdata[index + 4];
+    light.direction.y = Lights.lightdata[index + 5];
+    light.direction.z = Lights.lightdata[index + 6];
+    light.innerConeAngle = Lights.lightdata[index + 7];
+    light.outerConeAngle = Lights.lightdata[index + 8];
     return light;
 }
 
 DirectionalLight getDirectionalLight(uint index) {
     DirectionalLight light;
     light.lightInformation = getLightSourceInformation(index);
-    light.direction.x = Lights.lightdata[index + 8];
-    light.direction.y = Lights.lightdata[index + 9];
-    light.direction.z = Lights.lightdata[index + 10];
+    light.direction.x = Lights.lightdata[index + 4];
+    light.direction.y = Lights.lightdata[index + 5];
+    light.direction.z = Lights.lightdata[index + 6];
     return light;
 }
 
 PointLight getPointLight(uint index) {
     PointLight light;
     light.lightInformation = getLightSourceInformation(index);
+    light.position.x = Lights.lightdata[index + 4];
+    light.position.y = Lights.lightdata[index + 5];
+    light.position.z = Lights.lightdata[index + 6];
     return light;
 }
 
@@ -119,13 +119,15 @@ float convertSolidAngleToRadians(float angle) {
 
 float calculateSpecularOcclusion(float NdotV, vec3 BN, vec3 R, float roughness, float ao) {
 
-    // float aperture = getAperature(BN);
-    float aperture = getAperature(ao);
+    float aperture = getAperature(BN);
+    //float aperture = getAperature(ao);
 
     float r_p = aperture;
-    float r_l = convertSolidAngleToRadians(roughness);
-    //float d = acos(dot(normalize(BN), R) * mix(0.1, 1.0, clamp(NdotV, 0.0, 1.0)));  // Account for grazing artefacts, diminishes total quality, use with caution?
     float d = acos(dot(normalize(BN), R));
+    float omega_s = calculatePartialConeIntersection(r_p, roughness, d);
+    // omega_s = roughness;
+    float r_l = convertSolidAngleToRadians(omega_s);
+    //float d = acos(dot(normalize(BN), R) * mix(0.1, 1.0, clamp(NdotV, 0.0, 1.0)));  // Account for grazing artefacts, diminishes total quality, use with caution?
     // Light source vector V_l = R, radius r_l = reflection cone angle
     // d = similarity
     // r_p = bent cone aperture -> spherical cap radius
@@ -153,8 +155,8 @@ float calculateSpecularOcclusion(float NdotV, vec3 BN, vec3 R, float roughness, 
     // This is not accounted for in the GTAO paper, but it seems that when bent normals/AO have artefacts, aperture is underestimated
     //  and grazing angles create fake occlusion. This solves some of the issue, which comes from the specular cone overlapping past the
     //  perfect visibility hemisphere, which is unreachable by visibility samples.
+    // return omega_i / roughness;
     r_p = PI * 0.5;
-    float omega_s = calculatePartialConeIntersection(r_p, r_l, d);
     return clamp(omega_i / omega_s, 0.0, 1.0);
 }
 
@@ -163,7 +165,7 @@ vec3 IBLAmbientTerm(vec3 N, vec3 BN, vec3 V, vec3 fresnelRoughness, vec3 albedo,
     vec3 R = reflect(-V, N);  // World space
     // vec3 RWorld = normalize(transpose(TBN) * R);  // Since tbn is orthogonal it is transitive across the reflect operation *from when R was tangent space
     vec3 radiance = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
-    vec3 irradiance = texture(irradianceMap, normalize(BN)).rgb;
+    vec3 irradiance = texture(irradianceMap, normalize(N)).rgb;
 
     float so = 1.0;
     if (checkBitMask(lightingSettings, 3)) {
@@ -179,9 +181,9 @@ vec3 IBLAmbientTerm(vec3 N, vec3 BN, vec3 V, vec3 fresnelRoughness, vec3 albedo,
     if (multiScatter) {
         // Multiple scattering https://www.jcgt.org/published/0008/01/03/paper.pdf
         // Could use interped F0 instead of two BRDF calculations
-        vec3 metalBRDF = IBLMultiScatterBRDF(N, V, radiance, irradiance, albedo, f_ab, roughness, false, 1.0, vec3(1.0));
-        vec3 dielectricBRDF = IBLMultiScatterBRDF(N, V, radiance, irradiance, albedo, f_ab, roughness, true, specular, specularColour);
-        return mix(dielectricBRDF, metalBRDF, metallic);
+        vec3 metalBRDF = IBLMultiScatterBRDF(N, V, radiance, irradiance, albedo, f_ab, roughness, false, 1.0, vec3(1.0), so);
+        vec3 dielectricBRDF = IBLMultiScatterBRDF(N, V, radiance, irradiance, albedo, f_ab, roughness, true, specular, specularColour, so);
+        return mix(dielectricBRDF, metalBRDF, metallic) * ao;
     }
     else {
         // Single scatter
@@ -191,7 +193,7 @@ vec3 IBLAmbientTerm(vec3 N, vec3 BN, vec3 V, vec3 fresnelRoughness, vec3 albedo,
         vec3 kD = 1.0 - kS;
         kD *= 1.0 - metallic;
         vec3 diffuse = irradiance * albedo;
-        return kD * diffuse * ao + specular * so;
+        return (kD * diffuse + specular * so) * ao;
     }
 }
 
@@ -374,6 +376,19 @@ Specular getSpecular() {
     return specular;
 }
 
+vec3 calculateDiscreteReflectance(vec3 radiance, vec3 N, vec3 V, vec3 L, vec3 albedo, float roughness, float metallic, vec3 baseFresnelIncidence, float specular, bool clearcoatActive, float clearcoat, float clearcoatRoughness) {
+    vec3 H = normalize(V + L);
+
+    vec3 BRDF = calculateBRDF(N, V, L, H, albedo, roughness, metallic, baseFresnelIncidence, specular);
+    if (clearcoatActive) {
+        vec3 clearcoatFresnel = FresnelSchlick(V, H, vec3(0.04)) * clearcoat;
+        BRDF *= (1.0 - clearcoatFresnel);
+        BRDF += calculateClearcoatBRDF(N, L, H, clearcoatRoughness, clearcoatFresnel);
+    }
+
+    return calculateReflectance(BRDF, N, L, radiance);
+}
+
 void main() {
     bool iblEnabled = checkBitMask(lightingSettings, 0);
     bool directLightingEnabled = checkBitMask(lightingSettings, 1);
@@ -428,35 +443,37 @@ void main() {
 
     vec3 lightOutputted = vec3(0.0);
 
-    uint spotLightSize = 16;
-    uint directionalLightSize = 12;
+    uint spotLightSize = 12;
+    uint directionalLightSize = 8;
     uint pointLightSize = 8;
     if (directLightingEnabled) {
 
-        // Calculate for point lights
-        uint bufIndex = Lights.numSpotLights * spotLightSize + Lights.numDirectionalLights * directionalLightSize;
+        uint bufIndex = 0;
+        for (uint i = 0; i < Lights.numSpotLights; i++) {
+            // Todo
+            bufIndex += spotLightSize;
+        }
+
+        for (uint i = 0; i < Lights.numDirectionalLights; i++) {
+            DirectionalLight light = getDirectionalLight(bufIndex);
+            vec3 lightDir = normalize(-light.direction);
+            vec3 halfVec = normalize(lightDir + viewDir);
+            vec3 radiance = light.lightInformation.intensity * light.lightInformation.colour;
+
+            lightOutputted += calculateDiscreteReflectance(radiance, normal, viewDir, lightDir, albedo, roughness, metallic, baseFresnelIncidence, specular, clearcoatActive, clearcoat, clearcoatRoughness);
+            bufIndex += directionalLightSize;
+        }
+
         for (uint i = 0; i < Lights.numPointLights; i++) {
             PointLight light = getPointLight(bufIndex);
-            vec3 lightPos = light.lightInformation.position;
-            vec3 lightDir = normalize(lightPos - position);
-            float lightDist = length(lightDir);
+            vec3 lightDir = normalize(light.position - position);
+            vec3 radiance = light.lightInformation.intensity * light.lightInformation.colour / (pow(length(lightDir), 2));
 
-            vec3 halfVec = normalize(lightDir + viewDir);
-
-            vec3 radiance = light.lightInformation.intensity * light.lightInformation.colour / (lightDist * lightDist);
-
-            vec3 BRDF = calculateBRDF(normal, viewDir, lightDir, halfVec, albedo, roughness * roughnessFactor, metallic * metallicFactor, baseFresnelIncidence, specular);
-            if (clearcoatActive) {
-                vec3 clearcoatFresnel = FresnelSchlick(viewDir, halfVec, vec3(0.04)) * clearcoat;
-                BRDF *= (1.0 - clearcoatFresnel);
-                BRDF += calculateClearcoatBRDF(normal, lightDir, halfVec, clearcoatRoughness, clearcoatFresnel);
-            }
-
-            vec3 reflectance = calculateReflectance(BRDF, normal, lightDir, radiance);
-            lightOutputted += reflectance;
+            lightOutputted += calculateDiscreteReflectance(radiance, normal, viewDir, lightDir, albedo, roughness, metallic, baseFresnelIncidence, specular, clearcoatActive, clearcoat, clearcoatRoughness);
 
             bufIndex += pointLightSize;
         }
+
     }
 
     vec3 ambient = vec3(0.0);

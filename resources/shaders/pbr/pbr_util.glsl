@@ -70,7 +70,7 @@ vec3 calculateReflectance(vec3 BRDF, vec3 N, vec3 L, vec3 radiance) {
     return BRDF * radiance * max(dot(N, L), 0.0);
 }
 
-vec3 IBLMultiScatterBRDF(vec3 N, vec3 V, vec3 radiance, vec3 irradiance, vec3 albedo, vec2 f_ab, float perceptualRoughness, const bool dielectric, float specular, vec3 specularColour) {
+vec3 IBLMultiScatterBRDF(vec3 N, vec3 V, vec3 radiance, vec3 irradiance, vec3 albedo, vec2 f_ab, float perceptualRoughness, const bool dielectric, float specular, vec3 specularColour, float specularOcclusion) {
     vec3 F0;
     if (dielectric) F0 = min(vec3(0.04) * specularColour * specular, vec3(1.0));
     else F0 = albedo;
@@ -95,5 +95,5 @@ vec3 IBLMultiScatterBRDF(vec3 N, vec3 V, vec3 radiance, vec3 irradiance, vec3 al
     }
     else diffuse *= FmsEms;  // Full metal, metallic = 1
 
-    return specularContrib + diffuse;
+    return specularContrib * specularOcclusion + diffuse;
 }

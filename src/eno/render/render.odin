@@ -151,7 +151,7 @@ render :: proc(
         check_framebuffer_status_raw() or_return
 
         update_camera_ubo(scene) or_return
-        update_lights_ssbo(scene) or_return
+        update_lights_ssbo(scene, temp_allocator) or_return
 
         for execution in pass.executions {
             if len(mesh_data) != 0 do render_geometry(manager, scene, pipeline.shader_store, pass, mesh_data, execution.uniforms, allocator, temp_allocator) or_return
@@ -1074,8 +1074,6 @@ update_camera_ubo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
 
 GPULightInformation :: struct #packed {
     colour: [3]f32,
-    _pad: f32,
-    position: [3]f32,
     intensity: f32
 }
 
@@ -1094,35 +1092,40 @@ DirectionalLightGPU :: struct #packed {
 }
 
 PointLightGPU :: struct #packed {
-    light_information: GPULightInformation
+    light_information: GPULightInformation,
+    position: [3]f32,
+    _pad: f32
 }
 
 conv_light_information :: proc(info: resource.LightSourceInformation) -> GPULightInformation {
-    return { info.colour, 0.0, info.position, info.intensity }
+    return { info.colour, info.intensity }
 }
 
 // Returns heap allocated gpu light - make sure to free
 light_to_gpu_light :: proc(light: resource.Light) -> (gpu_light: rawptr) {
 
-    switch v in light {
+    switch light_var in light {
         case resource.SpotLight:
             p_Light := new(SpotLightGPU)
             p_Light^ = SpotLightGPU{
-                light_information = conv_light_information(v.light_information),
-                direction = v.direction,
-                inner_cone_angle = v.inner_cone_angle,
-                outer_cone_angle = v.outer_cone_angle
+                light_information = conv_light_information(light_var.light_information),
+                direction = light_var.direction,
+                inner_cone_angle = light_var.inner_cone_angle,
+                outer_cone_angle = light_var.outer_cone_angle
             }
             gpu_light = p_Light
         case resource.PointLight:
             p_Light := new(PointLightGPU)
-            p_Light^ = PointLightGPU{ conv_light_information(v) }
+            p_Light^ = PointLightGPU{
+                light_information = conv_light_information(light_var.light_information),
+                position = light_var.position
+            }
             gpu_light = p_Light
         case resource.DirectionalLight:
             p_Light := new(DirectionalLightGPU)
             p_Light^ = DirectionalLightGPU{
-                light_information = conv_light_information(v.light_information),
-                direction = v.direction
+                light_information = conv_light_information(light_var.light_information),
+                direction = light_var.direction
             }
             gpu_light = p_Light
     }
@@ -1132,23 +1135,23 @@ light_to_gpu_light :: proc(light: resource.Light) -> (gpu_light: rawptr) {
 }
 
 
-update_lights_ssbo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
+update_lights_ssbo :: proc(scene: ^ecs.Scene, temp_allocator: mem.Allocator) -> (ok: bool) {
     // Query to return only light components
     query := ecs.ArchetypeQuery{ components = []ecs.ComponentQuery{
         { label = resource.LIGHT_COMPONENT.label, action = .QUERY_AND_INCLUDE }
     }}
-    query_result := ecs.query_scene(scene, query) or_return
+    query_result := ecs.query_scene(scene, query, temp_allocator) or_return
 
-    lights := ecs.get_component_from_query_result(query_result, resource.Light, resource.LIGHT_COMPONENT.label) or_return
+    lights := ecs.get_component_from_query_result(query_result, resource.Light, resource.LIGHT_COMPONENT.label, allocator=temp_allocator) or_return
 
-    spot_lights := make([dynamic]^resource.SpotLight)
-    directional_lights := make([dynamic]^resource.DirectionalLight)
-    point_lights := make([dynamic]^resource.PointLight)
+    spot_lights := make([dynamic]^resource.SpotLight, allocator=temp_allocator)
+    directional_lights := make([dynamic]^resource.DirectionalLight, allocator=temp_allocator)
+    point_lights := make([dynamic]^resource.PointLight, allocator=temp_allocator)
 
     for &light in lights do switch &v in light {
         case resource.SpotLight: if v.light_information.enabled do append(&spot_lights, &v)
         case resource.DirectionalLight: if v.light_information.enabled do append(&directional_lights, &v)
-        case resource.PointLight: if v.enabled do append(&point_lights, &v)
+        case resource.PointLight: if v.light_information.enabled do append(&point_lights, &v)
     }
 
     num_spot_lights: uint = len(spot_lights)
@@ -1163,7 +1166,7 @@ update_lights_ssbo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
     directional_light_buffer_size := DIRECTIONAL_LIGHT_GPU_SIZE * num_directional_lights
     point_light_buffer_size := POINT_LIGHT_GPU_SIZE * num_point_lights
 
-    light_ssbo_data: []byte = make([]byte, 32 /* For counts and pad */ + spot_light_buffer_size + directional_light_buffer_size + point_light_buffer_size)
+    light_ssbo_data: []byte = make([]byte, 16/* For counts and pad */ + spot_light_buffer_size + directional_light_buffer_size + point_light_buffer_size)
     (transmute(^uint)&light_ssbo_data[0])^ = num_spot_lights
     (transmute(^uint)&light_ssbo_data[4])^ = num_directional_lights
     (transmute(^uint)&light_ssbo_data[8])^ = num_point_lights
@@ -1196,7 +1199,7 @@ update_lights_ssbo :: proc(scene: ^ecs.Scene) -> (ok: bool) {
     }
     else {
         ssbo := Context.lights_ssbo
-        transfer_buffer_data(ShaderBufferType.UBO, raw_data(light_ssbo_data), len(light_ssbo_data), update=true, buffer_id=ssbo.id.?)
+        transfer_buffer_data(ShaderBufferType.SSBO, raw_data(light_ssbo_data), len(light_ssbo_data), update=true, buffer_id=ssbo.id.?)
     }
 
     return true

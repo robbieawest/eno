@@ -696,10 +696,13 @@ LightSourceInformation :: struct {
     enabled: bool,
     intensity: f32,
     colour: glm.vec3,
+}
+
+PointLight :: struct {
+    light_information: LightSourceInformation,
     position: glm.vec3
 }
 
-PointLight :: LightSourceInformation
 DirectionalLight :: struct {
     light_information: LightSourceInformation,
     direction: glm.vec3

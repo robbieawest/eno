@@ -67,11 +67,15 @@ before_frame :: proc() -> (ok: bool) {
     // Camera
     ecs.scene_add_camera(game.Game.scene, cutils.init_camera(label = "cam", position = glm.vec3{ 0.0, 0.5, -0.2 }))  // Will set the scene viewpoint
 
-    light_arch := ecs.scene_add_archetype(game.Game.scene, "lights",
+    point_light_arch := ecs.scene_add_archetype(game.Game.scene, "point_lights",
         cast(ecs.ComponentInfo)(resource.LIGHT_COMPONENT),
         cast(ecs.ComponentInfo)(resource.MODEL_COMPONENT),
         cast(ecs.ComponentInfo)(standards.WORLD_COMPONENT),
         cast(ecs.ComponentInfo)(standards.VISIBLE_COMPONENT),
+    ) or_return
+
+    directional_light_arch := ecs.scene_add_archetype(game.Game.scene, "directional_lights",
+        cast(ecs.ComponentInfo)(resource.LIGHT_COMPONENT),
     ) or_return
 
     lights := make([dynamic]resource.PointLight)
@@ -79,9 +83,9 @@ before_frame :: proc() -> (ok: bool) {
     light_height: f32 = 2.0
     light_dist: f32 = 2.0
     intensity: f32 = 1.0
-    enabled := true
+    enabled := false
     append_elems(&lights,
-        resource.PointLight{ "demo_light", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 8.1, 6.0, 0.0 } },
+        resource.PointLight{ light_information = resource.LightSourceInformation{ "demo_light", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 } }, position = glm.vec3{ 8.1, 6.0, 0.0 } },
     /*
         resource.PointLight{ "demo_light2", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ light_dist, light_height, -light_dist } },
         resource.PointLight{ "demo_light3", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -light_dist, light_height, light_dist } },
@@ -93,13 +97,19 @@ before_frame :: proc() -> (ok: bool) {
 
     for light in lights {
         light_comp := standards.make_world_component(position=light.position)
-        ecs.archetype_add_entity(game.Game.scene, light_arch, light.name,
+        ecs.archetype_add_entity(game.Game.scene, point_light_arch, light.light_information.name,
             ecs.make_ecs_component_data(resource.LIGHT_COMPONENT.label, resource.LIGHT_COMPONENT.type, resource.Light(light)),
-            ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, resource.make_light_billboard_model(&game.Game.resource_manager, colour_override = light.colour) or_return),
+            ecs.make_ecs_component_data(resource.MODEL_COMPONENT.label, resource.MODEL_COMPONENT.type, resource.make_light_billboard_model(&game.Game.resource_manager, colour_override = light.light_information.colour) or_return),
             ecs.make_ecs_component_data(standards.WORLD_COMPONENT.label, standards.WORLD_COMPONENT.type, light_comp),
             ecs.make_ecs_component_data(standards.VISIBLE_COMPONENT.label, standards.VISIBLE_COMPONENT.type, true),
         )
     }
+
+    // Sun
+    sun := resource.DirectionalLight{ direction = { 0.0, -1.0, 0.0 }, light_information = resource.LightSourceInformation{ name="sun", enabled = true, intensity = 1.0, colour = {1.0, 1.0, 1.0}, }}
+    ecs.archetype_add_entity(game.Game.scene, directional_light_arch, "Sun",
+        ecs.make_ecs_component_data(resource.LIGHT_COMPONENT.label, resource.LIGHT_COMPONENT.type, resource.Light(sun))
+    )
 
     game.add_event_hooks(
         game.HOOK_MOUSE_MOTION(),
