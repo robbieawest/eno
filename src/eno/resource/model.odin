@@ -584,6 +584,12 @@ texture_id_from_cgltf_texture :: proc(
     allocator := context.allocator,
     loc := #caller_location
 ) -> (result: ResourceIdent, ok: bool) {
+    dbg.log(.INFO, "Loading cgltf texture %s", texture.image_.uri)
+
+    exist_id := check_resource_exists(manager, Texture{ image=Image{ uri=strings.clone_from_cstring(texture.image_.uri, allocator=allocator) } })
+    if exist_id != nil do return exist_id.?, true
+    else do dbg.log(.INFO, "Texture not found, now reading image")
+
     tex := texture_from_cgltf_texture(texture, gltf_file_location, allocator, loc) or_return
 
     pix_data := tex.image.pixel_data
@@ -727,7 +733,7 @@ make_light_billboard_model :: proc(
 
     billboard_mesh := primitive_square_mesh_data(allocator)
     layout := primitive_square_mesh_layout(true, allocator)
-    layout.shader = add_shader(manager, get_billboard_vertex_shader(cylindrical, allocator) or_return) or_return
+    layout.shader = get_billboard_vertex_shader(manager, cylindrical, allocator) or_return
     billboard_mesh.layout = add_vertex_layout(manager, layout) or_return
     billboard_mesh.centroid = calculate_centroid(billboard_mesh.vertex_data, layout.infos) or_return
 
@@ -759,9 +765,9 @@ make_light_billboard_model :: proc(
     return
 }
 
-get_billboard_vertex_shader :: proc(cylindrical: bool, allocator := context.allocator) -> (shader: Shader, ok: bool) {
-    if cylindrical do return read_single_shader_source(standards.SHADER_RESOURCE_PATH + "billboard/billboard_cylindrical.vert", .VERTEX, allocator=allocator)
-    else do return read_single_shader_source(standards.SHADER_RESOURCE_PATH + "billboard/billboard_spherical.vert", .VERTEX, allocator=allocator)
+get_billboard_vertex_shader :: proc(manager: ^ResourceManager, cylindrical: bool, allocator := context.allocator) -> (shader: ResourceIdent, ok: bool) {
+    if cylindrical do return generate_shader(manager, .VERTEX, standards.SHADER_RESOURCE_PATH + "billboard/billboard_cylindrical.vert", allocator=allocator)
+    else do return generate_shader(manager, .VERTEX, standards.SHADER_RESOURCE_PATH + "billboard/billboard_spherical.vert", allocator=allocator)
 }
 
 

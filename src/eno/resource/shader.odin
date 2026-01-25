@@ -437,11 +437,28 @@ ShaderType :: enum { // Is just gl.Shader_Type
 Shader :: struct {
     type: ShaderType,
     id: ShaderIdentifier,
-    source: ShaderSource
+    source: ShaderSource,
+    uri: string,
+    defines: []string
+}
+
+// ! Clones input uri and defines, does not clone internals of source
+make_shader :: proc(uri: string, type: ShaderType, defines: ..string,  source: ShaderSource = {}, allocator := context.allocator) -> (shader: Shader) {
+    shader.defines = slice.clone(defines, allocator)
+    for &define in shader.defines {
+        define = strings.clone(define, allocator)
+    }
+    shader.uri = strings.clone(uri, allocator)
+    shader.type = type
+    shader.source = source
+    return
 }
 
 destroy_shader :: proc(shader: Shader, allocator := context.allocator) {
     destroy_shader_source(shader.source, allocator)
+    for define in shader.defines do delete(define, allocator)
+    delete(shader.defines, allocator)
+    delete(shader.uri, allocator)
 }
 
 
@@ -906,7 +923,7 @@ init_shader_source :: proc(source: string, extension: string, allocator := conte
 }
 
 
-read_single_shader_source :: proc(full_path: string, shader_type: ShaderType, defines: ..string, allocator := context.allocator, loc := #caller_location) -> (shader: Shader, ok: bool) {
+read_single_shader_source :: proc(full_path: string, defines: ..string, allocator := context.allocator, loc := #caller_location) -> (shader_source: ShaderSource, ok: bool) {
     dbg.log(dbg.LogLevel.INFO, "Reading single shader source: %s", full_path, loc=loc)
     source, err := futils.read_file_source(full_path, allocator); defer delete(source)
     if err != .None {
@@ -942,11 +959,9 @@ read_single_shader_source :: proc(full_path: string, shader_type: ShaderType, de
         strings.write_string(&defines_builder, new_source)
     }
 
-    shader.source.string_source = strings.to_string(defines_builder)
-    // dbg.log(.INFO, "String source: %s", shader.source.string_source)
-    shader.source.is_available_as_string = true // Wtf even is this flag, you can just check the length of the string
+    shader_source.string_source = strings.to_string(defines_builder)
+    shader_source.is_available_as_string = true // Wtf even is this flag, you can just check the length of the string
 
-    shader.type = shader_type
     ok = true
     return
 }
@@ -1115,6 +1130,25 @@ handle_file_read_error :: proc(filepath: string, err: futils.FileReadError, loc 
     }
     dbg.log(level, "%s. File path: \"%s\"", message, filepath, loc = loc)
 
+    return
+}
+
+// Generate shader from defines and uri:
+generate_shader :: proc(manager: ^ResourceManager, type: ShaderType, uri: string, defines: ..string, allocator := context.allocator, loc := #caller_location) -> (shader: ResourceIdent, ok: bool) {
+
+    // shader = Shader{ uri=strings.clone(uri, allocator), }
+    shader_r := make_shader(uri, type, ..defines)
+    // Hash shader, check if uri already exists in resource manager
+    id := check_resource_exists(manager, shader_r, allocator)
+    if id == nil{
+        // Read shader, add to manager
+        source := read_single_shader_source(uri, ..defines, allocator=allocator, loc=loc) or_return
+        shader_r.source = source
+        shader = add_shader(manager, shader_r) or_return
+    }
+    else do shader = id.?
+
+    ok = true
     return
 }
 

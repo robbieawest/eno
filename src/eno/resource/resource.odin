@@ -43,16 +43,13 @@ hash_resource :: proc(resource: $T, allocator: mem.Allocator) -> ResourceHash {
         // If for some reason this needs to be different, don't use hash_resource and instead provide a hash or a hash func
         bytes := make([dynamic]byte, allocator=allocator)
         defer delete(bytes)
+        // todo move from hash_raw(bytes)
 
-        append_elems(&bytes, ..utils.to_bytes(&resource.type))
-        utils.map_to_bytes(resource.properties, &bytes)
-
-        append_elems(&bytes, ..utils.to_bytes(&resource.image.w))
-        append_elems(&bytes, ..utils.to_bytes(&resource.image.h))
-        append_elems(&bytes, ..utils.to_bytes(&resource.image.channels))
         append_elems(&bytes, ..(transmute([]u8)resource.image.uri))
+        i := 0
+        for i = len(bytes) - 1; i >= 0 && bytes[i] == 0; i -= 1 {}
 
-        return hash_raw(bytes[:])
+        return hash_raw(bytes[:i+1])
     }
     else when T == ShaderProgram {
         bytes := make([dynamic]byte, allocator=allocator)
@@ -63,12 +60,24 @@ hash_resource :: proc(resource: $T, allocator: mem.Allocator) -> ResourceHash {
         return hash_raw(bytes[:])
     }
     else when T == Shader {
-        source_hashable :: struct{ available: bool, info: ShaderInfo, str_hash: u64 }
-        hashable: struct{ type: ShaderType, source: source_hashable }
-        source_hashable_i := source_hashable{ resource.source.is_available_as_string, resource.source.shader_info, hash_str(resource.source.string_source) }
-        hashable = { resource.type, source_hashable_i }
+        if len(resource.uri) != 0 {
+            // Hash uri with defines
+            bytes := make([dynamic]byte, allocator=allocator)
+            defer delete(bytes)
 
-        return hash_ptr(&hashable)
+            append_elems(&bytes, ..(transmute([]u8)resource.uri))
+            for define in resource.defines do append_elems(&bytes, ..(transmute([]u8)define))
+            return hash_raw(bytes[:])
+        }
+        else {
+            // Hash source directly if no URI
+            source_hashable :: struct{ available: bool, info: ShaderInfo, str_hash: u64 }
+            hashable: struct{ type: ShaderType, source: source_hashable }
+            source_hashable_i := source_hashable{ resource.source.is_available_as_string, resource.source.shader_info, hash_str(resource.source.string_source) }
+            hashable = { resource.type, source_hashable_i }
+
+            return hash_ptr(&hashable)
+        }
     }
     else when T == MaterialType {
         if resource.unique do return rand.uint64()  // If theres a collision out of all 2^64 - 1 possibilities then all I can do is apologize
@@ -151,11 +160,15 @@ compare_resources :: proc(a: $T, b: T, allocator: mem.Allocator) -> bool {
 
     when T == Texture {
         equals := true
+        /*
         equals &= a.type == b.type
         equals &= a.image.w == b.image.w
         equals &= a.image.h == b.image.h
         equals &= a.image.channels == b.image.channels
-        equals &= strings.compare(a.image.uri, b.image.uri) == 0
+        */
+        equals &= a.image.uri == b.image.uri
+        if equals do dbg.log(.INFO, "Comparison true")
+        /*
 
         ap_bytes := make([dynamic]byte, allocator=allocator); defer delete(ap_bytes)
         bp_bytes := make([dynamic]byte, allocator=allocator); defer delete(bp_bytes)
@@ -163,6 +176,7 @@ compare_resources :: proc(a: $T, b: T, allocator: mem.Allocator) -> bool {
         utils.map_to_bytes(b.properties, &bp_bytes)
 
         equals &= slice.equal(ap_bytes[:], bp_bytes[:])
+        */
         return equals
     }
     else when T == ShaderProgram {
@@ -238,6 +252,33 @@ traverse_bucket_ptr :: proc(bucket: list.List, $T: typeid, ptr: uintptr) -> (nod
     return
 }
 
+check_resource_exists :: proc(manager: ^ResourceManager, resource: $T, allocator := context.allocator) -> (id: ResourceID) {
+    hash := hash_resource(resource, allocator)
+
+    mapping: ^ResourceMapping
+    when T == Shader {
+        mapping = &manager.shaders
+    }
+    else when T == Texture {
+        mapping = &manager.textures
+    }
+    else {
+        panic("Not implemented")
+    }
+    // Todo extend when needed
+
+    if hash in mapping {
+        bucket: ^list.List = &mapping[hash]
+        resource_node, node_exists := traverse_bucket(bucket^, resource, allocator)
+        dbg.log(.INFO, "node exists: %v", node_exists)
+
+        if node_exists do return ResourceIdent{ hash=hash, node=uintptr(resource_node)}
+    }
+    else do dbg.log(.INFO, "hash not in mapping: %d, for resource: %#v", hash, resource)
+
+    return nil
+}
+
 @(private)
 add_resource :: proc(
     mapping: ^ResourceMapping,
@@ -254,6 +295,7 @@ add_resource :: proc(
         resource_node, node_exists := traverse_bucket(bucket^, resource, allocator)
 
         if node_exists {
+            dbg.log(.INFO, "resource: %#v", resource)
             dbg.log(.INFO, "Increasing reference of resource, hash: %d", hash)
             // References an existing node/resource which is the same
             // Now, increase reference count of that resource and return an ident

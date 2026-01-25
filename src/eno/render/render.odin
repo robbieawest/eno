@@ -507,8 +507,11 @@ render_skybox :: proc(manager: ^resource.ResourceManager, viewpoint: ^cam.Camera
 
 @(private)
 create_skybox_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (shader: resource.ShaderProgram, ok: bool) {
-    vert := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/skybox.vert", .VERTEX, allocator=allocator) or_return
-    frag := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/skybox.frag", .FRAGMENT, allocator=allocator) or_return
+    vert_source := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/skybox.vert", allocator=allocator) or_return
+    vert := resource.Shader{ type = .VERTEX, source = vert_source }
+    frag_source := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/skybox.frag", allocator=allocator) or_return
+    frag := resource.Shader{ type = .FRAGMENT, source = frag_source}
+
     shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, "Skyboss shader pass", allocator) or_return
     transfer_shader_program(manager, &shader) or_return
 
@@ -1350,170 +1353,7 @@ generate_shader_pass_for_mesh :: proc(
     return shader_pass_id, true
 }
 
-@(private)
-generate_gbuffer_shader_pass :: proc(
-    manager: ^resource.ResourceManager,
-    vertex_layout: ^resource.VertexLayout,
-    material_type: ^resource.MaterialType,
-    options: rawptr,
-    allocator: mem.Allocator,
-) -> (shader_pass: resource.ShaderProgram, ok: bool) {
 
-    if options == nil {
-        dbg.log(.ERROR, "Options is nil in gbuffer generate pass")
-        return
-    }
-
-    // todo figure out how to hash the gbuffer vertex shader. Previously we hash the vertex layout that contains the shader
-    //  todo  , but now we don't have a vertex layout, unless we make vertex layouts and material types index into
-    //  todo  the shader store, instead of meshes. This does kind of make sense since the shader store is super simple then, since
-    //  todo   not many vertex/material permutations, but lots of meshes
-
-    defines := make([dynamic]string, allocator=allocator); defer delete(defines)
-    for attribute in vertex_layout.infos do #partial switch attribute.type {
-        case .position: append_elem(&defines, "POSITION_INPUT")
-        case .normal: append_elem(&defines, "NORMAL_INPUT")
-        case .texcoord: append_elem(&defines, "TEXCOORD_INPUT")
-        case .tangent: append_elem(&defines, "TANGENT_INPUT")
-    }
-
-    dbg.log(dbg.LogLevel.INFO, "Creating gbuffer vertex shader")
-    vert_id := generate_gbuffer_vertex_shader(manager, defines[:], allocator) or_return
-
-    dbg.log(dbg.LogLevel.INFO, "Creating gbuffer fragment shader")
-    config := cast(^GBufferShaderGenerateConfig)options
-    frag_id := generate_gbuffer_frag_shader(manager, config^, defines[:], allocator) or_return
-
-    // Grabbing shaders here makes it impossible to compile a shader twice
-    vert := resource.get_shader(manager, vert_id) or_return
-    frag := resource.get_shader(manager, frag_id) or_return
-
-    if vert.id == nil do compile_shader(vert) or_return
-    else do dbg.log(.INFO, "Vertex shader already compiled")
-    if frag.id == nil do compile_shader(frag) or_return
-    else do dbg.log(.INFO, "Fragment shader already compiled")
-
-    shader_pass = resource.init_shader_program("GBuffer shader pass")
-    shader_pass.shaders[.VERTEX] = vert_id
-    shader_pass.shaders[.FRAGMENT] = frag_id
-
-    // dbg.log(.INFO, "Vert source: %#s", vert.source.string_source)
-    // dbg.log(.INFO, "Frag source: %#s", frag.source.string_source)
-
-    ok = true
-    return
-}
-
-@(private)
-generate_lighting_shader_pass :: proc(
-    manager: ^resource.ResourceManager,
-    vertex_layout: ^resource.VertexLayout,
-    material_type: ^resource.MaterialType,
-    options: rawptr,
-    allocator: mem.Allocator
-) -> (shader_pass: resource.ShaderProgram, ok: bool) {
-
-    // config := cast(^LightingShaderGenerateConfig)options
-
-    contains_tangent := false
-    for info in vertex_layout.infos {
-        if info.type == .tangent  {
-            contains_tangent = true
-            break
-        }
-    }
-
-    if vertex_layout.shader == nil {
-        dbg.log(dbg.LogLevel.INFO, "Creating lighting vertex shader for layout")
-        vertex_layout.shader = generate_lighting_vertex_shader(manager, contains_tangent, allocator) or_return
-    }
-    else do dbg.log(dbg.LogLevel.INFO, "Vertex layout already has shader")
-
-    if material_type.shader == nil {
-        dbg.log(dbg.LogLevel.INFO, "Creating lighting fragment shader for material type")
-        material_type.shader = generate_lighting_frag_shader(manager, contains_tangent, allocator) or_return
-    }
-    else do dbg.log(dbg.LogLevel.INFO, "Material type already has shader")
-
-    // Grabbing shaders here makes it impossible to compile a shader twice
-    vert := resource.get_shader(manager, vertex_layout.shader.?) or_return
-    frag := resource.get_shader(manager, material_type.shader.?) or_return
-
-    if vert.id == nil do compile_shader(vert) or_return
-    if frag.id == nil do compile_shader(frag) or_return
-
-    shader_pass = resource.init_shader_program("Lighting pass")
-    shader_pass.shaders[.VERTEX] = vertex_layout.shader.?
-    shader_pass.shaders[.FRAGMENT] = material_type.shader.?
-
-    ok = true
-    return
-}
-
-@(private)
-generate_lighting_vertex_shader :: proc(
-    manager: ^resource.ResourceManager,
-    contains_tangent: bool,
-    allocator := context.allocator
-) -> (id: resource.ResourceIdent, ok: bool) {
-    // Todo dynamic
-    dbg.log(.INFO, "Generating lighting vertex shader")
-
-    single_shader: resource.Shader
-    if contains_tangent do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr/pbr.vert", .VERTEX, "CONTAINS_TANGENT", allocator=allocator) or_return
-    else do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr/pbr.vert", .VERTEX, allocator=allocator) or_return
-
-    id = resource.add_shader(manager, single_shader) or_return
-    ok = true
-    return
-}
-
-@(private)
-generate_lighting_frag_shader :: proc(
-    manager: ^resource.ResourceManager,
-    contains_tangent: bool,
-    allocator := context.allocator
-) -> (id: resource.ResourceIdent, ok: bool) {
-    dbg.log(.INFO, "Generating lighting frag shader")
-
-    single_shader: resource.Shader
-    if contains_tangent do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr/pbr.frag", .FRAGMENT, "CONTAINS_TANGENT", allocator=allocator) or_return
-    else do single_shader = resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "pbr/pbr.frag", .FRAGMENT, allocator=allocator) or_return
-
-    id = resource.add_shader(manager, single_shader) or_return
-    ok = true
-    return
-}
-
-@(private)
-generate_gbuffer_vertex_shader :: proc(
-    manager: ^resource.ResourceManager,
-    defines: []string,
-    allocator := context.allocator
-) -> (id: resource.ResourceIdent, ok: bool) {
-    dbg.log(.INFO, "Generating gbuffer vertex shader")
-
-
-
-    shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "gbuffer/gbuffer.vert", .VERTEX, ..defines, allocator=allocator) or_return
-
-    return resource.add_shader(manager, shader)
-}
-
-@(private)
-generate_gbuffer_frag_shader :: proc(
-    manager: ^resource.ResourceManager,
-    generate_config: GBufferShaderGenerateConfig,
-    defines: []string,
-    allocator := context.allocator
-) -> (id: resource.ResourceIdent, ok: bool) {
-    dbg.log(.INFO, "Generating gbuffer frag shader")
-
-    shader := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "gbuffer/gbuffer.frag", .FRAGMENT, ..defines, allocator=allocator) or_return
-
-
-    return resource.add_shader(manager, shader)
-}
 
 
 // Generic interface to handle pre-render passes explicitly
@@ -1854,8 +1694,11 @@ create_environment_map :: proc(
 
 @(private)
 get_environment_map_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (shader: resource.ShaderProgram, ok: bool) {
-    vert := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/cubemap.vert", .VERTEX, allocator=allocator) or_return
-    frag := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/equirectangular_to_cubemap.frag", .FRAGMENT, allocator=allocator) or_return
+    vert_source := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/cubemap.vert", allocator=allocator) or_return
+    vert := resource.Shader{ type = .VERTEX, source = vert_source }
+    frag_source := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/equirectangular_to_cubemap.frag", allocator=allocator) or_return
+    frag := resource.Shader{ type = .FRAGMENT, source = frag_source}
+
     shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, "Environment map shader pass", allocator) or_return
     transfer_shader_program(manager, &shader) or_return
 
@@ -1911,8 +1754,11 @@ create_ibl_irradiance_map :: proc(
 
 @(private)
 get_ibl_irradiance_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (shader: resource.ShaderProgram, ok: bool) {
-    vert := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/cubemap.vert", .VERTEX, allocator=allocator) or_return
-    frag := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/ibl_irradiance.frag", .FRAGMENT, allocator=allocator) or_return
+    vert_source := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/cubemap.vert", allocator=allocator) or_return
+    vert := resource.Shader{ type = .VERTEX, source = vert_source }
+    frag_source := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/ibl_irradiance.frag", allocator=allocator) or_return
+    frag := resource.Shader{ type = .FRAGMENT, source = frag_source}
+
     shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, "IBL irradiance map shader pass", allocator) or_return
     transfer_shader_program(manager, &shader) or_return
 
@@ -1992,8 +1838,11 @@ create_ibl_prefilter_map :: proc(
 
 @(private)
 get_ibl_prefilter_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (shader: resource.ShaderProgram, ok: bool) {
-    vert := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/cubemap.vert", .VERTEX, allocator=allocator) or_return
-    frag := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/ibl_prefilter.frag", .FRAGMENT, allocator=allocator) or_return
+    vert_source := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/cubemap.vert", allocator=allocator) or_return
+    vert := resource.Shader{ type = .VERTEX, source = vert_source }
+    frag_source := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/ibl_prefilter.frag", allocator=allocator) or_return
+    frag := resource.Shader{ type = .FRAGMENT, source = frag_source}
+
     shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, "IBL prefilter map shader pass", allocator) or_return
     transfer_shader_program(manager, &shader) or_return
 
@@ -2038,8 +1887,11 @@ create_ibl_brdf_lookup :: proc(
 
 @(private)
 get_ibl_brdf_lut_shader :: proc(manager: ^resource.ResourceManager, allocator := context.allocator) -> (shader: resource.ShaderProgram, ok: bool) {
-    vert := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/ibl_brdf.vert", .VERTEX, allocator=allocator) or_return
-    frag := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/ibl_brdf.frag", .FRAGMENT, allocator=allocator) or_return
+    vert_source := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/ibl_brdf.vert", allocator=allocator) or_return
+    vert := resource.Shader{ type = .VERTEX, source = vert_source }
+    frag_source := resource.read_single_shader_source(standards.SHADER_RESOURCE_PATH + "environment/ibl_brdf.frag", allocator=allocator) or_return
+    frag := resource.Shader{ type = .FRAGMENT, source = frag_source}
+
     shader = resource.make_shader_program(manager, []resource.Shader{ vert, frag }, "IBL brdf lut shader pass", allocator) or_return
     transfer_shader_program(manager, &shader) or_return
 

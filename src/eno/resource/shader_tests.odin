@@ -60,12 +60,3 @@ build_shader_source_test :: proc(t: ^testing.T) {
 
     log.info(shader_source.source.string_source)
 }
-
-
-@(test)
-shader_read_test :: proc(t: ^testing.T) {
-    shader, ok := read_single_shader_source("resources/shaders/demo_shader.frag", .FRAGMENT)
-    defer destroy_shader(shader)
-
-    testing.expect(t, ok, "ok check")
-}

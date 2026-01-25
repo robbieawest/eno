@@ -78,15 +78,17 @@ before_frame :: proc() -> (ok: bool) {
     defer delete(lights)
     light_height: f32 = 2.0
     light_dist: f32 = 2.0
-    intensity: f32 = 2.2
+    intensity: f32 = 1.0
     enabled := true
     append_elems(&lights,
-        resource.PointLight{ "demo_light", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ light_dist, light_height, light_dist } },
+        resource.PointLight{ "demo_light", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ 8.1, 6.0, 0.0 } },
+    /*
         resource.PointLight{ "demo_light2", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ light_dist, light_height, -light_dist } },
         resource.PointLight{ "demo_light3", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -light_dist, light_height, light_dist } },
         resource.PointLight{ "demo_light4", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -light_dist, light_height, -light_dist } },
         resource.PointLight{ "demo_light5", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ light_dist, light_height, 0.0 } },
         resource.PointLight{ "demo_light6", enabled, intensity, glm.vec3{ 1.0, 1.0, 1.0 }, glm.vec3{ -light_dist, light_height, 0.0 } },
+        */
     )
 
     for light in lights {
@@ -145,10 +147,10 @@ unload_current_preview_model :: proc(arch: ^ecs.Archetype) -> (ok: bool) {
 
 
 MODEL_PATH_BUFFER :: "demo_model_path"
-SCIFI_HELMET_PATH :: "./resources/models/SciFiHelmet/glTF/SciFiHelmet.gltf"
+DEFAULT_MODEL_PATH :: "./resources/models/Sponza/glTF/Sponza.gltf"
 setup_demo_ui :: proc() -> (ok: bool) {
-    load_model(demo_arch, SCIFI_HELMET_PATH) or_return
-    return ui.load_buffers(ui.BufferInit{ MODEL_PATH_BUFFER, 90, SCIFI_HELMET_PATH })
+    load_model(demo_arch, DEFAULT_MODEL_PATH) or_return
+    return ui.load_buffers(ui.BufferInit{ MODEL_PATH_BUFFER, 90, DEFAULT_MODEL_PATH })
 }
 
 demo_ui_element : ui.UIElement : proc() -> (ok: bool) {
