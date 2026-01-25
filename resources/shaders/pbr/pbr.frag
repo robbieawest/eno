@@ -117,17 +117,15 @@ float convertSolidAngleToRadians(float angle) {
     return acos((-angle) / (2.0 * PI) + 1.0);
 }
 
-float calculateSpecularOcclusion(float NdotV, vec3 BN, vec3 R, float roughness, float ao) {
+float calculateSpecularOcclusion(float NdotV, vec3 BN, vec3 N, vec3 R, float roughness, float ao) {
 
-    float aperture = getAperature(BN);
-    //float aperture = getAperature(ao);
+    // float aperture = getAperature(BN);
+    float aperture = getAperature(ao);
 
     float r_p = aperture;
     float d = acos(dot(normalize(BN), R));
-    float omega_s = calculatePartialConeIntersection(r_p, roughness, d);
-    // omega_s = roughness;
-    float r_l = convertSolidAngleToRadians(omega_s);
-    //float d = acos(dot(normalize(BN), R) * mix(0.1, 1.0, clamp(NdotV, 0.0, 1.0)));  // Account for grazing artefacts, diminishes total quality, use with caution?
+    float r_l = convertSolidAngleToRadians(roughness);
+
     // Light source vector V_l = R, radius r_l = reflection cone angle
     // d = similarity
     // r_p = bent cone aperture -> spherical cap radius
@@ -156,8 +154,9 @@ float calculateSpecularOcclusion(float NdotV, vec3 BN, vec3 R, float roughness, 
     //  and grazing angles create fake occlusion. This solves some of the issue, which comes from the specular cone overlapping past the
     //  perfect visibility hemisphere, which is unreachable by visibility samples.
     // return omega_i / roughness;
-    r_p = PI * 0.5;
-    return clamp(omega_i / omega_s, 0.0, 1.0);
+    float hemisphere_overlap = clamp(calculatePartialConeIntersection(PI * 0.5, r_l, acos(dot(N, R))), 0.0, 1.0);
+    return clamp((omega_i / roughness + NdotV * hemisphere_overlap) / hemisphere_overlap, 0.0, 1.0);
+
 }
 
 vec3 IBLAmbientTerm(vec3 N, vec3 BN, vec3 V, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat, float specular, vec3 specularColour, float ao) {
@@ -165,11 +164,11 @@ vec3 IBLAmbientTerm(vec3 N, vec3 BN, vec3 V, vec3 fresnelRoughness, vec3 albedo,
     vec3 R = reflect(-V, N);  // World space
     // vec3 RWorld = normalize(transpose(TBN) * R);  // Since tbn is orthogonal it is transitive across the reflect operation *from when R was tangent space
     vec3 radiance = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
-    vec3 irradiance = texture(irradianceMap, normalize(N)).rgb;
+    vec3 irradiance = texture(irradianceMap, normalize(N)).rgb;  // Use BN later when higher accuracy is available
 
     float so = 1.0;
     if (checkBitMask(lightingSettings, 3)) {
-        so = calculateSpecularOcclusion(dot(N, V), BN, reflect(-V, N), roughness, ao);
+        so = calculateSpecularOcclusion(dot(N, V), BN, N, reflect(-V, N), roughness, ao);
     }
 
     vec2 f_ab = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
