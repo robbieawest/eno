@@ -119,8 +119,8 @@ float convertSolidAngleToRadians(float angle) {
 
 float calculateSpecularOcclusion(float NdotV, vec3 BN, vec3 N, vec3 R, float roughness, float ao) {
 
-    // float aperture = getAperature(BN);
-    float aperture = getAperature(ao);
+    float aperture = getAperature(BN);
+    //float aperture = getAperature(ao);
 
     float r_p = aperture;
     float d = acos(dot(normalize(BN), R));
@@ -149,14 +149,21 @@ float calculateSpecularOcclusion(float NdotV, vec3 BN, vec3 N, vec3 R, float rou
     float omega_i = float(fullIntersection) * calculateFullConeIntersection(r_p, r_l) +
             float(partialIntersection) * calculatePartialConeIntersection(r_p, r_l, d);
 
-    // Addition: Check intersection of specular cone with perfect visibility hemisphere
-    // This is not accounted for in the GTAO paper, but it seems that when bent normals/AO have artefacts, aperture is underestimated
-    //  and grazing angles create fake occlusion. This solves some of the issue, which comes from the specular cone overlapping past the
-    //  perfect visibility hemisphere, which is unreachable by visibility samples.
-    // return omega_i / roughness;
-    float hemisphere_overlap = clamp(calculatePartialConeIntersection(PI * 0.5, r_l, acos(NdotV)), 0.0, 1.0);
-    return clamp((omega_i / roughness + NdotV * hemisphere_overlap) / hemisphere_overlap, 0.0, 1.0);
 
+    const bool experimental = false;
+
+    float so = omega_i / roughness;
+
+    if (experimental) {
+        // Addition: Check intersection of specular cone with perfect visibility hemisphere
+        // This is not accounted for in the GTAO paper, but it seems that when bent normals/AO have artefacts, aperture is underestimated
+        //  and grazing angles create fake occlusion. This solves some of the issue, which comes from the specular cone overlapping past the
+        //  perfect visibility hemisphere, which is unreachable by visibility samples.
+        float hemisphere_overlap = clamp(calculatePartialConeIntersection(PI * 0.5, r_l, acos(NdotV)), 0.0, 1.0);
+        float so_min = 0.05 * (1.0 - NdotV * hemisphere_overlap);
+        return clamp(mix(so_min, 1.0, so) / hemisphere_overlap, 0.0, 1.0);
+    }
+    else return so;
 }
 
 vec3 IBLAmbientTerm(vec3 N, vec3 BN, vec3 V, vec3 fresnelRoughness, vec3 albedo, float roughness, float metallic, const bool clearcoat, float specular, vec3 specularColour, float ao) {
