@@ -97,3 +97,57 @@ vec3 IBLMultiScatterBRDF(vec3 N, vec3 V, vec3 radiance, vec3 irradiance, vec3 al
 
     return specularContrib * specularOcclusion + diffuse;
 }
+
+// Oren Nayar:
+// First is PBRT, tangent space only
+
+float ONSinTheta(vec3 w) {
+    float Cos2Theta = w.z * w.z;
+    float Sin2Theta = max(0.0, 1.0 - Cos2Theta);
+    return sqrt(Sin2Theta);
+}
+
+float ONSinPhi(vec3 w) {
+    float sinTheta = ONSinTheta(w);
+    return float(sinTheta == 0) * clamp(w.y / sinTheta, -1.0, 1.0);
+}
+
+float ONCosPhi(vec3 w) {
+    float sinTheta = ONSinTheta(w);
+    return float(sinTheta == 0) * (clamp(w.x / sinTheta, -1.0, 1.0) - 1.0) + 1.0;
+}
+
+float ONCosTerm(vec3 L, vec3 V) {
+    float sinPhiI = ONSinPhi(L);
+    float cosPhiI = ONCosPhi(L);
+    float sinPhiO = ONSinPhi(V);
+    float cosPhiO = ONCosPhi(V);
+
+    return max(0.0, cosPhiI * cosPhiO + sinPhiI * sinPhiO);
+}
+
+float orenNayar(vec3 N, vec3 V, vec3 L, float roughness) {
+    float sigma2 = pow(roughness, 2);
+    float A = 1.0 - (sigma2 / (2.0 * (sigma2 + 0.33)));
+    float B = (0.45 * sigma2) / (sigma2 + 0.09);
+    float theta_i = acos(dot(N, L));
+    float theta_o = acos(dot(N, V));
+    float alpha = max(theta_i, theta_o);
+    float beta = min(theta_i, theta_o);
+
+    return A + B * ONCosTerm(L, V) * sin(alpha) * tan(beta);
+}
+
+// https://mimosa-pudica.net/improved-oren-nayar.html
+// https://github.com/portsmouth/OpenPBR-viewer/blob/main/glsl/diffuse_brdf.glsl
+float orenNayarFujii(vec3 N, vec3 V, vec3 L, float roughness) {
+    float NdotV = dot(N, V);
+    float NdotL = dot(N, L);
+    float s = dot(L, V) - NdotV * NdotL;
+    float stinv = (s > 0.0f) ? s / max(NdotL, NdotV) : 0.0;
+    float sigma = roughness;
+    float sigma2 = sigma * sigma;
+    float A = 1.0 - 0.5 * (sigma2 / (sigma2 + 0.33));
+    float B = 0.45 * sigma2 / (sigma2 + 0.09);
+    return A + B * stinv;
+}

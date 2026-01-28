@@ -198,7 +198,7 @@ vec3 IBLAmbientTerm(vec3 N, vec3 BN, vec3 V, vec3 fresnelRoughness, vec3 albedo,
 
         vec3 kD = 1.0 - kS;
         kD *= 1.0 - metallic;
-        vec3 diffuse = irradiance * albedo;
+        vec3 diffuse = irradiance * albedo * orenNayarFujii(N, V, R, roughness);
         return (kD * diffuse + specular * so) * ao;
     }
 }
@@ -382,7 +382,7 @@ Specular getSpecular() {
     return specular;
 }
 
-vec3 calculateDiscreteReflectance(vec3 radiance, vec3 N, vec3 V, vec3 L, vec3 albedo, float roughness, float metallic, vec3 baseFresnelIncidence, float specular, bool clearcoatActive, float clearcoat, float clearcoatRoughness) {
+vec3 calculateDirectReflectance(vec3 radiance, vec3 N, vec3 V, vec3 L, vec3 albedo, float roughness, float metallic, vec3 baseFresnelIncidence, float specular, bool clearcoatActive, float clearcoat, float clearcoatRoughness) {
     vec3 H = normalize(V + L);
 
     vec3 BRDF = calculateBRDF(N, V, L, H, albedo, roughness, metallic, baseFresnelIncidence, specular);
@@ -466,7 +466,7 @@ void main() {
             vec3 halfVec = normalize(lightDir + viewDir);
             vec3 radiance = light.lightInformation.intensity * light.lightInformation.colour;
 
-            lightOutputted += calculateDiscreteReflectance(radiance, normal, viewDir, lightDir, albedo, roughness, metallic, baseFresnelIncidence, specular, clearcoatActive, clearcoat, clearcoatRoughness);
+            lightOutputted += calculateDirectReflectance(radiance, normal, viewDir, lightDir, albedo, roughness, metallic, baseFresnelIncidence, specular, clearcoatActive, clearcoat, clearcoatRoughness);
             bufIndex += directionalLightSize;
         }
 
@@ -475,7 +475,7 @@ void main() {
             vec3 lightDir = normalize(light.position - position);
             vec3 radiance = light.lightInformation.intensity * light.lightInformation.colour / (pow(length(lightDir), 2));
 
-            lightOutputted += calculateDiscreteReflectance(radiance, normal, viewDir, lightDir, albedo, roughness, metallic, baseFresnelIncidence, specular, clearcoatActive, clearcoat, clearcoatRoughness);
+            lightOutputted += calculateDirectReflectance(radiance, normal, viewDir, lightDir, albedo, roughness, metallic, baseFresnelIncidence, specular, clearcoatActive, clearcoat, clearcoatRoughness);
 
             bufIndex += pointLightSize;
         }
