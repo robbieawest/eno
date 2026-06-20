@@ -1,8 +1,9 @@
 # eno
 game engine WIP written in odin
 
-This game engine has been developed primarily for learning purposes. Writing this semi-large project (~15K lines) has made much clear to me, including many common and open problems in game engine design. 
 The engine focuses on providing a simple and relatively powerful game engine interface for programmers to interact with, and it attempts to be interactive and extensible in every stage.
+
+The project is semi-large, ~15K LOC.
 
 ## Renderer output examples
 
